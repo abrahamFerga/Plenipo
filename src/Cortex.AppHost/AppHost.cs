@@ -21,8 +21,11 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 // ── Backing services (run as containers locally) ─────────────────────────────
 var postgres = builder.AddPostgres("cortex-pg")
-    // pgvector-enabled Postgres (same major as Aspire's default, so existing data volumes still
-    // attach) — the platform's opt-in RAG pipeline needs the vector extension at migration time.
+    // pgvector-enabled Postgres — the platform's opt-in RAG pipeline needs the vector extension
+    // at migration time. pg17 pairs with Aspire's data-volume mount (/var/lib/postgresql/data is
+    // exactly its PGDATA; pg18+ images use a versioned layout and refuse that mount). A volume
+    // created by a DIFFERENT Postgres image won't attach — `docker volume rm <apphost>-cortex-pg-data`
+    // resets the disposable dev data (see GETTING_STARTED gotchas).
     .WithImage("pgvector/pgvector")
     .WithImageTag("pg17")
     .WithDataVolume()
