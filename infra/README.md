@@ -141,6 +141,14 @@ to header-based dev auth (`X-Dev-Subject`, `X-Dev-Tenant`, `X-Dev-Roles`).
 - LLM provider API keys are seeded as **placeholders** (`REPLACE_ME`) and must
   be set out-of-band (portal / `az keyvault secret set` / a secrets-sync job).
   Terraform ignores later value drift on those secrets.
+- WhatsApp channel credentials (`whatsapp-app-secret`, `whatsapp-access-token`,
+  `whatsapp-verify-token`) follow the same placeholder + out-of-band contract;
+  the non-secret channel settings (`Channels__WhatsApp__Enabled`, `PhoneNumberId`,
+  `ModuleId`, `TenantSlug`) go in `api_extra_env` — see
+  [docs/WHATSAPP_CHANNEL.md](../docs/WHATSAPP_CHANNEL.md).
+- Composed Npgsql connection strings (`platform-connection-string`,
+  `audit-connection-string`) are stored whole and mapped 1:1 onto the
+  `ConnectionStrings__cortex-*` env vars the app binds.
 - The app reads all secrets at runtime via its **managed identity** (Key Vault
   Secrets User), never via stored connection strings in config.
 

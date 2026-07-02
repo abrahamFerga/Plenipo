@@ -175,6 +175,21 @@ and (for platform admins) shows an **Admin** area: Security map, Users & Roles,
 Token Usage, Audit Log. Ensure the API's `Cors:Origins` includes the SPA origin
 (`http://localhost:5173` by default).
 
+## Test the WhatsApp channel (no Meta account needed)
+
+The WhatsApp channel (Meta Cloud API webhook → authorized agent turns; see
+`docs/WHATSAPP_CHANNEL.md`) is **off by default** and fully covered by keyless
+E2E tests — the Mock provider answers the turn and a capturing fake replaces
+the Cloud API sender:
+
+```powershell
+dotnet test samples/Cortex.Sample.Host.IntegrationTests --filter FullyQualifiedName~WhatsApp
+```
+
+To poke it manually, enable `Channels:WhatsApp:*` via dev settings and POST a
+signed payload — `WhatsAppSignature.Compute` (in `Cortex.AspNetCore`) produces
+the `X-Hub-Signature-256` value, and `cortex.http` has a ready-made request pair.
+
 ## Verify the build & tests
 
 ```powershell
