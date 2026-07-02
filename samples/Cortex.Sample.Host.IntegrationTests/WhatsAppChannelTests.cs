@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using Cortex.AspNetCore.Channels;
+using Cortex.Core.Platform;
 using Cortex.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -113,6 +114,18 @@ public sealed class WhatsAppChannelTests(IntegrationFixture fixture)
 
         // Two user turns + two assistant replies accumulated in a single conversation row.
         Assert.True(conversation.Messages.Count >= 4);
+
+        // The MAF AgentSession must survive the Postgres jsonb round-trip: turn 1 serializes it, and
+        // turn 2 resumes it (jsonb reorders JSON keys, so the polymorphic $type discriminator comes
+        // back out of position — a deserializer without out-of-order tolerance fails the whole turn).
+        Assert.False(string.IsNullOrEmpty(conversation.SessionState));
+
+        // And turn 2 must be a real agent reply, not the channel's error fallback.
+        var lastAssistant = conversation.Messages
+            .Where(m => m.Role == MessageRole.Assistant)
+            .OrderBy(m => m.CreatedAt)
+            .Last();
+        Assert.DoesNotContain("couldn't process", lastAssistant.Content, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

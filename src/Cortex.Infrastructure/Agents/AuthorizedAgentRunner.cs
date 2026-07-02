@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.Json;
 using Cortex.Application.Agents;
 using Cortex.Application.Ai;
 using Cortex.Application.Approvals;
@@ -24,7 +25,8 @@ namespace Cortex.Infrastructure.Agents;
 ///   <item>resolves the module's tools and keeps only those the user is permitted to call — the model
 ///   never receives the schema of a forbidden tool;</item>
 ///   <item>wraps tool dispatch in audit middleware so every invocation is recorded;</item>
-///   <item>replays the conversation's history and streams the assistant's reply back.</item>
+///   <item>resumes the conversation's MAF <see cref="AgentSession"/> (persisted per conversation) and
+///   streams the assistant's reply back.</item>
 /// </list>
 /// </summary>
 public sealed class AuthorizedAgentRunner(
@@ -42,6 +44,17 @@ public sealed class AuthorizedAgentRunner(
     ILogger<AuthorizedAgentRunner> logger) : IAuthorizedAgentRunner
 {
     private readonly AiOptions _ai = aiOptions.Value;
+
+    /// <summary>
+    /// Serializer options for the persisted <see cref="AgentSession"/> state: the MAF agent-abstractions
+    /// options (polymorphic AIContent contracts) plus out-of-order metadata tolerance, because the state
+    /// lives in a PostgreSQL <c>jsonb</c> column and jsonb does not preserve key order — the <c>$type</c>
+    /// discriminator can come back after other properties.
+    /// </summary>
+    private static readonly JsonSerializerOptions SessionStateJson = new(AgentAbstractionsJsonUtilities.DefaultOptions)
+    {
+        AllowOutOfOrderMetadataProperties = true,
+    };
 
     public async IAsyncEnumerable<AgentStreamEvent> RunAsync(
         AgentRunRequest request,
@@ -129,7 +142,15 @@ public sealed class AuthorizedAgentRunner(
             .UseOpenTelemetry(sourceName: AgentTelemetry.SourceName)
             .Build();
 
-        var messages = BuildHistory(conversation, request.Message);
+        // Resume the conversation's MAF session (framework-owned state: full history including tool
+        // calls/results), persisted per conversation. Conversations from before session support — or
+        // whose state fails to round-trip — fall back to seeding a fresh session with the replayed
+        // user/assistant history, exactly the pre-session behaviour.
+        var session = await ResumeSessionAsync(agent, conversation, cancellationToken);
+        IReadOnlyList<ChatMessage> turnInput = session.Resumed
+            ? [new ChatMessage(ChatRole.User, request.Message)]
+            : BuildHistory(conversation, request.Message);
+
         var runOptions = new ChatClientAgentRunOptions(new ChatOptions
         {
             Temperature = _ai.Temperature,
@@ -140,7 +161,7 @@ public sealed class AuthorizedAgentRunner(
         var announcedTools = new HashSet<string>(StringComparer.Ordinal);
         var usage = new UsageAccumulator();
 
-        await foreach (var evt in StreamTurnAsync(agent, messages, runOptions, assistant, announcedTools, usage, cancellationToken))
+        await foreach (var evt in StreamTurnAsync(agent, turnInput, session.Session, runOptions, assistant, announcedTools, usage, cancellationToken))
         {
             yield return evt;
             if (evt.Type == AgentStreamEventType.Error)
@@ -149,7 +170,8 @@ public sealed class AuthorizedAgentRunner(
             }
         }
 
-        await conversations.AppendTurnAsync(conversation.Id, request.Message, assistant.ToString(), conversation.SessionState, cancellationToken);
+        var sessionState = await SerializeSessionAsync(agent, session.Session, cancellationToken);
+        await conversations.AppendTurnAsync(conversation.Id, request.Message, assistant.ToString(), sessionState, cancellationToken);
         await RecordUsageAsync(request.ModuleId, conversation.Id, usage, cancellationToken);
 
         // Persist any blocked side-effecting tool calls as pending approvals, then surface them to the client.
@@ -201,16 +223,58 @@ public sealed class AuthorizedAgentRunner(
         }, cancellationToken);
     }
 
+    /// <summary>
+    /// Deserializes the conversation's persisted <see cref="AgentSession"/>, or creates a fresh one.
+    /// <c>Resumed</c> is false when the caller must seed the new session with replayed history.
+    /// </summary>
+    private async Task<(AgentSession Session, bool Resumed)> ResumeSessionAsync(
+        AIAgent agent, Conversation conversation, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrEmpty(conversation.SessionState))
+        {
+            try
+            {
+                using var state = JsonDocument.Parse(conversation.SessionState);
+                var session = await agent.DeserializeSessionAsync(state.RootElement, SessionStateJson, cancellationToken);
+                return (session, true);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Corrupt or incompatible state (e.g. after a framework upgrade) must not brick the
+                // conversation — fall back to history replay and write fresh state after this turn.
+                logger.LogWarning(ex, "Could not deserialize agent session for conversation {ConversationId}; replaying history.", conversation.Id);
+            }
+        }
+
+        return (await agent.CreateSessionAsync(cancellationToken), false);
+    }
+
+    /// <summary>Serializes the session for persistence (best-effort — a failure falls back to history replay next turn).</summary>
+    private async Task<string?> SerializeSessionAsync(AIAgent agent, AgentSession session, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var element = await agent.SerializeSessionAsync(session, SessionStateJson, cancellationToken);
+            return JsonSerializer.Serialize(element);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Could not serialize agent session; the conversation will resume by history replay.");
+            return null;
+        }
+    }
+
     private async IAsyncEnumerable<AgentStreamEvent> StreamTurnAsync(
         AIAgent agent,
         IReadOnlyList<ChatMessage> messages,
+        AgentSession session,
         AgentRunOptions runOptions,
         StringBuilder assistant,
         HashSet<string> announcedTools,
         UsageAccumulator usage,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var enumerator = agent.RunStreamingAsync(messages, session: null, options: runOptions, cancellationToken).GetAsyncEnumerator(cancellationToken);
+        var enumerator = agent.RunStreamingAsync(messages, session, options: runOptions, cancellationToken).GetAsyncEnumerator(cancellationToken);
         try
         {
             while (true)

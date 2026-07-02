@@ -16,8 +16,10 @@ public sealed class Conversation : EntityBase, ITenantOwned
     public string? Title { get; set; }
 
     /// <summary>
-    /// Reserved for a serialized MAF <c>AgentSession</c>. Currently unused and always null: the agent runner
-    /// runs without a MAF session and resumes a conversation by replaying its persisted <see cref="Messages"/>.
+    /// The serialized MAF <c>AgentSession</c> — the framework-owned conversation state (full history
+    /// including tool calls/results), written after every turn and resumed on the next. Null for
+    /// conversations that haven't had a sessioned turn yet; the runner then seeds a fresh session by
+    /// replaying the persisted <see cref="Messages"/> (which remain the display/history source of truth).
     /// </summary>
     public string? SessionState { get; set; }
 

@@ -118,7 +118,10 @@ internal sealed class ConversationConfiguration : IEntityTypeConfiguration<Conve
         b.HasKey(x => x.Id);
         b.Property(x => x.ModuleId).HasMaxLength(64).IsRequired();
         b.Property(x => x.Title).HasMaxLength(300);
-        b.Property(x => x.SessionState).HasColumnType("jsonb");
+        // Deliberately text, not jsonb: this is MAF's opaque serialized AgentSession, and jsonb
+        // re-orders object keys — which breaks System.Text.Json's polymorphic $type metadata on
+        // rehydration. text preserves the framework's serialization byte-for-byte.
+        b.Property(x => x.SessionState).HasColumnType("text");
         b.HasIndex(x => new { x.TenantId, x.UserId, x.ModuleId });
         b.HasMany(x => x.Messages).WithOne().HasForeignKey(m => m.ConversationId).OnDelete(DeleteBehavior.Cascade);
     }
