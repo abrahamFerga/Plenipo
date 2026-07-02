@@ -33,6 +33,7 @@
   </Folder>
   <Folder Name="/host/">
     <Project Path="Cortex.Sample.Host/Cortex.Sample.Host.csproj" />
+    <Project Path="Cortex.Legal.Host/Cortex.Legal.Host.csproj" />
     <Project Path="Cortex.Sample.AppHost/Cortex.Sample.AppHost.csproj" />
     <Project Path="Cortex.Sample.Host.IntegrationTests/Cortex.Sample.Host.IntegrationTests.csproj" />
   </Folder>

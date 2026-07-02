@@ -50,6 +50,11 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   hold inside jobs. Claim **leases** recover jobs orphaned by a crashed host (requeue up to 3
   attempts, then fail); running jobs **cancel cooperatively** at progress reports, and only their
   enqueuer may cancel them. Pollable at `/api/jobs`.
+- **Separate-systems model** — each vertical is its own product/host/repo on the platform packages
+  (`samples/Cortex.Legal.Host` is the canonical single-vertical shape); systems connect via the
+  **cortex-peer connector**, which lets one deployment's agent ask another's over the open AG-UI
+  protocol (the peer enforces its own auth, RBAC, tool gating, and audit; credential is a protected
+  secret).
 - **Data-source connectors** — a manifest-first **connector SDK** (`Cortex.Connectors.Sdk`:
   `IConnector`, settings schema, tool source) bridging agents to where tenant data already lives.
   Connectors are **default-off per tenant**: an admin enables and configures each one on the new

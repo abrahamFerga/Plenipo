@@ -162,7 +162,17 @@ public sealed class IntegrationFixture : IAsyncLifetime
 
     private sealed class CortexAppFactory : WebApplicationFactory<Program>
     {
-        protected override void ConfigureWebHost(IWebHostBuilder builder) => builder.UseEnvironment("Development");
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            builder.UseEnvironment("Development");
+
+            // Route the cortex-peer connector's HttpClient back into this TestServer, so the
+            // peer-connector tests exercise a real system-to-system AG-UI conversation (the host
+            // asking "itself" as if it were a remote deployment) without opening a network port.
+            builder.ConfigureTestServices(services =>
+                services.AddHttpClient(Cortex.Connectors.Peer.CortexPeerConnector.HttpClientName)
+                    .ConfigurePrimaryHttpMessageHandler(() => Server.CreateHandler()));
+        }
     }
 }
 
