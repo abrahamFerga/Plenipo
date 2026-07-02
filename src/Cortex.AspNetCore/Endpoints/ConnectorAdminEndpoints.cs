@@ -70,8 +70,8 @@ public static class ConnectorAdminEndpoints
             .WithName("Admin_EnableConnector");
 
         // Disabling turns the connector's tools off for the tenant immediately (the runner checks
-        // per turn). Settings are kept: re-enabling doesn't force re-entering everything. When
-        // per-user OAuth arrives (delegated connectors), disable will also revoke stored tokens.
+        // per turn) AND revokes every user's stored OAuth session — re-enabling forces re-auth.
+        // Settings are kept: re-enabling doesn't force re-entering everything.
         group.MapPost("/{connectorId}/disable", async (
                 string connectorId, PlatformDbContext db, CancellationToken cancellationToken) =>
             {
@@ -83,8 +83,12 @@ public static class ConnectorAdminEndpoints
                 }
 
                 row.Enabled = false;
+                var logins = await db.UserConnectorLogins
+                    .Where(l => l.ConnectorId == connectorId)
+                    .ToListAsync(cancellationToken);
+                db.UserConnectorLogins.RemoveRange(logins);
                 await db.SaveChangesAsync(cancellationToken);
-                return Results.Ok();
+                return Results.Ok(new { revokedLogins = logins.Count });
             })
             .WithName("Admin_DisableConnector");
 

@@ -2,6 +2,7 @@ using Cortex.AspNetCore.Connectors;
 using Cortex.AspNetCore.Hosting;
 using Cortex.Connectors.AzureBlob;
 using Cortex.Connectors.LocalFolder;
+using Cortex.Connectors.MsGraph;
 using Cortex.Connectors.Peer;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -28,6 +29,7 @@ builder.AddCortexPlatform();
 builder.AddCortexConnector<LocalFolderConnector>();
 builder.AddCortexConnector<AzureBlobConnector>();
 builder.AddCortexConnector<CortexPeerConnector>();
+builder.AddCortexConnector<MsGraphConnector>();
 
 var app = builder.Build();
 

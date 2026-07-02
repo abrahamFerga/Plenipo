@@ -71,6 +71,12 @@ public static class InfrastructureSetup
         // per-item stamps); the owning module attaches/indexes what gets imported.
         services.AddScoped<IConnectorBindingService, ConnectorBindingService>();
         services.AddSingleton<IJobHandler, ConnectorSyncJobHandler>();
+
+        // Delegated (per-user OAuth) connectors: protected token sessions + the code exchange.
+        services.AddHttpClient(OAuthTokenClient.HttpClientName);
+        services.AddSingleton<IOAuthTokenClient, OAuthTokenClient>();
+        services.AddScoped<ConnectorUserLoginService>();
+        services.AddScoped<IConnectorUserLogins>(sp => sp.GetRequiredService<ConnectorUserLoginService>());
     }
 
     private static void AddRag(IHostApplicationBuilder builder)

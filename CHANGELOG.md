@@ -63,6 +63,12 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   settings are write-only and protected at rest. Ships with **Azure Blob Storage** and a keyless
   **local-folder** connector; fetched files land in the tenant file store, so attachments, document
   tools, matters, and RAG indexing work on them unchanged.
+- **Delegated connectors (per-user OAuth)** — the two-stage model completed: the admin enables and
+  registers the IdP app (stage 1), each USER connects their own account through a real
+  auth-code+PKCE flow (stage 2); tokens are stored protected and refresh transparently, and
+  **disabling a connector revokes every user session**. Ships the **Microsoft 365 connector**
+  (`msgraph`): browse/fetch OneDrive/SharePoint on the user's own token, so Microsoft enforces
+  their permissions per call.
 - **Connector sync (Lane B)** — bind ONE external folder to ONE module resource (Harvey-style
   scoped bindings, never global indexing): a background sync job imports new/changed files
   (incremental via per-item stamps) into the file store and hands them to the owning module. In

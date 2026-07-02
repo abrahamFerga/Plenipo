@@ -170,10 +170,56 @@ public sealed class IntegrationFixture : IAsyncLifetime
             // peer-connector tests exercise a real system-to-system AG-UI conversation (the host
             // asking "itself" as if it were a remote deployment) without opening a network port.
             builder.ConfigureTestServices(services =>
+            {
                 services.AddHttpClient(Cortex.Connectors.Peer.CortexPeerConnector.HttpClientName)
-                    .ConfigurePrimaryHttpMessageHandler(() => Server.CreateHandler()));
+                    .ConfigurePrimaryHttpMessageHandler(() => Server.CreateHandler());
+
+                // Keyless stand-ins for the delegated-OAuth machinery: the IdP token exchange and
+                // Microsoft Graph. The platform-side flow (state protection, token storage,
+                // refresh, revoke-on-disable) stays fully real.
+                services.AddSingleton<Cortex.Application.Connectors.IOAuthTokenClient>(new FakeOAuthTokenClient());
+                services.AddSingleton<Cortex.Connectors.MsGraph.IGraphApiClient>(new FakeGraphApiClient());
+            });
         }
     }
+}
+
+/// <summary>A fake IdP token endpoint: any code exchanges into a deterministic token.</summary>
+public sealed class FakeOAuthTokenClient : Cortex.Application.Connectors.IOAuthTokenClient
+{
+    public Task<Cortex.Application.Connectors.OAuthTokens> ExchangeCodeAsync(
+        Cortex.Application.Connectors.OAuthClientConfig config, string code, string redirectUri, string codeVerifier,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(new Cortex.Application.Connectors.OAuthTokens(
+            $"fake-access-{code}", "fake-refresh", DateTimeOffset.UtcNow.AddHours(1)));
+
+    public Task<Cortex.Application.Connectors.OAuthTokens?> RefreshAsync(
+        Cortex.Application.Connectors.OAuthClientConfig config, string refreshToken,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<Cortex.Application.Connectors.OAuthTokens?>(new(
+            "fake-access-refreshed", refreshToken, DateTimeOffset.UtcNow.AddHours(1)));
+}
+
+/// <summary>A fake Graph drive with two canned documents; downloads only with a fake token.</summary>
+public sealed class FakeGraphApiClient : Cortex.Connectors.MsGraph.IGraphApiClient
+{
+    public Task<IReadOnlyList<Cortex.Connectors.MsGraph.GraphDriveItem>> ListDriveItemsAsync(
+        string accessToken, string? folderPath, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<Cortex.Connectors.MsGraph.GraphDriveItem>>(
+            accessToken.StartsWith("fake-access-", StringComparison.Ordinal)
+                ?
+                [
+                    new("item-1", "engagement-letter.txt", 64, false),
+                    new("item-2", "fee-schedule.txt", 48, false),
+                ]
+                : []);
+
+    public Task<Cortex.Connectors.MsGraph.GraphFileContent?> DownloadAsync(
+        string accessToken, string itemId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(accessToken.StartsWith("fake-access-", StringComparison.Ordinal) && itemId == "item-1"
+            ? new Cortex.Connectors.MsGraph.GraphFileContent(
+                new MemoryStream("Engagement letter for the Contoso matter."u8.ToArray()), "text/plain")
+            : null);
 }
 
 [CollectionDefinition("api")]

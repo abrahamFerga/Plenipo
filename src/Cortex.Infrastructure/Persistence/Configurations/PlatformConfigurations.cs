@@ -182,6 +182,19 @@ internal sealed class TenantConnectorConfiguration : IEntityTypeConfiguration<Te
     }
 }
 
+internal sealed class UserConnectorLoginConfiguration : IEntityTypeConfiguration<UserConnectorLogin>
+{
+    public void Configure(EntityTypeBuilder<UserConnectorLogin> b)
+    {
+        b.ToTable("user_connector_logins");
+        b.HasKey(x => x.Id);
+        b.Property(x => x.ConnectorId).HasMaxLength(64).IsRequired();
+        b.Property(x => x.ProtectedTokensJson).IsRequired();
+        b.HasIndex(x => new { x.UserId, x.ConnectorId }).IsUnique();
+        b.HasIndex(x => new { x.TenantId, x.ConnectorId }); // the disable-revokes sweep
+    }
+}
+
 internal sealed class ConnectorBindingConfiguration : IEntityTypeConfiguration<ConnectorBinding>
 {
     public void Configure(EntityTypeBuilder<ConnectorBinding> b)

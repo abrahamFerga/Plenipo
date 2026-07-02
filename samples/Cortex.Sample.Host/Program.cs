@@ -3,6 +3,7 @@ using Cortex.AspNetCore.Hosting;
 using Cortex.AspNetCore.Modules;
 using Cortex.Connectors.AzureBlob;
 using Cortex.Connectors.LocalFolder;
+using Cortex.Connectors.MsGraph;
 using Cortex.Connectors.Peer;
 using Cortex.Modules.Finance;
 using Cortex.Modules.Legal;
@@ -30,6 +31,7 @@ builder.AddCortexModule<LegalModule>();
 builder.AddCortexConnector<LocalFolderConnector>();
 builder.AddCortexConnector<AzureBlobConnector>();
 builder.AddCortexConnector<CortexPeerConnector>(); // verticals are separate systems; this is how they talk
+builder.AddCortexConnector<MsGraphConnector>();
 
 var app = builder.Build();
 

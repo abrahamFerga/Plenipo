@@ -34,6 +34,7 @@ public sealed class PlatformDbContext(
     public DbSet<RagChunk> RagChunks => Set<RagChunk>();
     public DbSet<TenantConnector> TenantConnectors => Set<TenantConnector>();
     public DbSet<ConnectorBinding> ConnectorBindings => Set<ConnectorBinding>();
+    public DbSet<UserConnectorLogin> UserConnectorLogins => Set<UserConnectorLogin>();
 
     private static readonly MethodInfo ApplyTenantFilterMethod = typeof(PlatformDbContext)
         .GetMethod(nameof(ApplyTenantFilter), BindingFlags.NonPublic | BindingFlags.Instance)!;
