@@ -1,9 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Third domain module (the-lawyer / legal). Stateless — proves Cortex spans a third, very different industry. -->
+  <!-- Third domain module (the-lawyer / legal). Owns a 'legal' schema: matters and their documents
+       (the Harvey-style matter workspace — see docs/LEGAL_VERTICAL_PLAN.md). -->
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Microsoft.Extensions.AI" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>

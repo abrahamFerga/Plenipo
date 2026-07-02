@@ -59,12 +59,26 @@ public sealed class LegalCatalogTests
     }
 
     [Fact]
-    public void Manifest_DeclaresTwoToolsAndChatTab()
+    public void Manifest_DeclaresClauseAndMatterToolsWithApprovalGatedWrites()
     {
         var manifest = new LegalModule().Manifest;
 
         Assert.Equal("legal", manifest.Id);
-        Assert.Equal(2, manifest.Tools.Count);
+        Assert.Equal(
+            ["search_clauses", "draft_clause", "create_matter", "list_matters", "attach_document_to_matter", "list_matter_documents"],
+            manifest.Tools.Select(t => t.Name));
+
+        // The side-effecting matter tools are held for human approval; the read tools are not.
+        Assert.All(
+            manifest.Tools.Where(t => t.Name is "create_matter" or "attach_document_to_matter"),
+            t => Assert.True(t.RequiresApproval));
+        Assert.All(
+            manifest.Tools.Where(t => t.Name is "list_matters" or "list_matter_documents"),
+            t => Assert.False(t.RequiresApproval));
+
         Assert.Contains(manifest.Tabs, t => t.Id == "chat");
+        // The Matters tab is live: server-driven data, no placeholder needed.
+        var mattersTab = manifest.Tabs.First(t => t.Id == "matters");
+        Assert.Equal("/api/legal/matters", mattersTab.DataEndpoint);
     }
 }

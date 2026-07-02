@@ -12,7 +12,8 @@ public sealed class LegalToolSource : IModuleToolSource
 
     public IReadOnlyList<ModuleTool> GetTools(IServiceProvider scopedServices)
     {
-        var tools = scopedServices.GetRequiredService<LegalTools>();
+        var clauses = scopedServices.GetRequiredService<LegalTools>();
+        var matters = scopedServices.GetRequiredService<MatterTools>();
 
         return
         [
@@ -21,14 +22,44 @@ public sealed class LegalToolSource : IModuleToolSource
                 ModuleId = ModuleId,
                 Name = "search_clauses",
                 Permission = Permissions.ForTool(ModuleId, "search_clauses"),
-                Function = AIFunctionFactory.Create(tools.SearchClauses, name: "search_clauses"),
+                Function = AIFunctionFactory.Create(clauses.SearchClauses, name: "search_clauses"),
             },
             new ModuleTool
             {
                 ModuleId = ModuleId,
                 Name = "draft_clause",
                 Permission = Permissions.ForTool(ModuleId, "draft_clause"),
-                Function = AIFunctionFactory.Create(tools.DraftClause, name: "draft_clause"),
+                Function = AIFunctionFactory.Create(clauses.DraftClause, name: "draft_clause"),
+            },
+            new ModuleTool
+            {
+                ModuleId = ModuleId,
+                Name = "create_matter",
+                Permission = Permissions.ForTool(ModuleId, "create_matter"),
+                Function = AIFunctionFactory.Create(matters.CreateMatter, name: "create_matter"),
+                RequiresApproval = true,
+            },
+            new ModuleTool
+            {
+                ModuleId = ModuleId,
+                Name = "list_matters",
+                Permission = Permissions.ForTool(ModuleId, "list_matters"),
+                Function = AIFunctionFactory.Create(matters.ListMatters, name: "list_matters"),
+            },
+            new ModuleTool
+            {
+                ModuleId = ModuleId,
+                Name = "attach_document_to_matter",
+                Permission = Permissions.ForTool(ModuleId, "attach_document_to_matter"),
+                Function = AIFunctionFactory.Create(matters.AttachDocumentToMatter, name: "attach_document_to_matter"),
+                RequiresApproval = true,
+            },
+            new ModuleTool
+            {
+                ModuleId = ModuleId,
+                Name = "list_matter_documents",
+                Permission = Permissions.ForTool(ModuleId, "list_matter_documents"),
+                Function = AIFunctionFactory.Create(matters.ListMatterDocuments, name: "list_matter_documents"),
             },
         ];
     }

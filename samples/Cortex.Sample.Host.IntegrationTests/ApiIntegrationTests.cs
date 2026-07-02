@@ -80,14 +80,15 @@ public sealed class ApiIntegrationTests(IntegrationFixture fixture)
     }
 
     [Fact]
-    public async Task Tabs_WithoutData_DeclareAFriendlyPlaceholder()
+    public async Task Legal_matters_tab_is_live_with_a_data_endpoint()
     {
         var modules = await fixture.ClientFor("system_admin").GetFromJsonAsync<JsonElement>("/api/platform/modules");
 
-        // A declared-but-not-yet-built tab shows an intentional empty state, not developer jargon.
+        // The Matters tab graduated from placeholder to a live server-driven table.
         var legal = modules.EnumerateArray().First(m => m.GetProperty("id").GetString() == "legal");
         var matters = legal.GetProperty("tabs").EnumerateArray().First(t => t.GetProperty("id").GetString() == "matters");
-        Assert.False(string.IsNullOrWhiteSpace(matters.GetProperty("placeholder").GetString()));
+        Assert.Equal("/api/legal/matters", matters.GetProperty("dataEndpoint").GetString());
+        Assert.True(matters.GetProperty("columns").GetArrayLength() >= 4);
     }
 
     [Fact]
