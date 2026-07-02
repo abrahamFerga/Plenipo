@@ -45,7 +45,8 @@ function renderChat() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <ChatPanel moduleId="finance" suggestedPrompts={["Summarize my spending"]} />
+      {/* These tests exercise the SignalR transport explicitly; AG-UI has its own spec file. */}
+      <ChatPanel moduleId="finance" transport="signalr" suggestedPrompts={["Summarize my spending"]} />
     </QueryClientProvider>,
   );
 }
@@ -160,7 +161,7 @@ describe("ChatPanel", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <ChatPanel moduleId="legal" conversationId="c2" />
+        <ChatPanel moduleId="legal" transport="signalr" conversationId="c2" />
       </QueryClientProvider>,
     );
 
@@ -202,7 +203,7 @@ describe("ChatPanel", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <ChatPanel moduleId="legal" />
+        <ChatPanel moduleId="legal" transport="signalr" />
       </QueryClientProvider>,
     );
 
@@ -254,7 +255,7 @@ describe("ChatPanel", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <ChatPanel moduleId="finance" conversationId="c1" />
+        <ChatPanel moduleId="finance" transport="signalr" conversationId="c1" />
       </QueryClientProvider>,
     );
 

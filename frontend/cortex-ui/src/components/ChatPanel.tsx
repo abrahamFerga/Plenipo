@@ -6,6 +6,7 @@ import {
   type AgentStreamEvent,
 } from "../lib/signalr";
 import { api, uploadFile, type StoredFileInfo } from "../lib/api";
+import { messageId, runAgui } from "../lib/agui";
 import { parseAttachmentRefs, withAttachmentRefs } from "../lib/attachments";
 import { Markdown } from "./Markdown";
 import { PendingApprovals } from "./PendingApprovals";
@@ -26,6 +27,13 @@ interface ChatMessage {
 
 interface ChatPanelProps {
   moduleId: string;
+  /**
+   * Streaming transport. "agui" (default) speaks the open AG-UI protocol (HTTP POST + SSE) that the
+   * backend implements at /api/agui/{moduleId} — the same protocol any AG-UI client can use;
+   * "signalr" streams over the /hubs/agent WebSocket hub instead. Both run the identical
+   * authorized, audited pipeline server-side.
+   */
+  transport?: "agui" | "signalr";
   /** Example prompts shown as one-click starters when the conversation is empty. */
   suggestedPrompts?: string[];
   /** When set, resume this conversation (load its history); when undefined, a fresh conversation. */
@@ -59,6 +67,7 @@ function autoGrow(el: HTMLTextAreaElement | null) {
 
 export function ChatPanel({
   moduleId,
+  transport = "agui",
   suggestedPrompts,
   conversationId,
   onConversationStarted,
@@ -73,6 +82,7 @@ export function ChatPanel({
   const [uploading, setUploading] = useState(false);
   const [failedText, setFailedText] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const queryClient = useQueryClient();
 
   const connectionRef = useRef<HubConnection | null>(null);
@@ -85,6 +95,12 @@ export function ChatPanel({
   const pinnedRef = useRef(true);
   const prevMessageCountRef = useRef(0);
   const copyTimerRef = useRef<number | undefined>(undefined);
+  // AG-UI: the client-owned thread id for a conversation the server hasn't named yet. Once the
+  // server returns its conversation id we use THAT as the thread id (the backend resumes a thread
+  // id that matches an existing conversation directly).
+  const threadIdRef = useRef<string | undefined>(undefined);
+  // Counts drag-enter/leave pairs — child elements fire leave events while still inside the panel.
+  const dragDepthRef = useRef(0);
 
   async function attachFiles(list: FileList | null) {
     if (!list || list.length === 0) return;
@@ -103,8 +119,13 @@ export function ChatPanel({
     }
   }
 
-  // Establish the hub connection once.
+  // Establish the hub connection once — only for the SignalR transport. AG-UI is plain
+  // HTTP + SSE per turn: nothing to connect, nothing to reconnect.
   useEffect(() => {
+    if (transport !== "signalr") {
+      return;
+    }
+
     const connection = createAgentConnection();
     connectionRef.current = connection;
     let active = true;
@@ -129,7 +150,7 @@ export function ChatPanel({
       void connection.stop();
       connectionRef.current = null;
     };
-  }, []);
+  }, [transport]);
 
   // Keep the message list scrolled to the bottom — but only while the user is pinned there, so
   // scrolling up to read isn't yanked back by streaming tokens. A send (message count grew) always
@@ -158,10 +179,12 @@ export function ChatPanel({
       setError(null);
       setSessionTokens(0);
       conversationIdRef.current = undefined;
+      threadIdRef.current = undefined;
       return;
     }
 
     conversationIdRef.current = conversationId;
+    threadIdRef.current = undefined; // resumed conversations use their server id as the thread id
     setError(null);
     setSessionTokens(0);
     let active = true;
@@ -205,6 +228,7 @@ export function ChatPanel({
     setError(null);
     setSessionTokens(0);
     conversationIdRef.current = undefined;
+    threadIdRef.current = undefined;
   }
 
   // Stop a streaming turn: disposing the subscription cancels the server-side run (its CancellationToken
@@ -237,7 +261,8 @@ export function ChatPanel({
 
   function send(explicit?: string) {
     const typed = (explicit ?? input).trim();
-    if ((!typed && attachments.length === 0) || status === "streaming" || uploading || !connectionRef.current) {
+    const transportReady = transport === "agui" || connectionRef.current !== null;
+    if ((!typed && attachments.length === 0) || status === "streaming" || uploading || !transportReady) {
       return;
     }
 
@@ -249,8 +274,7 @@ export function ChatPanel({
   }
 
   function sendText(text: string) {
-    const connection = connectionRef.current;
-    if (!connection || status === "streaming") {
+    if (status === "streaming") {
       return;
     }
 
@@ -277,6 +301,18 @@ export function ChatPanel({
       return alreadyShown ? [...prev, assistantMessage] : [...prev, userMessage, assistantMessage];
     });
     setStatus("streaming");
+
+    if (transport === "agui") {
+      sendOverAgui(assistantId, text);
+      return;
+    }
+
+    const connection = connectionRef.current;
+    if (!connection) {
+      failTurn(assistantId, text, "The agent hub is not connected.");
+      setStatus("idle");
+      return;
+    }
 
     const request = {
       moduleId,
@@ -344,8 +380,120 @@ export function ChatPanel({
     });
   }
 
+  /**
+   * One AG-UI turn: POST the message, consume the SSE events. The thread id is the server's
+   * conversation id once known (the backend resumes it directly); before that, a client-owned id
+   * that stays stable across the conversation's turns.
+   */
+  function sendOverAgui(assistantId: string, text: string) {
+    const threadId = conversationIdRef.current ?? (threadIdRef.current ??= messageId());
+    const controller = new AbortController();
+    subscriptionRef.current = { dispose: () => controller.abort() };
+
+    void (async () => {
+      try {
+        for await (const evt of runAgui(moduleId, text, { threadId, signal: controller.signal })) {
+          switch (evt.type) {
+            case "TEXT_MESSAGE_CONTENT": {
+              const delta = typeof evt.delta === "string" ? evt.delta : "";
+              if (delta) {
+                appendToAssistant(assistantId, (m) => ({ ...m, text: m.text + delta }));
+              }
+              break;
+            }
+            case "TOOL_CALL_START": {
+              const tool = typeof evt.toolCallName === "string" ? evt.toolCallName : undefined;
+              if (tool) {
+                appendToAssistant(assistantId, (m) => ({ ...m, tools: [...m.tools, tool] }));
+              }
+              break;
+            }
+            case "CUSTOM": {
+              if (evt.name === "token_usage" && typeof evt.value === "object" && evt.value !== null) {
+                const v = evt.value as { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+                const usage: TokenUsage = {
+                  input: v.inputTokens ?? 0,
+                  output: v.outputTokens ?? 0,
+                  total: v.totalTokens ?? 0,
+                };
+                appendToAssistant(assistantId, (m) => ({ ...m, usage }));
+                setSessionTokens((t) => t + usage.total);
+              } else if (evt.name === "approval_required") {
+                void queryClient.invalidateQueries({ queryKey: ["approvals"] });
+              }
+              break;
+            }
+            case "RUN_FINISHED": {
+              const result = evt.result as { conversationId?: string } | undefined;
+              if (result?.conversationId) {
+                const wasNew = conversationIdRef.current === undefined;
+                conversationIdRef.current = result.conversationId;
+                if (wasNew) {
+                  onConversationStarted?.(result.conversationId);
+                }
+              }
+              break;
+            }
+            case "RUN_ERROR": {
+              failTurn(assistantId, text, typeof evt.message === "string" ? evt.message : "Unknown stream error");
+              break;
+            }
+          }
+        }
+      } catch (e: unknown) {
+        if (!controller.signal.aborted) {
+          failTurn(assistantId, text, e instanceof Error ? e.message : String(e));
+        }
+      } finally {
+        subscriptionRef.current = null;
+        setStatus("idle");
+      }
+    })();
+  }
+
   return (
-    <div className="flex h-full flex-col">
+    <div
+      className="relative flex h-full flex-col"
+      onDragEnter={(e) => {
+        if (e.dataTransfer.types.includes("Files")) {
+          e.preventDefault();
+          dragDepthRef.current++;
+          setDragging(true);
+        }
+      }}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("Files")) {
+          e.preventDefault();
+        }
+      }}
+      onDragLeave={() => {
+        // Children fire enter/leave pairs while the cursor stays inside the panel; only a leave
+        // that closes the outermost enter ends the drop state.
+        if (--dragDepthRef.current <= 0) {
+          dragDepthRef.current = 0;
+          setDragging(false);
+        }
+      }}
+      onDrop={(e) => {
+        if (e.dataTransfer.files.length > 0) {
+          e.preventDefault();
+          void attachFiles(e.dataTransfer.files);
+        }
+        dragDepthRef.current = 0;
+        setDragging(false);
+      }}
+    >
+      {dragging && (
+        <div
+          role="status"
+          aria-label="Drop files to attach"
+          className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-brand-500 bg-brand-50/80 dark:bg-slate-900/80"
+        >
+          <p className="text-sm font-medium text-brand-700 dark:text-brand-300">
+            Drop files to attach them to your message
+          </p>
+        </div>
+      )}
       <div className="mb-2 flex items-center justify-between border-b border-slate-200 pb-2 dark:border-slate-700">
         <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
           {moduleId} assistant
@@ -591,6 +739,13 @@ export function ChatPanel({
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               send();
+            }
+          }}
+          onPaste={(e) => {
+            // Pasting a file (screenshot, copied document) attaches it like a drop would.
+            if (e.clipboardData.files.length > 0) {
+              e.preventDefault();
+              void attachFiles(e.clipboardData.files);
             }
           }}
         />

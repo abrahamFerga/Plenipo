@@ -2,8 +2,8 @@ import { test, expect, type Page } from "@playwright/test";
 
 // Chat E2E over a fully mocked API: the conversation list, resuming a conversation (history with
 // attachment chips + markdown), and the composer's Shift+Enter behavior. SignalR streaming is out of
-// scope — the hub negotiate is aborted so the connection fails fast and the run never touches a real
-// backend (the panel's "Could not connect" banner is expected and harmless here).
+// scope — the default transport is AG-UI (HTTP per turn, nothing connects at mount); the hub route
+// is still aborted defensively for any code path that opts into SignalR.
 const MODULE = {
   id: "demo",
   displayName: "Demo Module",
@@ -87,9 +87,8 @@ test("Shift+Enter inserts a newline in the composer without sending", async ({ p
 
   const composer = page.getByLabel("Message");
   await expect(composer).toBeVisible();
-  // The mount-time hub negotiate has settled (aborted → banner) before we start watching the network,
-  // so anything recorded below can only come from the keypress.
-  await expect(page.getByText(/Could not connect to agent hub/)).toBeVisible();
+  // The default transport is AG-UI (plain HTTP per turn) — nothing connects at mount, so anything
+  // recorded below can only come from the keypress.
 
   const sends: string[] = [];
   page.on("request", (req) => {

@@ -385,6 +385,13 @@ export const api = {
     reject: (id: string) => apiSend(`/api/chat/approvals/${id}/reject`, "POST"),
   },
 
+  connectors: {
+    // Any authenticated user starts THEIR OWN account link for a delegated connector (stage 2 of
+    // enablement); the returned authorizeUrl opens the IdP's consent page in a new tab.
+    oauthStart: (connectorId: string) =>
+      apiGet<{ authorizeUrl: string }>(`/api/connectors/${encodeURIComponent(connectorId)}/oauth/start`),
+  },
+
   admin: {
     securityCatalog: () => apiGet<SecurityCatalog>("/api/admin/security/catalog"),
     roles: () => apiGet<RoleInfo[]>("/api/admin/roles"),

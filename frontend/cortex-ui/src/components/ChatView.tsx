@@ -6,6 +6,8 @@ import { ConversationList } from "./ConversationList";
 interface ChatViewProps {
   moduleId: string;
   suggestedPrompts?: string[];
+  /** Streaming transport for the chat panel: "agui" (default, open AG-UI protocol) or "signalr". */
+  transport?: "agui" | "signalr";
 }
 
 /**
@@ -14,7 +16,7 @@ interface ChatViewProps {
  * conversation is created it's selected and the list refreshed. Composed from the exported `ChatPanel` and
  * `ConversationList`, so a host can still use either alone.
  */
-export function ChatView({ moduleId, suggestedPrompts }: ChatViewProps) {
+export function ChatView({ moduleId, suggestedPrompts, transport }: ChatViewProps) {
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const queryClient = useQueryClient();
 
@@ -29,6 +31,7 @@ export function ChatView({ moduleId, suggestedPrompts }: ChatViewProps) {
       <div className="min-h-0 flex-1 pl-4">
         <ChatPanel
           moduleId={moduleId}
+          transport={transport}
           suggestedPrompts={suggestedPrompts}
           conversationId={selectedId}
           onNewChat={() => setSelectedId(undefined)}

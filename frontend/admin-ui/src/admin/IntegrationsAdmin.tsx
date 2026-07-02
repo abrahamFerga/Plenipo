@@ -104,6 +104,11 @@ function ConnectorCard({ connector }: { connector: ConnectorAdmin }) {
     mutationFn: (enabled: boolean) => api.admin.setConnectorEnabled(connector.id, enabled),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "connectors"] }),
   });
+  // Stage 2 for delegated connectors: link YOUR account (each user does this individually).
+  const connect = useMutation({
+    mutationFn: () => api.connectors.oauthStart(connector.id),
+    onSuccess: ({ authorizeUrl }) => window.open(authorizeUrl, "_blank", "noopener"),
+  });
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
@@ -125,6 +130,17 @@ function ConnectorCard({ connector }: { connector: ConnectorAdmin }) {
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-3">
+          {connector.authMode === "UserDelegated" && connector.enabled && (
+            <button
+              type="button"
+              onClick={() => connect.mutate()}
+              disabled={connect.isPending}
+              title="Link your own account (opens the identity provider's consent page)"
+              className="focus-ring rounded-md border border-brand-600 px-2 py-1 text-sm font-medium text-brand-600 hover:bg-brand-50 disabled:opacity-50 dark:hover:bg-slate-800"
+            >
+              {connect.isPending ? "Opening…" : "Connect account"}
+            </button>
+          )}
           {connector.settings.length > 0 && (
             <button
               type="button"

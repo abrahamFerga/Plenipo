@@ -241,6 +241,25 @@ public sealed class ApiIntegrationTests(IntegrationFixture fixture)
     }
 
     [Fact]
+    public async Task Agui_ThreadIdThatIsAConversationId_ResumesThatConversation()
+    {
+        var client = fixture.ClientFor("system_admin");
+
+        // Start a conversation under a client-owned thread id, then RESUME it by using the SERVER's
+        // conversation id as the thread id — how the web UI continues a conversation picked from
+        // history over AG-UI (the id round-trips through RUN_FINISHED.result.conversationId).
+        var threadId = "resume-" + Guid.NewGuid().ToString("N")[..8];
+        var conversationId = ConversationIdOf(await RunAguiTurnAsync(client, threadId, "Hello there"));
+        Assert.False(string.IsNullOrEmpty(conversationId));
+
+        var resumed = ConversationIdOf(await RunAguiTurnAsync(client, conversationId!, "And hello again"));
+        Assert.Equal(conversationId, resumed);
+
+        var conversation = await fixture.GetConversationAsync(Guid.Parse(conversationId!));
+        Assert.Equal(4, conversation.Messages.Count); // both turns landed in the SAME conversation
+    }
+
+    [Fact]
     public async Task TokenUsage_IsRecorded_AndReportedByTheAdminUsageEndpoint()
     {
         var client = fixture.ClientFor("system_admin");

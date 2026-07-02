@@ -93,6 +93,14 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   bundled TypeScript declarations.
 - **Dark mode** — a light/dark/system toggle in both app headers; the preference persists, "system"
   follows the OS live, and a pre-bundle guard prevents a light flash on reload.
+- **Chat speaks AG-UI by default** — the chat panel now drives the open AG-UI protocol
+  (POST /api/agui/{module} + SSE) end to end; SignalR remains available via `transport="signalr"`.
+  A thread id that is an existing conversation's id resumes it server-side, so picking a
+  conversation from history continues it over AG-UI.
+- **Drag & drop + paste attachments** — drop files anywhere on the chat panel (with a drop overlay)
+  or paste a file into the composer; both upload to the file store and attach as chips.
+- **Connect account** — the Integrations page shows a per-user "Connect account" button on enabled
+  delegated connectors, opening the IdP consent page from /oauth/start.
 
 **Samples**
 - Three demo verticals — **Finance** (rule-based categorizer + LLM fallback, budgets, seeded demo ledger),
