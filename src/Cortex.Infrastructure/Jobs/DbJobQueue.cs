@@ -36,14 +36,29 @@ public sealed class DbJobQueue(PlatformDbContext db, ICurrentUser currentUser) :
     public async Task<bool> TryCancelAsync(Guid jobId, CancellationToken cancellationToken = default)
     {
         var job = await FindAsync(jobId, cancellationToken);
-        if (job is null || job.Status != JobStatus.Queued)
+        // Only the enqueuer may cancel — a job runs under its enqueuer's authority, and tenant
+        // scoping alone would let any tenant member kill a colleague's work.
+        if (job is null || job.UserId != currentUser.UserId)
         {
             return false;
         }
 
-        job.Status = JobStatus.Cancelled;
-        job.CompletedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(cancellationToken);
-        return true;
+        switch (job.Status)
+        {
+            case JobStatus.Queued:
+                job.Status = JobStatus.Cancelled;
+                job.CompletedAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync(cancellationToken);
+                return true;
+
+            case JobStatus.Running:
+                // Cooperative: the processor observes the flag at the next progress report.
+                job.CancelRequested = true;
+                await db.SaveChangesAsync(cancellationToken);
+                return true;
+
+            default:
+                return false;
+        }
     }
 }

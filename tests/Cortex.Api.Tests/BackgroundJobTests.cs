@@ -41,7 +41,11 @@ public sealed class BackgroundJobTests : IAsyncLifetime
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             base.ConfigureWebHost(builder);
-            builder.ConfigureTestServices(services => services.AddSingleton<IJobHandler, EchoJobHandler>());
+            builder.ConfigureTestServices(services =>
+            {
+                services.AddSingleton<IJobHandler, EchoJobHandler>();
+                services.AddSingleton<IJobHandler, SlowJobHandler>();
+            });
         }
     }
 
@@ -67,6 +71,24 @@ public sealed class BackgroundJobTests : IAsyncLifetime
             await context.ReportProgressAsync(50, "halfway", cancellationToken);
             var args = JsonDocument.Parse(context.ArgumentsJson).RootElement;
             return JsonSerializer.Serialize(new { echoed = args.GetProperty("message").GetString() });
+        }
+    }
+
+    /// <summary>Runs for seconds, reporting progress every step — the cooperative-cancel target.</summary>
+    private sealed class SlowJobHandler : IJobHandler
+    {
+        public string Kind => "test.slow";
+
+        public async Task<string?> ExecuteAsync(JobExecutionContext context, CancellationToken cancellationToken)
+        {
+            for (var i = 1; i <= 200; i++)
+            {
+                // Each report is a cancellation point; a requested cancel throws from inside it.
+                await context.ReportProgressAsync(Math.Min(99, i), $"step {i}", cancellationToken);
+                await Task.Delay(25, cancellationToken);
+            }
+
+            return null;
         }
     }
 
@@ -171,5 +193,131 @@ public sealed class BackgroundJobTests : IAsyncLifetime
         // (other-tenant doesn't exist in the seeded store; enrichment yields no tenant → filters hide everything)
         var response = await foreign.GetAsync($"/api/jobs/{unknownKindJob}");
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Orphaned_running_job_is_requeued_and_completes_on_the_next_attempt()
+    {
+        using var client = ClientFor("user", "lease-user");
+        (await client.GetAsync("/api/platform/me")).EnsureSuccessStatusCode();
+
+        // Simulate a host that crashed mid-run: a Running row whose lease has already expired.
+        var jobId = await InsertRunningJobWithExpiredLeaseAsync("lease-user", attempts: 1);
+
+        var job = await PollUntilTerminalAsync(client, jobId);
+        Assert.Equal("Succeeded", job.GetProperty("status").GetString());
+        Assert.Equal(2, job.GetProperty("attempts").GetInt32()); // the crashed run + the recovery run
+
+        var note = job.GetProperty("progressNote").GetString();
+        Assert.False(string.IsNullOrEmpty(note)); // the handler's own progress overwrote the requeue note
+    }
+
+    [Fact]
+    public async Task Orphaned_running_job_fails_permanently_once_attempts_are_exhausted()
+    {
+        using var client = ClientFor("user", "lease-user-2");
+        (await client.GetAsync("/api/platform/me")).EnsureSuccessStatusCode();
+
+        var jobId = await InsertRunningJobWithExpiredLeaseAsync("lease-user-2", attempts: JobProcessor.MaxAttempts);
+
+        var job = await PollUntilTerminalAsync(client, jobId);
+        Assert.Equal("Failed", job.GetProperty("status").GetString());
+        Assert.Contains("lease expired", job.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task Running_job_cancels_cooperatively_and_only_for_its_owner()
+    {
+        using var owner = ClientFor("user", "cancel-user");
+        (await owner.GetAsync("/api/platform/me")).EnsureSuccessStatusCode();
+
+        Guid jobId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var queue = await ScopedQueueAsAsync(scope, "cancel-user");
+            jobId = await queue.EnqueueAsync("test", "test.slow", new { });
+        }
+
+        // Wait until the processor has actually started it (progress > 0 ⇒ inside the loop).
+        for (var i = 0; i < 100; i++)
+        {
+            var running = await owner.GetFromJsonAsync<JsonElement>($"/api/jobs/{jobId}");
+            if (running.GetProperty("status").GetString() == "Running" && running.GetProperty("progress").GetInt32() > 0)
+            {
+                break;
+            }
+
+            await Task.Delay(50);
+        }
+
+        // A same-tenant NON-owner cannot cancel it (a job runs under its enqueuer's authority).
+        using var other = ClientFor("user", "cancel-bystander");
+        (await other.GetAsync("/api/platform/me")).EnsureSuccessStatusCode();
+        var denied = await other.PostAsync($"/api/jobs/{jobId}/cancel", null);
+        Assert.Equal(HttpStatusCode.Conflict, denied.StatusCode);
+
+        // The owner can; the handler observes the flag at its next progress report.
+        var accepted = await owner.PostAsync($"/api/jobs/{jobId}/cancel", null);
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+
+        var job = await PollUntilTerminalAsync(owner, jobId);
+        Assert.Equal("Cancelled", job.GetProperty("status").GetString());
+        Assert.Equal("cancelled while running", job.GetProperty("progressNote").GetString());
+    }
+
+    /// <summary>Sets the scope's identity to <paramref name="subject"/> and returns its job queue.</summary>
+    private static async Task<IJobQueue> ScopedQueueAsAsync(IServiceScope scope, string subject)
+    {
+        var db = scope.ServiceProvider.GetRequiredService<PlatformDbContext>();
+        var context = scope.ServiceProvider.GetRequiredService<Cortex.Infrastructure.Context.RequestContext>();
+        var tenant = await db.Tenants.FirstAsync(t => t.Slug == "dev");
+        context.SetTenant(tenant.Id);
+        var user = await db.Users.IgnoreQueryFilters().FirstAsync(u => u.Subject == subject);
+        context.SetUser(user.Id, user.Subject, user.DisplayName);
+        context.SetPermissions(["chat.use"]);
+        return scope.ServiceProvider.GetRequiredService<IJobQueue>();
+    }
+
+    /// <summary>A Running echo job whose lease is already in the past — what a host crash leaves behind.</summary>
+    private async Task<Guid> InsertRunningJobWithExpiredLeaseAsync(string subject, int attempts)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PlatformDbContext>();
+        var tenant = await db.Tenants.FirstAsync(t => t.Slug == "dev");
+        var user = await db.Users.IgnoreQueryFilters().FirstAsync(u => u.Subject == subject);
+
+        var job = new Cortex.Core.Platform.BackgroundJob
+        {
+            TenantId = tenant.Id,
+            UserId = user.Id,
+            ModuleId = "test",
+            Kind = "test.echo",
+            ArgumentsJson = """{"message":"survived the crash"}""",
+            PermissionsSnapshotJson = """["chat.use"]""",
+            Status = Cortex.Core.Platform.JobStatus.Running,
+            Attempts = attempts,
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-30),
+            LeaseExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-20),
+        };
+        db.BackgroundJobs.Add(job);
+        await db.SaveChangesAsync();
+        return job.Id;
+    }
+
+    private static async Task<JsonElement> PollUntilTerminalAsync(HttpClient client, Guid jobId)
+    {
+        JsonElement job = default;
+        for (var i = 0; i < 150; i++)
+        {
+            job = await client.GetFromJsonAsync<JsonElement>($"/api/jobs/{jobId}");
+            if (job.GetProperty("status").GetString() is "Succeeded" or "Failed" or "Cancelled")
+            {
+                return job;
+            }
+
+            await Task.Delay(100);
+        }
+
+        return job;
     }
 }

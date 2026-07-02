@@ -34,21 +34,25 @@ public static class JobEndpoints
             })
             .WithName("Jobs_Mine");
 
+        // Queued jobs cancel immediately; running ones cancel cooperatively at their next progress
+        // report. Only the enqueuer can cancel their job.
         group.MapPost("/{jobId:guid}/cancel", async (Guid jobId, IJobQueue jobs, CancellationToken cancellationToken) =>
             {
                 var cancelled = await jobs.TryCancelAsync(jobId, cancellationToken);
                 return cancelled
                     ? Results.Ok()
-                    : Results.Conflict(new { error = "The job does not exist or already started." });
+                    : Results.Conflict(new { error = "The job does not exist, already finished, or is not yours to cancel." });
             })
             .WithName("Jobs_Cancel");
     }
 
     private static JobDto ToDto(BackgroundJob job) => new(
         job.Id, job.ModuleId, job.Kind, job.Status.ToString(), job.Progress, job.ProgressNote,
-        job.ResultJson, job.Error, job.CreatedAt, job.StartedAt, job.CompletedAt);
+        job.ResultJson, job.Error, job.Attempts, job.CancelRequested,
+        job.CreatedAt, job.StartedAt, job.CompletedAt);
 
     private sealed record JobDto(
         Guid Id, string ModuleId, string Kind, string Status, int Progress, string? ProgressNote,
-        string? ResultJson, string? Error, DateTimeOffset CreatedAt, DateTimeOffset? StartedAt, DateTimeOffset? CompletedAt);
+        string? ResultJson, string? Error, int Attempts, bool CancelRequested,
+        DateTimeOffset CreatedAt, DateTimeOffset? StartedAt, DateTimeOffset? CompletedAt);
 }

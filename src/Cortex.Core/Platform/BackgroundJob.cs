@@ -44,6 +44,22 @@ public sealed class BackgroundJob : EntityBase, ITenantOwned
 
     public JobStatus Status { get; set; } = JobStatus.Queued;
 
+    /// <summary>How many times the job has been claimed for execution (1 on the first run).</summary>
+    public int Attempts { get; set; }
+
+    /// <summary>
+    /// Set when the enqueuer asks to cancel a job that is already running. Cancellation is
+    /// cooperative: the processor observes the flag at the job's next progress report.
+    /// </summary>
+    public bool CancelRequested { get; set; }
+
+    /// <summary>
+    /// The claim lease, stamped when the processor takes the job and extended at every progress
+    /// report. A Running job whose lease has expired was orphaned by a crashed or stopped host;
+    /// the processor requeues it (or fails it once its attempts are used up).
+    /// </summary>
+    public DateTimeOffset? LeaseExpiresAt { get; set; }
+
     /// <summary>0–100. Handlers report progress; the UI polls it.</summary>
     public int Progress { get; set; }
 

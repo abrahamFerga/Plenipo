@@ -16,6 +16,10 @@ public interface IJobQueue
     /// <summary>The job row, tenant-scoped. Null when the id doesn't exist in this tenant.</summary>
     public Task<BackgroundJob?> FindAsync(Guid jobId, CancellationToken cancellationToken = default);
 
-    /// <summary>Cancels a job that is still queued. Returns false when it already started (or doesn't exist).</summary>
+    /// <summary>
+    /// Cancels the caller's own job: a Queued job is cancelled immediately; a Running one gets a
+    /// cancellation request the processor honors at the job's next progress report. Returns false
+    /// when the job is already finished, belongs to someone else, or doesn't exist.
+    /// </summary>
     public Task<bool> TryCancelAsync(Guid jobId, CancellationToken cancellationToken = default);
 }
