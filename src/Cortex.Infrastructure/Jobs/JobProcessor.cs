@@ -234,5 +234,30 @@ public sealed class JobProcessor(
 
             await db.SaveChangesAsync(CancellationToken.None);
         }
+
+        // Tell the enqueuer how their job ended — the first notification producer. Best-effort:
+        // a notification hiccup must never disturb the completed job's state.
+        if (job.Status is JobStatus.Succeeded or JobStatus.Failed)
+        {
+            try
+            {
+                var notifier = services.GetRequiredService<Cortex.Application.Notifications.INotifier>();
+                await notifier.NotifyAsync(new Cortex.Application.Notifications.Notification(
+                    job.TenantId,
+                    job.UserId,
+                    Category: "jobs",
+                    Title: job.Status == JobStatus.Succeeded
+                        ? $"Job finished: {job.Kind}"
+                        : $"Job failed: {job.Kind}",
+                    Body: job.Status == JobStatus.Succeeded
+                        ? job.ProgressNote ?? "Completed successfully."
+                        : job.Error ?? "Failed without an error message.",
+                    Link: $"/api/jobs/{job.Id}"), CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Could not send completion notification for job {JobId}", job.Id);
+            }
+        }
     }
 }

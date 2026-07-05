@@ -140,6 +140,21 @@ internal sealed class InstructionSnapshotConfiguration : IEntityTypeConfiguratio
     }
 }
 
+internal sealed class UserNotificationConfiguration : IEntityTypeConfiguration<UserNotification>
+{
+    public void Configure(EntityTypeBuilder<UserNotification> b)
+    {
+        b.ToTable("user_notifications");
+        b.HasKey(x => x.Id);
+        b.Property(x => x.Category).HasMaxLength(32).IsRequired();
+        b.Property(x => x.Title).HasMaxLength(200).IsRequired();
+        b.Property(x => x.Body).HasMaxLength(2000).IsRequired();
+        b.Property(x => x.Link).HasMaxLength(500);
+        // The inbox query: a user's notifications, unread first, newest first.
+        b.HasIndex(x => new { x.TenantId, x.UserId, x.ReadAt });
+    }
+}
+
 internal sealed class ConversationConfiguration : IEntityTypeConfiguration<Conversation>
 {
     public void Configure(EntityTypeBuilder<Conversation> b)

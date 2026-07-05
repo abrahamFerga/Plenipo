@@ -95,8 +95,14 @@ KV references instead of env vars).
     advertisement); distinct assemblies are recorded once per tenant in `instruction_snapshots`,
     resolvable via GET `/api/admin/instruction-snapshots/{hash}` (platform.ai.manage).
     Best-effort by design — provenance failure never fails a chat turn. Delivered.
-  - **Notification channel seam**: deliver job completions/calendar reminders via chat push,
-    email, or webhook — one interface, per-tenant channel config.
+  - [x] **Notification seam (in-app baseline + channel interface)**: `INotifier` persists a
+    durable in-app inbox row (`user_notifications`) then fans out best-effort to registered
+    `INotificationChannel`s (none by default — webhook/email are follow-ups). Self-scoped user
+    API: GET `/api/notifications` (unread-first), mark-read, read-all. First producer: the job
+    processor notifies the enqueuer on Succeeded/Failed (best-effort, never disturbs job state).
+    Explicit tenant/user on the Notification record — producers run outside request scopes.
+    Follow-ups: webhook channel (per-tenant URL + HMAC via ISecretVault), calendar-reminder
+    producer (module-side), UI bell/badge in @cortex/ui. Delivered.
   - **Cross-module handoff**: MAF handoff workflow between module agents ("ask finance" from
     legal chat) — the cortex-peer connector already covers the cross-system case.
   - **Admin ops tab**: job queue depth, connector sync health, RAG index freshness in one view.
