@@ -38,4 +38,12 @@ public sealed class AgentProfile : EntityBase, ITenantOwned
 
     /// <summary>At most one default per (tenant, module); the default is the one the runner applies.</summary>
     public bool IsDefault { get; set; }
+
+    /// <summary>
+    /// Which tools this agent may use, as tool-name patterns (exact names, or a trailing <c>*</c>
+    /// wildcard like <c>ask_*</c>). Null or empty = every tool the caller is permitted to call
+    /// (the pre-profile behaviour). A selection can only NARROW the RBAC-permitted set — it never
+    /// grants a tool the user's permissions don't already allow.
+    /// </summary>
+    public List<string>? ToolNames { get; set; }
 }

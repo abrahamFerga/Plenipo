@@ -91,16 +91,22 @@ public sealed class AuthorizedAgentRunner(
         // Resolve this tenant's effective AI settings (system prompt + token budget), defaults with overrides.
         var aiSettings = await tenantAiSettings.ResolveAsync(cancellationToken);
 
+        // The tenant's default agent profile for this module (if any) retasks or specializes the
+        // chatbot — different voice/policy and, when it declares a tool selection, a narrower tool
+        // surface — no code change. Resolved before tool filtering so the selection applies below.
+        var profile = await agentProfiles.ResolveActiveAsync(request.ModuleId, cancellationToken);
+
         // --- Pre-model-call tool filtering: the model only ever sees tools the caller may invoke. ---
         // Module + platform tools, plus tools from connectors this TENANT has enabled (default-off) —
-        // then every tool, whatever its source, passes the same per-permission gate.
+        // then every tool, whatever its source, passes the same per-permission gate. The profile's
+        // tool selection intersects AFTER RBAC: it can hide a permitted tool, never grant one.
         var candidateTools = new List<ModuleTool>(toolRegistry.GetModuleTools(request.ModuleId, services));
         candidateTools.AddRange(await connectorTools.GetEnabledToolsAsync(services, cancellationToken));
 
         var permittedTools = new List<ModuleTool>();
         foreach (var tool in candidateTools)
         {
-            if (currentUser.HasPermission(tool.Permission))
+            if (currentUser.HasPermission(tool.Permission) && AgentToolSelection.Matches(profile?.ToolNames, tool.Name))
             {
                 permittedTools.Add(tool);
             }
@@ -156,9 +162,6 @@ public sealed class AuthorizedAgentRunner(
             .ToHashSet(StringComparer.Ordinal);
         approvalRequired.UnionWith(candidateTools.Where(t => t.RequiresApproval).Select(t => t.Name));
 
-        // The tenant's default agent profile for this module (if any) retasks or specializes the
-        // chatbot — same manifest tools, different voice/policy, no code change.
-        var profile = await agentProfiles.ResolveActiveAsync(request.ModuleId, cancellationToken);
         var instructions = InstructionComposer.Compose(aiSettings.SystemPrompt, manifest.AgentInstructions, profile);
 
         // Advertise skills (name + description only — progressive disclosure) when this user can

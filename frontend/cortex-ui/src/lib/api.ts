@@ -165,6 +165,11 @@ export interface AgentProfile {
   mode: "Append" | "Replace";
   /** The default profile is the one the agent runner applies each turn. */
   isDefault: boolean;
+  /**
+   * Tool-name patterns this agent may use (exact names or a trailing `*` wildcard, e.g. `ask_*`).
+   * Null/absent = every tool the caller's permissions allow. A selection only narrows RBAC.
+   */
+  toolNames?: string[] | null;
 }
 
 /** A user with their roles and explicit permission grants. */
@@ -494,6 +499,7 @@ export const api = {
       instructions: string;
       mode: "Append" | "Replace";
       isDefault: boolean;
+      toolNames?: string[] | null;
     }) => apiSend("/api/admin/agent-profiles", "PUT", profile),
     deleteAgentProfile: (id: string) => apiSend(`/api/admin/agent-profiles/${id}`, "DELETE"),
     usage: (days = 30) => apiGet<UsageReport>(`/api/admin/usage?days=${days}`),

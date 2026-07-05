@@ -175,7 +175,7 @@ public static class AdminEndpoints
 
             var profiles = await query
                 .OrderBy(p => p.ModuleId).ThenBy(p => p.Name)
-                .Select(p => new AgentProfileDto(p.Id, p.ModuleId, p.Name, p.Instructions, p.Mode.ToString(), p.IsDefault))
+                .Select(p => new AgentProfileDto(p.Id, p.ModuleId, p.Name, p.Instructions, p.Mode.ToString(), p.IsDefault, p.ToolNames))
                 .ToListAsync(ct);
             return Results.Ok(profiles);
         })
@@ -210,6 +210,32 @@ public static class AdminEndpoints
                 mode = AgentProfileMode.Append;
             }
 
+            // Tool selection: null/empty = all permitted tools. Patterns are tool names, optionally
+            // with a trailing '*' — validated tightly since they feed the runner's tool filter.
+            List<string>? toolNames = null;
+            if (body.ToolNames is { Count: > 0 })
+            {
+                toolNames = body.ToolNames
+                    .Select(t => t?.Trim() ?? "")
+                    .Where(t => t.Length > 0)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList();
+                if (toolNames.Count > 100)
+                {
+                    return Results.BadRequest("toolNames: at most 100 patterns.");
+                }
+
+                if (toolNames.Any(t => t.Length > 100 || !System.Text.RegularExpressions.Regex.IsMatch(t, "^[a-zA-Z0-9_-]+\\*?$")))
+                {
+                    return Results.BadRequest("toolNames: each entry must be a tool name (letters, digits, _ or -), optionally ending in '*'.");
+                }
+
+                if (toolNames.Count == 0)
+                {
+                    toolNames = null;
+                }
+            }
+
             if (body.IsDefault)
             {
                 var currentDefaults = await db.AgentProfiles
@@ -232,6 +258,7 @@ public static class AdminEndpoints
                     Instructions = instructions,
                     Mode = mode,
                     IsDefault = body.IsDefault,
+                    ToolNames = toolNames,
                 };
                 db.AgentProfiles.Add(profile);
             }
@@ -240,10 +267,11 @@ public static class AdminEndpoints
                 profile.Instructions = instructions;
                 profile.Mode = mode;
                 profile.IsDefault = body.IsDefault;
+                profile.ToolNames = toolNames;
             }
 
             await db.SaveChangesAsync(ct);
-            return Results.Ok(new AgentProfileDto(profile.Id, profile.ModuleId, profile.Name, profile.Instructions, profile.Mode.ToString(), profile.IsDefault));
+            return Results.Ok(new AgentProfileDto(profile.Id, profile.ModuleId, profile.Name, profile.Instructions, profile.Mode.ToString(), profile.IsDefault, profile.ToolNames));
         })
         .RequireAuthorization(PermissionRequirement.PolicyName(Permissions.ManageAiSettings))
         .WithName("Admin_UpsertAgentProfile");
@@ -1107,10 +1135,14 @@ public static class AdminEndpoints
         string DefaultSystemPrompt, int DefaultMaxConversationTokens, long DefaultMaxMonthlyTokens);
     private sealed record AiSettingsRequest(string? SystemPrompt, int? MaxConversationTokens, long? MaxMonthlyTokens);
 
-    private sealed record AgentProfileDto(Guid Id, string ModuleId, string Name, string Instructions, string Mode, bool IsDefault);
+    private sealed record AgentProfileDto(
+        Guid Id, string ModuleId, string Name, string Instructions, string Mode, bool IsDefault,
+        IReadOnlyList<string>? ToolNames);
 
     /// <summary>Create or update a named agent profile for a module (matched by moduleId + name).</summary>
-    private sealed record AgentProfileRequest(string? ModuleId, string? Name, string? Instructions, string? Mode, bool IsDefault);
+    private sealed record AgentProfileRequest(
+        string? ModuleId, string? Name, string? Instructions, string? Mode, bool IsDefault,
+        IReadOnlyList<string>? ToolNames);
 
     private sealed record InstructionSnapshotDto(string Hash, string Instructions, DateTimeOffset FirstSeenAt);
 

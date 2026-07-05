@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, ConfirmDialog, type AgentProfile } from "@cortex/ui";
+import { api, ConfirmDialog, type AgentProfile, type SecurityCatalog } from "@cortex/ui";
 
 const inputClass =
   "w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800";
@@ -11,6 +11,8 @@ interface EditorState {
   instructions: string;
   mode: "Append" | "Replace";
   isDefault: boolean;
+  /** null = every permitted tool; a list = only those tools (narrows RBAC, never widens it). */
+  toolNames: string[] | null;
 }
 
 const emptyEditor = (moduleId: string): EditorState => ({
@@ -19,7 +21,11 @@ const emptyEditor = (moduleId: string): EditorState => ({
   instructions: "",
   mode: "Append",
   isDefault: true,
+  toolNames: null,
 });
+
+/** The tool name is the last segment of its permission (`tools.legal.list_matters` → `list_matters`). */
+const toolNameOf = (permission: string): string => permission.split(".").pop() ?? permission;
 
 /**
  * Agent profiles: named, per-module chatbot configurations. The DEFAULT profile for a module is
@@ -31,6 +37,7 @@ export function AgentProfilesAdmin() {
   const qc = useQueryClient();
   const modules = useQuery({ queryKey: ["modules"], queryFn: api.modules });
   const profiles = useQuery({ queryKey: ["admin", "agent-profiles"], queryFn: () => api.admin.agentProfiles() });
+  const catalog = useQuery({ queryKey: ["admin", "security-catalog"], queryFn: api.admin.securityCatalog });
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [deleting, setDeleting] = useState<AgentProfile | null>(null);
 
@@ -106,11 +113,19 @@ export function AgentProfilesAdmin() {
                     default
                   </span>
                 )}
+                {p.toolNames && p.toolNames.length > 0 && (
+                  <span
+                    title={p.toolNames.join(", ")}
+                    className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700 dark:bg-amber-900/40 dark:text-amber-200"
+                  >
+                    {p.toolNames.length} tool{p.toolNames.length === 1 ? "" : "s"}
+                  </span>
+                )}
               </p>
               <div className="flex shrink-0 gap-2">
                 <button
                   type="button"
-                  onClick={() => setEditor({ ...p })}
+                  onClick={() => setEditor({ ...p, toolNames: p.toolNames ?? null })}
                   className="focus-ring rounded border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 dark:border-slate-600 dark:text-slate-300"
                 >
                   Edit
@@ -208,12 +223,25 @@ export function AgentProfilesAdmin() {
             </label>
           </div>
 
+          <ToolPicker
+            moduleId={editor.moduleId}
+            value={editor.toolNames}
+            onChange={(toolNames) => setEditor({ ...editor, toolNames })}
+            catalog={catalog.data}
+          />
+
           {save.isError && <p className="text-xs text-red-600">{(save.error as Error).message}</p>}
 
           <div className="flex gap-2">
             <button
               type="submit"
-              disabled={save.isPending || !editor.name.trim() || !editor.instructions.trim() || !editor.moduleId}
+              disabled={
+                save.isPending ||
+                !editor.name.trim() ||
+                !editor.instructions.trim() ||
+                !editor.moduleId ||
+                (editor.toolNames !== null && editor.toolNames.length === 0)
+              }
               className="focus-ring rounded bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-40"
             >
               {save.isPending ? "Saving…" : "Save profile"}
@@ -243,6 +271,91 @@ export function AgentProfilesAdmin() {
         }}
         onCancel={() => setDeleting(null)}
       />
+    </div>
+  );
+}
+
+/**
+ * Foundry/Copilot-Studio-style tool selection: which tools THIS agent may use. Unrestricted means
+ * every tool the caller's permissions already allow; a selection can only narrow that set (RBAC is
+ * enforced server-side either way). Choices come from the live security catalog, so new module or
+ * platform tools appear automatically.
+ */
+function ToolPicker({
+  moduleId,
+  value,
+  onChange,
+  catalog,
+}: {
+  moduleId: string;
+  value: string[] | null;
+  onChange: (toolNames: string[] | null) => void;
+  catalog: SecurityCatalog | undefined;
+}) {
+  const moduleTools = catalog?.modules.find((m) => m.id === moduleId)?.tools.map((t) => toolNameOf(t.permission)) ?? [];
+  // Platform tools every module's agent receives (documents, knowledge, skills). The handoff
+  // permission covers per-module ask_{module} tools, so it's offered as the ask_* pattern.
+  const platformTools =
+    catalog?.platform
+      .filter((p) => p.permission.startsWith("tools.") && !p.permission.startsWith("tools.handoff."))
+      .map((p) => toolNameOf(p.permission)) ?? [];
+  const hasHandoff = catalog?.platform.some((p) => p.permission.startsWith("tools.handoff.")) ?? false;
+
+  const options = [
+    ...moduleTools.map((name) => ({ name, group: moduleId })),
+    ...platformTools.map((name) => ({ name, group: "platform" })),
+    ...(hasHandoff ? [{ name: "ask_*", group: "platform" }] : []),
+  ];
+
+  const restricted = value !== null;
+  const selected = new Set(value ?? []);
+
+  const toggle = (name: string) => {
+    const next = new Set(selected);
+    if (next.has(name)) {
+      next.delete(name);
+    } else {
+      next.add(name);
+    }
+    onChange([...next]);
+  };
+
+  return (
+    <div className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-700">
+      <label className="flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+        <input
+          type="checkbox"
+          checked={restricted}
+          onChange={(e) => onChange(e.target.checked ? [] : null)}
+        />
+        Restrict which tools this agent can use
+      </label>
+      {!restricted && (
+        <p className="text-xs text-slate-400">
+          Unrestricted: the agent gets every tool the user's permissions allow. Restricting only narrows that
+          set — it never grants a tool the user couldn't already call.
+        </p>
+      )}
+      {restricted &&
+        (options.length === 0 ? (
+          <p className="text-xs text-slate-400">No tool catalog available for this module.</p>
+        ) : (
+          <div className="grid gap-1 sm:grid-cols-2">
+            {options.map((o) => (
+              <label
+                key={o.name}
+                className="flex items-center gap-1.5 font-mono text-xs text-slate-600 dark:text-slate-300"
+              >
+                <input type="checkbox" checked={selected.has(o.name)} onChange={() => toggle(o.name)} />
+                {o.name}
+                <span className="font-sans text-[10px] text-slate-400">{o.group}</span>
+              </label>
+            ))}
+          </div>
+        ))}
+      {restricted && selected.size === 0 && (
+        <p className="text-xs text-amber-600">Nothing selected yet — this agent would have no tools at all.</p>
+      )}
     </div>
   );
 }
