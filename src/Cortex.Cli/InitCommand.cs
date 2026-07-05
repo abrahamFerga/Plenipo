@@ -66,6 +66,22 @@ public sealed class InitCommand : Command<InitCommand.Settings>
         [CommandOption("--permission-source <SOURCE>")]
         [Description("Database (internal RBAC + token) | Token (external IdP only)")]
         public string? PermissionSource { get; init; }
+
+        [CommandOption("--skills <BOOL>")]
+        [Description("Enable agent skills (deploy-time SKILL.md bundles shipped with the host).")]
+        public bool? Skills { get; init; }
+
+        [CommandOption("--skills-path <DIR>")]
+        [Description("Directory of skill bundles, relative to the host (default: skills).")]
+        public string? SkillsPath { get; init; }
+
+        [CommandOption("--secrets-provider <PROVIDER>")]
+        [Description("Where runtime-entered secrets (connector keys, tokens) rest: DataProtection | AzureKeyVault")]
+        public string? SecretsProvider { get; init; }
+
+        [CommandOption("--keyvault-uri <URL>")]
+        [Description("Key Vault URI (required when --secrets-provider AzureKeyVault).")]
+        public string? KeyVaultUri { get; init; }
     }
 
     public override int Execute(CommandContext context, Settings settings)
@@ -102,6 +118,10 @@ public sealed class InitCommand : Command<InitCommand.Settings>
         AuthAuthority = s.AuthAuthority,
         AuthAudience = s.AuthAudience,
         PermissionSource = s.PermissionSource,
+        SkillsEnabled = s.Skills,
+        SkillsPath = s.SkillsPath,
+        SecretsProvider = s.SecretsProvider,
+        KeyVaultUri = s.KeyVaultUri,
     };
 
     private static SettingsPlan RunWizard(Settings s)
@@ -110,14 +130,15 @@ public sealed class InitCommand : Command<InitCommand.Settings>
         AnsiConsole.MarkupLine(
             """
             Steps: [bold]1[/] AI provider · [bold]2[/] Knowledge (RAG) · [bold]3[/] Document tools ·
-                   [bold]4[/] Channels · [bold]5[/] File storage · [bold]6[/] Authentication
+                   [bold]4[/] Channels · [bold]5[/] File storage · [bold]6[/] Authentication ·
+                   [bold]7[/] Skills · [bold]8[/] Secret storage
             Every step can keep the current value; secrets are configured via user-secrets afterwards.
             Connectors and modules are enabled per tenant at runtime (admin console → Integrations / Modules).
             """);
 
         var aiProvider = s.AiProvider ?? AnsiConsole.Prompt(
             new SelectionPrompt<string>()
-                .Title("[bold]1/6[/] AI provider (Mock needs no key and exercises the full pipeline)")
+                .Title("[bold]1/8[/] AI provider (Mock needs no key and exercises the full pipeline)")
                 .AddChoices("Mock", "OpenAI", "AzureOpenAI", "Ollama", "(keep current)"));
         string? aiModel = null, aiEndpoint = null;
         if (aiProvider is "OpenAI" or "AzureOpenAI" or "Ollama")
@@ -129,7 +150,7 @@ public sealed class InitCommand : Command<InitCommand.Settings>
             }
         }
 
-        var rag = s.Rag ?? AnsiConsole.Confirm("[bold]2/6[/] Enable the knowledge pipeline (index documents, search_knowledge)?", defaultValue: false);
+        var rag = s.Rag ?? AnsiConsole.Confirm("[bold]2/8[/] Enable the knowledge pipeline (index documents, search_knowledge)?", defaultValue: false);
         string? embeddingProvider = null;
         if (rag)
         {
@@ -139,15 +160,15 @@ public sealed class InitCommand : Command<InitCommand.Settings>
                     .AddChoices("Mock", "OpenAI", "AzureOpenAI", "Ollama"));
         }
 
-        var documents = s.Documents ?? AnsiConsole.Confirm("[bold]3/6[/] Keep the platform document tools (read/generate PDFs) enabled?", defaultValue: true);
-        var whatsapp = s.WhatsApp ?? AnsiConsole.Confirm("[bold]4/6[/] Enable the WhatsApp channel?", defaultValue: false);
+        var documents = s.Documents ?? AnsiConsole.Confirm("[bold]3/8[/] Keep the platform document tools (read/generate PDFs) enabled?", defaultValue: true);
+        var whatsapp = s.WhatsApp ?? AnsiConsole.Confirm("[bold]4/8[/] Enable the WhatsApp channel?", defaultValue: false);
         var filesProvider = s.FilesProvider ?? AnsiConsole.Prompt(
             new SelectionPrompt<string>()
-                .Title("[bold]5/6[/] File storage")
+                .Title("[bold]5/8[/] File storage")
                 .AddChoices("Local", "AzureBlob", "(keep current)"));
 
         string? authority = s.AuthAuthority, audience = s.AuthAudience, permissionSource = s.PermissionSource;
-        if (AnsiConsole.Confirm("[bold]6/6[/] Configure an external identity provider (Entra External ID / B2C)?", defaultValue: false))
+        if (AnsiConsole.Confirm("[bold]6/8[/] Configure an external identity provider (Entra External ID / B2C)?", defaultValue: false))
         {
             authority ??= AnsiConsole.Ask<string>("   OIDC authority URL:");
             audience ??= AnsiConsole.Ask<string>("   Audience (API client id):");
@@ -155,6 +176,23 @@ public sealed class InitCommand : Command<InitCommand.Settings>
                 new SelectionPrompt<string>()
                     .Title("   Authorization source")
                     .AddChoices("Database", "Token"));
+        }
+
+        var skills = s.Skills ?? AnsiConsole.Confirm("[bold]7/8[/] Enable agent skills (deploy-time SKILL.md bundles shipped with the host)?", defaultValue: false);
+        string? skillsPath = null;
+        if (skills)
+        {
+            skillsPath = s.SkillsPath ?? AnsiConsole.Ask("   Skills directory (relative to the host):", "skills");
+        }
+
+        var secretsProvider = s.SecretsProvider ?? AnsiConsole.Prompt(
+            new SelectionPrompt<string>()
+                .Title("[bold]8/8[/] Runtime secret storage (connector keys, OAuth tokens — entered later in the admin UI)")
+                .AddChoices("DataProtection", "AzureKeyVault", "(keep current)"));
+        string? keyVaultUri = s.KeyVaultUri;
+        if (secretsProvider == "AzureKeyVault")
+        {
+            keyVaultUri ??= AnsiConsole.Ask<string>("   Key Vault URI (https://<vault>.vault.azure.net/):");
         }
 
         return new SettingsPlan
@@ -170,6 +208,10 @@ public sealed class InitCommand : Command<InitCommand.Settings>
             AuthAuthority = authority,
             AuthAudience = audience,
             PermissionSource = permissionSource,
+            SkillsEnabled = skills,
+            SkillsPath = skillsPath,
+            SecretsProvider = secretsProvider is "(keep current)" ? null : secretsProvider,
+            KeyVaultUri = keyVaultUri,
         };
     }
 
@@ -199,6 +241,14 @@ public sealed class InitCommand : Command<InitCommand.Settings>
             {
                 AnsiConsole.WriteLine("  " + step);
             }
+        }
+
+        if (plan.AiProvider is "OpenAI" or "AzureOpenAI")
+        {
+            AnsiConsole.MarkupLine(
+                "\n[bold]In containers[/] the same key is the [bold]Ai__ApiKey[/] environment variable " +
+                "(compose maps AI_API_KEY from .env; Terraform injects a Key Vault reference). " +
+                "See docs/CONFIGURATION.md.");
         }
 
         AnsiConsole.MarkupLine(

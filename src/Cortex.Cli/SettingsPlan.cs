@@ -27,6 +27,12 @@ public sealed record SettingsPlan
     public string? AuthAuthority { get; init; }
     public string? AuthAudience { get; init; }
     public string? PermissionSource { get; init; }
+
+    public bool? SkillsEnabled { get; init; }
+    public string? SkillsPath { get; init; }
+
+    public string? SecretsProvider { get; init; }
+    public string? KeyVaultUri { get; init; }
 }
 
 /// <summary>
@@ -61,6 +67,12 @@ public static class CortexSettingsFile
         Set(root, plan.AuthAuthority, "Auth", "Authority");
         Set(root, plan.AuthAudience, "Auth", "Audience");
         Set(root, plan.PermissionSource, "Auth", "PermissionSource");
+
+        Set(root, plan.SkillsEnabled, "Skills", "Enabled");
+        Set(root, plan.SkillsPath, "Skills", "Path");
+
+        Set(root, plan.SecretsProvider, "Secrets", "Provider");
+        Set(root, plan.KeyVaultUri, "Secrets", "KeyVaultUri");
 
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))

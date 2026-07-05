@@ -69,6 +69,25 @@ public sealed class CortexSettingsFileTests
     }
 
     [Fact]
+    public void Writes_skills_and_secret_storage_sections()
+    {
+        var json = CortexSettingsFile.Merge(null, new SettingsPlan
+        {
+            SkillsEnabled = true,
+            SkillsPath = "skills",
+            SecretsProvider = "AzureKeyVault",
+            KeyVaultUri = "https://contoso-vault.vault.azure.net/",
+        });
+
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        Assert.True(root.GetProperty("Skills").GetProperty("Enabled").GetBoolean());
+        Assert.Equal("skills", root.GetProperty("Skills").GetProperty("Path").GetString());
+        Assert.Equal("AzureKeyVault", root.GetProperty("Secrets").GetProperty("Provider").GetString());
+        Assert.Equal("https://contoso-vault.vault.azure.net/", root.GetProperty("Secrets").GetProperty("KeyVaultUri").GetString());
+    }
+
+    [Fact]
     public void Merging_into_a_partial_section_keeps_its_other_keys()
     {
         var existing = """{ "Ai": { "Provider": "Ollama", "Endpoint": "http://localhost:11434/v1" } }""";
