@@ -231,6 +231,14 @@ public sealed class LegalToolSource : IModuleToolSource
                 Function = AIFunctionFactory.Create(matters.ReopenMatter, name: "reopen_matter"),
                 RequiresApproval = true,
             },
+            new ModuleTool
+            {
+                ModuleId = ModuleId,
+                Name = "draft_status_update",
+                Permission = Permissions.ForTool(ModuleId, "draft_status_update"),
+                Function = AIFunctionFactory.Create(matters.DraftStatusUpdate, name: "draft_status_update"),
+                RequiresApproval = true,
+            },
         ];
     }
 }

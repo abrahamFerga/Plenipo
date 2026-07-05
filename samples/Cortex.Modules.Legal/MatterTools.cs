@@ -986,6 +986,107 @@ public sealed class MatterTools(
         return $"Reopened matter '{matter.Name}'. Its open deadlines and tasks are active again.";
     }
 
+    [Description("Draft a CLIENT-FACING status update letter for a matter (recent progress, upcoming dates, hours worked — no internal notes or strategy) and file it on the matter as a PDF for attorney review before sending.")]
+    public async Task<string> DraftStatusUpdate(
+        [Description("The matter name.")] string matterName,
+        CancellationToken cancellationToken = default)
+    {
+        var matter = await FindMatterAsync(matterName, cancellationToken);
+        if (matter is null)
+        {
+            return $"No matter named '{matterName}' exists. Use list_matters to find the right name.";
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var since = now.AddDays(-30);
+        var recentDeadlines = await db.MatterDeadlines
+            .Where(d => d.MatterId == matter.Id && d.CompletedAt >= since)
+            .OrderByDescending(d => d.CompletedAt).Take(10).ToListAsync(cancellationToken);
+        var recentTasks = await db.MatterTasks
+            .Where(t => t.MatterId == matter.Id && t.CompletedAt >= since)
+            .OrderByDescending(t => t.CompletedAt).Take(10).ToListAsync(cancellationToken);
+        var upcoming = await db.MatterDeadlines
+            .Where(d => d.MatterId == matter.Id && d.CompletedAt == null && d.DueAt <= now.AddDays(60))
+            .OrderBy(d => d.DueAt).Take(10).ToListAsync(cancellationToken);
+        var sinceDay = DateOnly.FromDateTime(since.UtcDateTime);
+        var recentHours = await db.TimeEntries
+            .Where(t => t.MatterId == matter.Id && t.WorkedOn >= sinceDay)
+            .SumAsync(t => (decimal?)t.Hours, cancellationToken) ?? 0m;
+
+        // Client-facing on purpose: progress, dates, and effort — no internal notes, assignees,
+        // billing rates, or strategy. The letter is a DRAFT the attorney reviews before sending.
+        var body = new StringBuilder();
+        body.AppendLine($"Re: {matter.Name}");
+        body.AppendLine($"Date: {now:yyyy-MM-dd}");
+        body.AppendLine();
+        body.AppendLine($"Dear {matter.ClientName ?? "Client"},");
+        body.AppendLine();
+        body.AppendLine("Here is the current status of your matter.");
+        body.AppendLine();
+
+        if (recentDeadlines.Count > 0 || recentTasks.Count > 0)
+        {
+            body.AppendLine("Progress in the last 30 days:");
+            foreach (var d in recentDeadlines)
+            {
+                body.AppendLine($"  - Completed: {d.Title} ({d.CompletedAt:yyyy-MM-dd})");
+            }
+
+            foreach (var t in recentTasks)
+            {
+                body.AppendLine($"  - Completed: {t.Title} ({t.CompletedAt:yyyy-MM-dd})");
+            }
+        }
+        else
+        {
+            body.AppendLine("Progress in the last 30 days: work is ongoing; no milestones completed in this period.");
+        }
+
+        body.AppendLine();
+        if (upcoming.Count > 0)
+        {
+            body.AppendLine("Upcoming dates:");
+            foreach (var d in upcoming)
+            {
+                body.AppendLine($"  - {d.DueAt:yyyy-MM-dd}: {d.Title}");
+            }
+        }
+        else
+        {
+            body.AppendLine("Upcoming dates: none scheduled in the next 60 days.");
+        }
+
+        body.AppendLine();
+        body.AppendLine($"Time devoted to your matter in the last 30 days: {recentHours:0.##} hours.");
+        body.AppendLine();
+        body.AppendLine("Please contact us with any questions.");
+        body.AppendLine();
+        body.AppendLine("Sincerely,");
+        body.AppendLine("[Attorney name]");
+        body.AppendLine();
+        body.AppendLine("DRAFT — for attorney review before sending to the client.");
+
+        var pdf = pdfRenderer.Render($"Status update — {matter.Name}", body.ToString());
+        using var stream = new MemoryStream(pdf);
+        var stored = await files.SaveAsync(
+            $"status-update-{DateTime.UtcNow:yyyyMMdd-HHmm}.pdf", "application/pdf", stream,
+            source: "status_update", cancellationToken);
+
+        db.MatterDocuments.Add(new MatterDocument
+        {
+            TenantId = tenant.RequireTenantId(),
+            MatterId = matter.Id,
+            FileId = stored.Id,
+            FileName = stored.FileName,
+            Note = $"client status update (draft), {now:yyyy-MM-dd}",
+        });
+        await db.SaveChangesAsync(cancellationToken);
+
+        return $"Filed draft status update '{stored.FileName}' (file id: {stored.Id}) on matter '{matter.Name}': " +
+               $"{recentDeadlines.Count + recentTasks.Count} completed item(s), {upcoming.Count} upcoming date(s), " +
+               $"{recentHours:0.##}h in the last 30 days. Review before sending to the client.";
+    }
+
     private async Task<Matter?> FindMatterAsync(string name, CancellationToken cancellationToken)
     {
         var normalized = name.Trim();

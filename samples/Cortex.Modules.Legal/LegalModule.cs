@@ -31,7 +31,7 @@ public sealed class LegalModule : IModule
     {
         Id = Id,
         DisplayName = "Legal",
-        Version = "1.11.0",
+        Version = "1.12.0",
         Description = "Matter-centric legal assistant. Organize case documents into matters, docket deadlines with reminders, run conflict checks at intake, track billable time, manage matter tasks, search a clause library, and draft clauses for review.",
         Icon = "scale",
         AgentInstructions =
@@ -60,6 +60,9 @@ public sealed class LegalModule : IModule
             "it files the PDF on the matter for billing review. " +
             "TASKS: track to-dos with add_task (matter, title, optional assignee and target date), list_tasks, and " +
             "complete_task; use tasks for work items and add_deadline for hard dates that must remind. " +
+            "STATUS UPDATES: when the client should hear where things stand, use draft_status_update — it composes " +
+            "a client-facing letter (progress, upcoming dates, hours; never internal notes or strategy) and files it " +
+            "as a DRAFT for attorney review; never present it as sent. " +
             "CLOSE-OUT: close a finished matter with close_matter — it refuses while deadlines or tasks are open; " +
             "resolve them first, and only pass force after the user explicitly confirms leaving items open. " +
             "BRIEFING: answer 'brief me on X' / 'where does X stand' with get_matter_overview — the one-look " +
@@ -245,6 +248,13 @@ public sealed class LegalModule : IModule
                 Name = "reopen_matter",
                 Description = "Reopen a closed matter. Side-effecting and requires human approval.",
                 Permission = Permissions.ForTool(Id, "reopen_matter"),
+                RequiresApproval = true,
+            },
+            new ToolDescriptor
+            {
+                Name = "draft_status_update",
+                Description = "Draft a client-facing status letter (recent progress, upcoming dates, hours) filed on the matter for attorney review. Side-effecting: writes a document and requires human approval.",
+                Permission = Permissions.ForTool(Id, "draft_status_update"),
                 RequiresApproval = true,
             },
             new ToolDescriptor

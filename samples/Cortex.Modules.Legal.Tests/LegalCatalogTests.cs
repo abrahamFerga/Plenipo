@@ -61,7 +61,7 @@ public sealed class LegalCatalogTests
 
         Assert.Equal("legal", manifest.Id);
         Assert.Equal(
-            ["search_clauses", "draft_clause", "create_matter", "list_matters", "attach_document_to_matter", "list_matter_documents", "get_playbook", "start_bulk_review", "index_matter_documents", "add_deadline", "list_deadlines", "complete_deadline", "add_party", "list_parties", "check_conflicts", "log_time", "list_time", "add_task", "list_tasks", "complete_task", "get_matter_overview", "export_prebill", "close_matter", "reopen_matter", "restrict_matter_access", "open_matter_access", "connect_matter_folder", "sync_matter_folder"],
+            ["search_clauses", "draft_clause", "create_matter", "list_matters", "attach_document_to_matter", "list_matter_documents", "get_playbook", "start_bulk_review", "index_matter_documents", "add_deadline", "list_deadlines", "complete_deadline", "add_party", "list_parties", "check_conflicts", "log_time", "list_time", "add_task", "list_tasks", "complete_task", "get_matter_overview", "export_prebill", "close_matter", "reopen_matter", "draft_status_update", "restrict_matter_access", "open_matter_access", "connect_matter_folder", "sync_matter_folder"],
             manifest.Tools.Select(t => t.Name));
 
         // The side-effecting matter tools are held for human approval; the read tools are not.
@@ -70,7 +70,7 @@ public sealed class LegalCatalogTests
                 or "index_matter_documents" or "restrict_matter_access" or "open_matter_access"
                 or "connect_matter_folder" or "sync_matter_folder" or "add_deadline" or "complete_deadline"
                 or "add_party" or "add_task" or "complete_task" or "export_prebill"
-                or "close_matter" or "reopen_matter"),
+                or "close_matter" or "reopen_matter" or "draft_status_update"),
             t => Assert.True(t.RequiresApproval));
         Assert.All(
             manifest.Tools.Where(t => t.Name is "list_matters" or "list_matter_documents" or "list_deadlines"
