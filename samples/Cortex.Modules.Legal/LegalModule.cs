@@ -31,8 +31,8 @@ public sealed class LegalModule : IModule
     {
         Id = Id,
         DisplayName = "Legal",
-        Version = "1.4.0",
-        Description = "Matter-centric legal assistant. Organize case documents into matters, docket deadlines with reminders, search a clause library, and draft clauses for review.",
+        Version = "1.5.0",
+        Description = "Matter-centric legal assistant. Organize case documents into matters, docket deadlines with reminders, run conflict checks at intake, search a clause library, and draft clauses for review.",
         Icon = "scale",
         AgentInstructions =
             "You are Cortex's legal assistant, organized around MATTERS (engagement workspaces). " +
@@ -51,6 +51,9 @@ public sealed class LegalModule : IModule
             "DOCKETING: when the user mentions a court date, filing deadline, or limitation period, offer to docket " +
             "it with add_deadline (matter, title, ISO due date); use list_deadlines to answer 'what's coming up' and " +
             "complete_deadline when something is done. Deadlines drive reminder notifications — never rely on memory. " +
+            "INTAKE: before creating a matter for a new client or engagement, run check_conflicts on the client and " +
+            "every known opposing party, and report the result before proceeding; record parties with add_party " +
+            "(client / adverse / related) as they emerge — the conflict check is only as good as the recorded parties. " +
             "Always make clear that " +
             "output is a starting template, not legal advice, and recommend review by a licensed attorney. Never " +
             "invent statutes, case citations, or jurisdiction-specific rules; if asked for those, say a qualified " +
@@ -61,6 +64,7 @@ public sealed class LegalModule : IModule
         [
             "List my matters",
             "What deadlines are coming up?",
+            "Run a conflict check for a prospective client",
             "Review the attached contract against our playbook and file the memo on the matter",
             "Draft an NDA between our client and the counterparty, and file it on the matter",
             "Summarize the documents on a matter, citing each file",
@@ -146,6 +150,25 @@ public sealed class LegalModule : IModule
                 Description = "Mark a docketed deadline as completed. Side-effecting: writes data and requires human approval.",
                 Permission = Permissions.ForTool(Id, "complete_deadline"),
                 RequiresApproval = true,
+            },
+            new ToolDescriptor
+            {
+                Name = "add_party",
+                Description = "Record a party on a matter (client, adverse, or related) — feeds future conflict checks. Side-effecting: writes data and requires human approval.",
+                Permission = Permissions.ForTool(Id, "add_party"),
+                RequiresApproval = true,
+            },
+            new ToolDescriptor
+            {
+                Name = "list_parties",
+                Description = "List the parties recorded on a matter with their roles.",
+                Permission = Permissions.ForTool(Id, "list_parties"),
+            },
+            new ToolDescriptor
+            {
+                Name = "check_conflicts",
+                Description = "Conflict-of-interest check: search every recorded party and client across the firm's matters (restricted matters report anonymously). Run before any new engagement.",
+                Permission = Permissions.ForTool(Id, "check_conflicts"),
             },
             new ToolDescriptor
             {

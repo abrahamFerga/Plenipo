@@ -438,6 +438,125 @@ public sealed class MatterTools(
         return $"Marked '{deadline.Title}' on matter '{matter.Name}' as completed.";
     }
 
+    [Description("Record a party on a matter (the client, an adverse party, or a related person/entity) — the raw material of future conflict checks. Record parties at intake and as they emerge.")]
+    public async Task<string> AddParty(
+        [Description("The matter name to record the party on.")] string matterName,
+        [Description("The party's full name, e.g. 'Initech Corporation' or 'Jane Doe'.")] string name,
+        [Description("The party's role: client, adverse, or related.")] string role = "client",
+        [Description("Optional context, e.g. 'parent company of client'.")] string? notes = null,
+        CancellationToken cancellationToken = default)
+    {
+        var matter = await FindMatterAsync(matterName, cancellationToken);
+        if (matter is null)
+        {
+            return $"No matter named '{matterName}' exists. Use list_matters to find the right name.";
+        }
+
+        if (!Enum.TryParse<PartyRole>(role, ignoreCase: true, out var parsedRole))
+        {
+            return $"'{role}' is not a party role — use client, adverse, or related.";
+        }
+
+        db.MatterParties.Add(new MatterParty
+        {
+            TenantId = tenant.RequireTenantId(),
+            MatterId = matter.Id,
+            Name = name.Trim(),
+            Role = parsedRole,
+            Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(),
+        });
+        await db.SaveChangesAsync(cancellationToken);
+        return $"Recorded '{name.Trim()}' as {parsedRole.ToString().ToUpperInvariant()} party on matter '{matter.Name}'.";
+    }
+
+    [Description("List the parties recorded on a matter, with their roles.")]
+    public async Task<string> ListParties(
+        [Description("The matter name.")] string matterName,
+        CancellationToken cancellationToken = default)
+    {
+        var matter = await FindMatterAsync(matterName, cancellationToken);
+        if (matter is null)
+        {
+            return $"No matter named '{matterName}' exists. Use list_matters to find the right name.";
+        }
+
+        var parties = await db.MatterParties
+            .Where(p => p.MatterId == matter.Id)
+            .OrderBy(p => p.Role).ThenBy(p => p.Name)
+            .ToListAsync(cancellationToken);
+        if (parties.Count == 0)
+        {
+            return $"Matter '{matter.Name}' has no recorded parties. Record them with add_party — conflict checks depend on it.";
+        }
+
+        var sb = new StringBuilder($"Parties on matter '{matter.Name}':\n");
+        foreach (var p in parties)
+        {
+            sb.AppendLine($"- {p.Name} — {p.Role.ToString().ToUpperInvariant()}{(p.Notes is null ? "" : $" ({p.Notes})")}");
+        }
+
+        return sb.ToString();
+    }
+
+    [Description("Run a conflict-of-interest check BEFORE opening a matter or engaging a new client: searches every recorded party and client name across all of the firm's matters. Restricted (walled) matters report as anonymous hits.")]
+    public async Task<string> CheckConflicts(
+        [Description("The name(s) to check — a person or entity, or several separated by semicolons. Free text is fine; names are matched loosely.")] string names,
+        CancellationToken cancellationToken = default)
+    {
+        // The check runs across the WHOLE tenant — including walled matters, because a conflict
+        // that hides behind an ethical wall is still a conflict. Walled hits are reported without
+        // the matter or party name (the standard screened-matter convention).
+        var parties = await db.MatterParties
+            .Join(db.Matters, p => p.MatterId, m => m.Id,
+                (p, m) => new { p.Name, p.Role, MatterName = m.Name, m.RestrictedUserIdsJson })
+            .Take(5000)
+            .ToListAsync(cancellationToken);
+        var clients = await db.Matters
+            .Where(m => m.ClientName != null)
+            .Select(m => new { Name = m.ClientName!, Role = PartyRole.Client, MatterName = m.Name, m.RestrictedUserIdsJson })
+            .Take(2000)
+            .ToListAsync(cancellationToken);
+
+        var visible = new List<string>();
+        var restrictedHits = 0;
+        foreach (var candidate in parties.Concat(clients))
+        {
+            if (!ConflictCheck.Matches(names, candidate.Name))
+            {
+                continue;
+            }
+
+            if (Matter.WallAllows(candidate.RestrictedUserIdsJson, currentUser.UserId))
+            {
+                visible.Add($"- '{candidate.Name}' is a {candidate.Role.ToString().ToUpperInvariant()} party on matter '{candidate.MatterName}'");
+            }
+            else
+            {
+                restrictedHits++;
+            }
+        }
+
+        if (visible.Count == 0 && restrictedHits == 0)
+        {
+            return $"CONFLICT CHECK CLEAR: no recorded party or client matches '{names.Trim()}'. " +
+                   "Reliability depends on parties being recorded — keep using add_party at intake.";
+        }
+
+        var sb = new StringBuilder($"CONFLICT CHECK: {visible.Count + restrictedHits} potential conflict(s) found:\n");
+        foreach (var line in visible)
+        {
+            sb.AppendLine(line);
+        }
+
+        if (restrictedHits > 0)
+        {
+            sb.AppendLine($"- {restrictedHits} additional match(es) on RESTRICTED matter(s) — details are screened; contact your administrator before proceeding.");
+        }
+
+        sb.Append("Do not open the engagement until these are cleared by the responsible attorney.");
+        return sb.ToString();
+    }
+
     private async Task<Matter?> FindMatterAsync(string name, CancellationToken cancellationToken)
     {
         var normalized = name.Trim();

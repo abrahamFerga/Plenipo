@@ -22,8 +22,8 @@ Derived from [research/legal-ai.md](../research/legal-ai.md) (Harvey + competito
 | Item | Status |
 |------|--------|
 | 11. **Docketing**: matter deadlines with reminders - add_deadline / list_deadlines / complete_deadline tools, Deadlines tab (soonest-first, overdue flagged), DeadlineReminderService produces one inbox notification per deadline as its window opens (wall-respecting; latch = ReminderSentAt) | done |
-| 12. Conflict-of-interest check: parties/adverse parties on matters + a check at intake | next |
-| 13. Time tracking: billable entries per matter (start from chat: "log 0.5h on Acme") | todo |
+| 12. **Conflict-of-interest check**: parties on matters (add_party client/adverse/related, list_parties) + check_conflicts across ALL matters at intake - recall-biased loose matching; walled matters report as anonymous screened hits (never named) | done |
+| 13. Time tracking: billable entries per matter (start from chat: "log 0.5h on Acme") | next |
 | 14. Matter tasks: to-dos with owners, surfaced beside deadlines | todo |
 | 15. Engagement-letter intake flow: new client -> conflict check -> matter + engagement letter drafted and filed | todo |
 

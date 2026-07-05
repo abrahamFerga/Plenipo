@@ -19,6 +19,7 @@ public sealed class LegalDbContext(
     public DbSet<Matter> Matters => Set<Matter>();
     public DbSet<MatterDocument> MatterDocuments => Set<MatterDocument>();
     public DbSet<MatterDeadline> MatterDeadlines => Set<MatterDeadline>();
+    public DbSet<MatterParty> MatterParties => Set<MatterParty>();
     public DbSet<TenantClause> Clauses => Set<TenantClause>();
     public DbSet<PlaybookRule> PlaybookRules => Set<PlaybookRule>();
 
@@ -58,6 +59,19 @@ public sealed class LegalDbContext(
             b.HasIndex(x => x.MatterId);
             // The reminder scanner's shape: open, un-reminded deadlines by due date, across tenants.
             b.HasIndex(x => x.DueAt).HasFilter("\"CompletedAt\" IS NULL AND \"ReminderSentAt\" IS NULL");
+            b.HasOne<Matter>().WithMany().HasForeignKey(x => x.MatterId).OnDelete(DeleteBehavior.Cascade);
+            b.HasQueryFilter(x => x.TenantId == tenantContext.TenantId);
+        });
+
+        modelBuilder.Entity<MatterParty>(b =>
+        {
+            b.ToTable("matter_parties");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Name).HasMaxLength(300).IsRequired();
+            b.Property(x => x.Notes).HasMaxLength(500);
+            b.Property(x => x.Role).HasConversion<string>().HasMaxLength(16);
+            b.HasIndex(x => x.MatterId);
+            b.HasIndex(x => x.TenantId); // the conflicts check scans the whole tenant's parties
             b.HasOne<Matter>().WithMany().HasForeignKey(x => x.MatterId).OnDelete(DeleteBehavior.Cascade);
             b.HasQueryFilter(x => x.TenantId == tenantContext.TenantId);
         });
