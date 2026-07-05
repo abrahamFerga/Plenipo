@@ -92,7 +92,7 @@ and change without a deploy.
 
 | Section | Purpose | Notes |
 |---------|---------|-------|
-| `Ai` | The DEPLOYMENT-DEFAULT chat provider: `Provider` (Mock/OpenAI/AzureOpenAI/Ollama/None), `Model`, `Endpoint`, `ApiKey`, `Temperature`, `MaxOutputTokens`, `MaxConversationTokens`, `MaxMonthlyTokens` | `Mock` is keyless and exercises the full pipeline. Tenants can override the whole connection at runtime (Admin → AI Settings): switch provider/model, bring their own key (vaulted, write-only) — and agent profiles can pin a per-agent model. See [SAAS_OPERATIONS.md](SAAS_OPERATIONS.md). |
+| `Ai` | The DEPLOYMENT-DEFAULT chat provider: `Provider` (Mock/OpenAI/AzureOpenAI/Anthropic/Ollama/None), `Model`, `Endpoint`, `ApiKey`, `Temperature`, `MaxOutputTokens`, `MaxConversationTokens`, `MaxMonthlyTokens` | `Mock` is keyless and exercises the full pipeline. Tenants can override the whole connection at runtime (Admin → AI Settings): switch provider/model, bring their own key (vaulted, write-only) — and agent profiles can pin a per-agent model. See [SAAS_OPERATIONS.md](SAAS_OPERATIONS.md). |
 | `Rag` | `Enabled`, `EmbeddingProvider`, `EmbeddingModel` | Mock embedder is deterministic and keyless |
 | `Skills` | `Enabled`, `Path` | Deploy-time SKILL.md bundles shipped with the host — never tenant uploads |
 | `Mcp` | `Servers` — external MCP tool servers (name, transport, command/url, approval) | Deploy-time, like skills; each discovered tool is RBAC-gated as `tools.mcp.*` |

@@ -68,11 +68,10 @@ function PermTable({ rows, roles }: { rows: PermissionInfo[]; roles: RoleInfo[] 
 }
 
 /**
- * The security map: every permission the RBAC system can grant — platform
- * permissions plus, for each installed module, the tools the agent can call and
- * the permission each one requires. This is the inspectable "what can the agent
- * do, and who's allowed to invoke it" view (Cortex's analogue of OpenClaw's
- * explicit tool-permission map), alongside the role → permission baseline.
+ * The permission reference: every permission the RBAC system can grant — platform permissions
+ * plus, for each installed module, the tools the agent can call and the permission each one
+ * requires, with the roles that currently grant it. Rendered as a collapsible reference INSIDE
+ * the Roles page (it's documentation for the editor above it, not a destination of its own).
  */
 export function SecurityCatalogView() {
   const catalog = useQuery({ queryKey: ["admin", "security"], queryFn: api.admin.securityCatalog });
@@ -89,14 +88,11 @@ export function SecurityCatalogView() {
 
   return (
     <div className="space-y-8">
-      <header>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Security</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          The live permission map: what each permission allows and which roles currently grant it in this
-          tenant (wildcards resolved). Change grants on the <strong>Roles</strong> tab, or per user on{" "}
-          <strong>Users</strong>. The agent never receives the schema of a tool the caller lacks permission to call.
-        </p>
-      </header>
+      <p className="text-sm text-slate-500 dark:text-slate-400">
+        What each permission allows and which roles currently grant it in this tenant (wildcards
+        resolved). Edit grants with the role editor above, or per user on <strong>Users</strong>. The
+        agent never receives the schema of a tool the caller lacks permission to call.
+      </p>
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">

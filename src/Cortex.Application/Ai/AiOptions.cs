@@ -10,7 +10,7 @@ public sealed class AiOptions
     public const string SectionName = "Ai";
 
     /// <summary>
-    /// One of: OpenAI, AzureOpenAI, Ollama, Mock, None. "None" disables the agent surface;
+    /// One of: OpenAI, AzureOpenAI, Anthropic, Ollama, Mock, None. "None" disables the agent surface;
     /// "Mock" enables a dependency-free canned assistant for local dev/demos (no API key needed).
     /// </summary>
     public string Provider { get; set; } = "None";

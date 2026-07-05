@@ -23,6 +23,8 @@
     <PackageReference Include="Microsoft.Agents.AI.OpenAI" />
     <!-- MCP client (official C# SDK, MIT): external tool servers surfaced as RBAC-gated agent tools. -->
     <PackageReference Include="ModelContextProtocol.Core" />
+    <!-- Anthropic (Claude) provider (MIT) — IChatClient over the Anthropic Messages API. -->
+    <PackageReference Include="Anthropic.SDK" />
     <PackageReference Include="Azure.AI.OpenAI" />
     <PackageReference Include="Azure.Identity" />
 

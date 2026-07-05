@@ -1,6 +1,5 @@
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AdminErrorBoundary } from "../components/AdminErrorBoundary";
-import { SecurityCatalogView } from "./SecurityCatalogView";
 import { RolesEditor } from "./RolesEditor";
 import { UsersAdmin } from "./UsersAdmin";
 import { ModulesAdmin } from "./ModulesAdmin";
@@ -14,8 +13,7 @@ import { OpsView } from "./OpsView";
 
 // Routes are relative to the router's /admin basename, so these are bare section paths.
 const SECTIONS = [
-  { to: "/", label: "Security", end: true },
-  { to: "/roles", label: "Roles", end: false },
+  { to: "/", label: "Roles", end: true },
   { to: "/users", label: "Users", end: false },
   { to: "/modules", label: "Modules", end: false },
   { to: "/integrations", label: "Integrations", end: false },
@@ -35,8 +33,8 @@ function subNavClass({ isActive }: { isActive: boolean }): string {
 }
 
 /**
- * The platform administration area: configure RBAC and AI tool permissions,
- * inspect the security map, watch token usage, and review the agent audit log.
+ * The platform administration area: configure roles and AI tool permissions (with the full
+ * permission map as in-page reference), watch token usage, and review the agent audit log.
  * This is the whole surface of the admin console app (served at /admin).
  */
 export function AdminPage() {
@@ -67,8 +65,9 @@ export function AdminPage() {
         {/* Keyed on the route so a crash in one section clears when the operator navigates to another. */}
         <AdminErrorBoundary key={location.pathname}>
           <Routes>
-            <Route index element={<SecurityCatalogView />} />
-            <Route path="roles" element={<RolesEditor />} />
+            <Route index element={<RolesEditor />} />
+            {/* Old bookmarks: /roles and the former /-as-Security page both land on Roles. */}
+            <Route path="roles" element={<Navigate to="/" replace />} />
             <Route path="users" element={<UsersAdmin />} />
             <Route path="modules" element={<ModulesAdmin />} />
             <Route path="integrations" element={<IntegrationsAdmin />} />

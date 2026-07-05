@@ -37,7 +37,7 @@ public static class TenantAiSettingsValidator
     }
 
     /// <summary>Providers a tenant may switch to at runtime ("None" disables chat for the tenant).</summary>
-    public static readonly IReadOnlyList<string> AllowedProviders = ["Mock", "OpenAI", "AzureOpenAI", "Ollama", "None"];
+    public static readonly IReadOnlyList<string> AllowedProviders = ["Mock", "OpenAI", "AzureOpenAI", "Anthropic", "Ollama", "None"];
 
     /// <summary>
     /// Validates a tenant's provider-connection override. <paramref name="hasApiKey"/> is whether a
@@ -71,6 +71,8 @@ public static class TenantAiSettingsValidator
         {
             "OpenAI" when string.IsNullOrWhiteSpace(model) => "model is required for the OpenAI provider.",
             "OpenAI" when !hasApiKey => "An API key is required for the OpenAI provider.",
+            "Anthropic" when string.IsNullOrWhiteSpace(model) => "model is required for the Anthropic provider.",
+            "Anthropic" when !hasApiKey => "An API key is required for the Anthropic provider.",
             "AzureOpenAI" when string.IsNullOrWhiteSpace(model) => "model (deployment name) is required for the AzureOpenAI provider.",
             "AzureOpenAI" when string.IsNullOrWhiteSpace(endpoint) => "endpoint is required for the AzureOpenAI provider.",
             "Ollama" when string.IsNullOrWhiteSpace(model) => "model is required for the Ollama provider.",

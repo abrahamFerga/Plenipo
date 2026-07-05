@@ -72,15 +72,21 @@ export function ModulesAdmin() {
       <header>
         <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Modules</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Enable or disable the installed domain modules for this tenant. Disabling one removes it from the
-          workspace; changes are recorded in the audit trail.
+          The per-tenant licensing switch: which of this deployment's installed domain modules this tenant may
+          use. Enabling one gives the tenant its workspace tabs and its agent; disabling removes them (its
+          tools become uninvocable, not just hidden). Changes are recorded in the audit trail.
         </p>
       </header>
 
       {rows.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400 dark:border-slate-700">
-          No modules are installed in this deployment.
-        </p>
+        <div className="space-y-1 rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400 dark:border-slate-700">
+          <p className="font-medium text-slate-500 dark:text-slate-300">No modules are installed in this deployment.</p>
+          <p>
+            Modules are installed in code by the product host (<code className="font-mono text-xs">AddCortexModule&lt;T&gt;()</code>)
+            — this page only toggles them per tenant. The bare platform host ships none; run the sample host
+            (samples/Cortex.Sample.AppHost) for Finance, Nutrition, and Legal.
+          </p>
+        </div>
       ) : (
         <div className="space-y-2">
           {rows.map((m) => (

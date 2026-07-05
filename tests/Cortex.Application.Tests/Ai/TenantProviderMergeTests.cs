@@ -88,6 +88,8 @@ public sealed class TenantProviderMergeTests
     [InlineData("OpenAI", "gpt-4o", null, false, "API key is required")]
     [InlineData("AzureOpenAI", "dep", null, false, "endpoint is required")]
     [InlineData("AzureOpenAI", "dep", "https://x.openai.azure.com", false, null)] // managed identity: key optional
+    [InlineData("Anthropic", "claude-sonnet-5", null, true, null)]
+    [InlineData("Anthropic", "claude-sonnet-5", null, false, "API key is required")]
     [InlineData("Ollama", "llama3.1", "http://localhost:11434/v1", false, null)]
     [InlineData("Ollama", "llama3.1", null, false, "endpoint is required")]
     [InlineData("Bedrock", "x", null, false, "provider must be one of")]

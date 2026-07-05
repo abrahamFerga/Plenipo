@@ -34,7 +34,7 @@ ship it. It unifies the patterns proven in two earlier apps — **NutriForge** (
 | **Connectors** | A manifest-first **connector SDK** bridges agents to where tenant data already lives (Azure Blob ships; a keyless local-folder connector powers dev/CI). **Default-off per tenant** — an admin enables each on the console's Integrations page; secrets are write-only and protected at rest; fetches are approval-gated and land in the file store. |
 | **Audit everything** | Every tool invocation, data change, and token spend is written to a separate, append-only audit database. |
 | **Multi-tenant by default** | Row-level isolation via EF Core global query filters on `TenantId` — impossible to forget. |
-| **Provider-swappable AI** | OpenAI / Azure OpenAI / Ollama via one config section — plus a dependency-free **Mock** provider so the chatbot (and even real, audited tool calls + the approval gate) work with zero setup. |
+| **Provider-swappable AI** | OpenAI / Azure OpenAI / Anthropic (Claude) / Ollama via one config section — plus a dependency-free **Mock** provider so the chatbot (and even real, audited tool calls + the approval gate) work with zero setup. Tenants can switch the whole connection at runtime from the admin UI (BYO key, vaulted write-only). |
 
 Built on **.NET 10**, **Microsoft Agent Framework** (MAF) over **Microsoft.Extensions.AI**, **EF Core 10**
 (+ Npgsql), **.NET Aspire**, and **React 18 + Vite**.

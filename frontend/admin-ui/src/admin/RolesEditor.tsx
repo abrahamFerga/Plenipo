@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ConfirmDialog, type PermissionInfo, type RoleInfo } from "@cortex/ui";
+import { SecurityCatalogView } from "./SecurityCatalogView";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Schema-driven role editor.
@@ -443,6 +444,17 @@ export function RolesEditor() {
           />
         )
       )}
+
+      {/* The full permission map lives here as reference material for the editor above — what each
+          permission allows, who currently grants it, and which tools are approval-gated/audited. */}
+      <details className="rounded-lg border border-slate-200 dark:border-slate-700">
+        <summary className="focus-ring cursor-pointer select-none rounded-lg px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800/60">
+          Permission reference — every permission, what it allows, and who currently grants it
+        </summary>
+        <div className="border-t border-slate-200 p-4 dark:border-slate-700">
+          <SecurityCatalogView />
+        </div>
+      </details>
     </div>
   );
 }

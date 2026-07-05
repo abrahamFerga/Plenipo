@@ -23,11 +23,22 @@ public static class ChatClientFactory
         {
             "OpenAI" => CreateOpenAI(options),
             "AzureOpenAI" => CreateAzureOpenAI(options),
+            "Anthropic" => CreateAnthropic(options),
             "Ollama" => CreateOllama(options),
             "Mock" => new MockChatClient(),
             _ => throw new InvalidOperationException(
-                $"AI provider '{options.Provider}' is not supported. Use OpenAI, AzureOpenAI, Ollama, or Mock."),
+                $"AI provider '{options.Provider}' is not supported. Use OpenAI, AzureOpenAI, Anthropic, Ollama, or Mock."),
         };
+    }
+
+    private static IChatClient CreateAnthropic(AiOptions options)
+    {
+        var apiKey = Require(options.ApiKey, "Ai:ApiKey is required for the Anthropic provider.");
+        // The Anthropic client selects the model per request (ChatOptions.ModelId), so pin the
+        // configured model on the client — matching the per-connection caching upstream.
+        return new ChatClientBuilder((IChatClient)new Anthropic.SDK.AnthropicClient(new Anthropic.SDK.APIAuthentication(apiKey)).Messages)
+            .ConfigureOptions(o => o.ModelId ??= options.Model)
+            .Build();
     }
 
     private static IChatClient CreateOpenAI(AiOptions options)

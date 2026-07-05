@@ -67,11 +67,15 @@ describe("RolesEditor (schema-driven)", () => {
     // Pick an editable role to reveal the editor.
     fireEvent.click(await screen.findByRole("button", { name: "user" }));
 
-    // Every catalog permission (platform built-ins + each module's tools) appears as a toggle — no hardcoding.
-    expect(await screen.findByText("chat.use")).toBeTruthy();
-    expect(screen.getByText("platform.users.manage")).toBeTruthy();
-    expect(screen.getByText("tools.finance.summarize_spending")).toBeTruthy();
-    expect(screen.getByText(/Finance.*tools/i)).toBeTruthy();
+    // Every catalog permission (platform built-ins + each module's tools) appears as a toggle — no
+    // hardcoding. Each also appears in the embedded permission-reference table, hence getAllByText.
+    expect((await screen.findAllByText("chat.use")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("platform.users.manage").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("tools.finance.summarize_spending").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Finance.*tools/i).length).toBeGreaterThan(0);
+
+    // The former Security page now lives here as a collapsible reference.
+    expect(screen.getByText(/Permission reference/i)).toBeTruthy();
   });
 
   it("saves a toggled permission as a PUT carrying the updated set", async () => {

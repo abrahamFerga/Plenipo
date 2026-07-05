@@ -86,7 +86,7 @@ export function AiSettingsAdmin() {
   const monthlyInvalid =
     monthlyTokens.trim() !== "" && (!/^\d+$/.test(monthlyTokens.trim()) || Number(monthlyTokens) < 0);
   const needsEndpoint = provider === "AzureOpenAI" || provider === "Ollama";
-  const needsKey = provider === "OpenAI";
+  const needsKey = provider === "OpenAI" || provider === "Anthropic";
   const willHaveKey = apiKey.trim() !== "" || (data.hasApiKey && !clearKey);
   const keyMissing = needsKey && !willHaveKey;
 
@@ -126,6 +126,7 @@ export function AiSettingsAdmin() {
                 <option value="Mock">Mock (keyless demo)</option>
                 <option value="OpenAI">OpenAI</option>
                 <option value="AzureOpenAI">Azure OpenAI</option>
+                <option value="Anthropic">Anthropic (Claude)</option>
                 <option value="Ollama">Ollama</option>
                 <option value="None">None (disable chat)</option>
               </select>
@@ -184,7 +185,7 @@ export function AiSettingsAdmin() {
                   Clear the stored key
                 </label>
               )}
-              {keyMissing && <p className="text-xs text-red-600">The OpenAI provider requires an API key.</p>}
+              {keyMissing && <p className="text-xs text-red-600">The {provider} provider requires an API key.</p>}
             </div>
           )}
           <p className="text-xs text-slate-400">

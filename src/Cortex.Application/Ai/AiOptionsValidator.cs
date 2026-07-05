@@ -8,8 +8,8 @@ namespace Cortex.Application.Ai;
 /// </summary>
 public static class AiOptionsValidator
 {
-    private static readonly string[] KnownProviders = ["None", "Mock", "OpenAI", "AzureOpenAI", "Ollama"];
-    private const string ValidList = "None, Mock, OpenAI, AzureOpenAI, Ollama";
+    private static readonly string[] KnownProviders = ["None", "Mock", "OpenAI", "AzureOpenAI", "Anthropic", "Ollama"];
+    private const string ValidList = "None, Mock, OpenAI, AzureOpenAI, Anthropic, Ollama";
 
     /// <summary>Returns every problem found in <paramref name="options"/> (empty when valid).</summary>
     public static IReadOnlyList<string> Validate(AiOptions options)
@@ -40,6 +40,13 @@ public static class AiOptionsValidator
             case "AzureOpenAI":
                 RequireModel(options, errors);
                 RequireAbsoluteEndpoint(options, "AzureOpenAI", errors);
+                break;
+            case "Anthropic":
+                RequireModel(options, errors);
+                if (string.IsNullOrWhiteSpace(options.ApiKey))
+                {
+                    errors.Add("Ai:ApiKey is required for the Anthropic provider.");
+                }
                 break;
             case "Ollama":
                 RequireModel(options, errors);

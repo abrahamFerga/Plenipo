@@ -24,7 +24,7 @@ public sealed class InitCommand : Command<InitCommand.Settings>
         public bool NonInteractive { get; init; }
 
         [CommandOption("--ai-provider <PROVIDER>")]
-        [Description("Mock | OpenAI | AzureOpenAI | Ollama | None")]
+        [Description("Mock | OpenAI | AzureOpenAI | Anthropic | Ollama | None")]
         public string? AiProvider { get; init; }
 
         [CommandOption("--ai-model <MODEL>")]
@@ -139,9 +139,9 @@ public sealed class InitCommand : Command<InitCommand.Settings>
         var aiProvider = s.AiProvider ?? AnsiConsole.Prompt(
             new SelectionPrompt<string>()
                 .Title("[bold]1/8[/] AI provider (Mock needs no key and exercises the full pipeline)")
-                .AddChoices("Mock", "OpenAI", "AzureOpenAI", "Ollama", "(keep current)"));
+                .AddChoices("Mock", "OpenAI", "AzureOpenAI", "Anthropic", "Ollama", "(keep current)"));
         string? aiModel = null, aiEndpoint = null;
-        if (aiProvider is "OpenAI" or "AzureOpenAI" or "Ollama")
+        if (aiProvider is "OpenAI" or "AzureOpenAI" or "Anthropic" or "Ollama")
         {
             aiModel = s.AiModel ?? AnsiConsole.Ask<string>("   Model / deployment name:");
             if (aiProvider is "AzureOpenAI" or "Ollama")
@@ -218,7 +218,7 @@ public sealed class InitCommand : Command<InitCommand.Settings>
     private static void PrintNextSteps(SettingsPlan plan, string targetDirectory)
     {
         var steps = new List<string>();
-        if (plan.AiProvider is "OpenAI" or "AzureOpenAI")
+        if (plan.AiProvider is "OpenAI" or "AzureOpenAI" or "Anthropic")
         {
             steps.Add($"dotnet user-secrets --project \"{targetDirectory}\" set \"Ai:ApiKey\" \"<key>\"");
         }
@@ -243,7 +243,7 @@ public sealed class InitCommand : Command<InitCommand.Settings>
             }
         }
 
-        if (plan.AiProvider is "OpenAI" or "AzureOpenAI")
+        if (plan.AiProvider is "OpenAI" or "AzureOpenAI" or "Anthropic")
         {
             AnsiConsole.MarkupLine(
                 "\n[bold]In containers[/] the same key is the [bold]Ai__ApiKey[/] environment variable " +

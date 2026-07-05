@@ -34,6 +34,8 @@
     <PackageVersion Include="Microsoft.Agents.AI.OpenAI" Version="1.11.1" />
     <!-- Official MCP C# SDK (MIT); Core = client + protocol without the hosting extras. -->
     <PackageVersion Include="ModelContextProtocol.Core" Version="1.4.0" />
+    <!-- Anthropic (Claude) chat client (MIT) — implements Microsoft.Extensions.AI's IChatClient. -->
+    <PackageVersion Include="Anthropic.SDK" Version="5.10.0" />
     <PackageVersion Include="Azure.AI.OpenAI" Version="2.1.0" />
     <PackageVersion Include="Azure.Identity" Version="1.21.0" />
   </ItemGroup>
