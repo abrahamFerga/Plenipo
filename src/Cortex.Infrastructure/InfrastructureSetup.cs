@@ -274,6 +274,10 @@ public static class InfrastructureSetup
         services.AddScoped<IConversationStore, ConversationStore>();
         services.AddScoped<ITokenUsageReader, TokenUsageReader>();
         services.AddScoped<Usage.BudgetAlerts>();
+
+        // Cross-module handoff: ask_{module} tools (read-only nested turns; permission-gated).
+        services.AddScoped<Handoff.HandoffTools>();
+        services.AddSingleton<IPlatformToolSource, Handoff.HandoffToolSource>();
         services.AddScoped<IApprovalStore, ApprovalStore>();
         services.AddScoped<ApprovalExecutor>();
         services.AddScoped<IAuthorizedAgentRunner, AuthorizedAgentRunner>();

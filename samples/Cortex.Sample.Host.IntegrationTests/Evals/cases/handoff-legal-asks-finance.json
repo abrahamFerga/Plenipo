@@ -1,0 +1,9 @@
+{
+  // Cross-module handoff: from the LEGAL chat, a finance question routes to ask_finance, which
+  // runs a nested read-only turn against the finance module and relays the answer.
+  "name": "handoff-legal-asks-finance",
+  "module": "legal",
+  "message": "Ask finance how much I spent on groceries",
+  "expectToolCalls": ["ask_finance"],
+  "expectApproval": false
+}

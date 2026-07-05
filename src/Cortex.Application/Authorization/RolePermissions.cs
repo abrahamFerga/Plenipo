@@ -31,6 +31,8 @@ public static class RolePermissions
             "tools.knowledge.*",
             // Skills are deploy-time content and scripts are approval-gated; admins get the loop.
             "tools.skills.*",
+            // Handoffs are read-only nested turns; the nested RBAC filter still applies inside.
+            "tools.handoff.*",
         ],
 
         // user can chat, see their conversations, attach files, and use the platform's read-only

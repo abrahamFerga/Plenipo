@@ -39,5 +39,6 @@ public static class PermissionCatalog
         new("tools.skills.load_skill", ChatCategory, "Agent tool: load an installed skill's instructions on demand (requires Skills:Enabled)."),
         new("tools.skills.read_skill_resource", ChatCategory, "Agent tool: read a resource file bundled with an installed skill."),
         new("tools.skills.run_skill_script", ChatCategory, "Agent tool: run a script bundled with an installed skill (side-effecting; approval-gated)."),
+        new("tools.handoff.ask_module", ChatCategory, "Agent tool: ask another enabled module's assistant a read-only question (ask_finance, ask_legal, …) and relay the answer."),
     ];
 }

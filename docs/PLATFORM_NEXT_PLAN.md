@@ -117,8 +117,15 @@ KV references instead of env vars).
     The UI half landed: NotificationBell in the @cortex/ui top bar (unread badge, 30s poll,
     mark-read / mark-all) and an Operations tab in @cortex/admin-ui over /api/admin/ops
     (jobs / knowledge / connectors / AI+budget cards, backlog + budget warnings, 15s refresh).
-  - **Cross-module handoff**: MAF handoff workflow between module agents ("ask finance" from
-    legal chat) — the cortex-peer connector already covers the cross-system case.
+  - [x] **Cross-module handoff (in-host)**: generated `ask_{module}` platform tools — one per
+    installed module, each carrying the target's description for routing — run a nested,
+    one-shot, READ-ONLY agent turn against the target module (same user, same RBAC filter;
+    approval-required tools never reach the nested agent; handoff tools excluded from the
+    nested set + AsyncLocal depth guard; stateless — no conversation row; answer capped at
+    4k chars). One permission gates them all (`tools.handoff.ask_module`, tenant_admin
+    baseline). Eval-covered: legal chat routes "ask finance …" to ask_finance end to end.
+    The cross-SYSTEM case remains cortex-peer. Known v1 limitation: nested-turn token usage
+    is not recorded. Delivered.
   - [x] **Admin ops snapshot**: GET `/api/admin/ops` (platform.audit.view) — job queue depth /
     running / failed-24h / oldest-queued age, enabled connectors with binding counts and last
     sync, RAG collections/chunks/last-ingest, webhook-configured flag, AI provider + month

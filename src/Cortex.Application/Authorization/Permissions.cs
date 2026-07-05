@@ -37,6 +37,9 @@ public static class Permissions
     /// <summary>The pseudo-module id the agent-skill tools are namespaced under (tools.skills.*).</summary>
     public const string SkillsToolModule = "skills";
 
+    /// <summary>The pseudo-module id the cross-module handoff tools are namespaced under (tools.handoff.*).</summary>
+    public const string HandoffToolModule = "handoff";
+
     /// <summary>
     /// Permissions reserved for the platform operator (system_admin): they act ACROSS tenants, so a
     /// tenant-scoped admin must never hold them. The RBAC editor refuses to grant these — or any wildcard that
