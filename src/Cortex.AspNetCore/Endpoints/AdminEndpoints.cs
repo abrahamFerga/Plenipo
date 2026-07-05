@@ -218,7 +218,8 @@ public static class AdminEndpoints
             var row = await db.TenantAiSettings.FirstOrDefaultAsync(ct);
             var defaults = ai.Value;
             return Results.Ok(new AiSettingsDto(
-                row?.SystemPrompt, row?.MaxConversationTokens, defaults.SystemPrompt, defaults.MaxConversationTokens));
+                row?.SystemPrompt, row?.MaxConversationTokens, row?.MaxMonthlyTokens,
+                defaults.SystemPrompt, defaults.MaxConversationTokens, defaults.MaxMonthlyTokens));
         })
         .RequireAuthorization(PermissionRequirement.PolicyName(Permissions.ManageAiSettings))
         .WithName("Admin_AiSettings");
@@ -235,7 +236,7 @@ public static class AdminEndpoints
 
             // Validate the value we will actually store (trimmed), so a length check reflects the persisted prompt.
             var systemPrompt = string.IsNullOrWhiteSpace(body.SystemPrompt) ? null : body.SystemPrompt.Trim();
-            if (TenantAiSettingsValidator.Validate(systemPrompt, body.MaxConversationTokens) is { } error)
+            if (TenantAiSettingsValidator.Validate(systemPrompt, body.MaxConversationTokens, body.MaxMonthlyTokens) is { } error)
             {
                 return Results.BadRequest(error);
             }
@@ -248,12 +249,14 @@ public static class AdminEndpoints
                     TenantId = tenantId,
                     SystemPrompt = systemPrompt,
                     MaxConversationTokens = body.MaxConversationTokens,
+                    MaxMonthlyTokens = body.MaxMonthlyTokens,
                 });
             }
             else
             {
                 row.SystemPrompt = systemPrompt;
                 row.MaxConversationTokens = body.MaxConversationTokens;
+                row.MaxMonthlyTokens = body.MaxMonthlyTokens;
             }
 
             await db.SaveChangesAsync(ct);
@@ -995,8 +998,9 @@ public static class AdminEndpoints
     private sealed record TenantAdminDto(Guid Id, string Name, string Slug, bool IsActive, DateTimeOffset CreatedAt);
 
     private sealed record AiSettingsDto(
-        string? SystemPromptOverride, int? MaxConversationTokensOverride, string DefaultSystemPrompt, int DefaultMaxConversationTokens);
-    private sealed record AiSettingsRequest(string? SystemPrompt, int? MaxConversationTokens);
+        string? SystemPromptOverride, int? MaxConversationTokensOverride, long? MaxMonthlyTokensOverride,
+        string DefaultSystemPrompt, int DefaultMaxConversationTokens, long DefaultMaxMonthlyTokens);
+    private sealed record AiSettingsRequest(string? SystemPrompt, int? MaxConversationTokens, long? MaxMonthlyTokens);
 
     private sealed record AgentProfileDto(Guid Id, string ModuleId, string Name, string Instructions, string Mode, bool IsDefault);
 

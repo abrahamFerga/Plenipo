@@ -43,6 +43,7 @@ public sealed class AuthorizedAgentRunner(
     IConversationStore conversations,
     IAuditLog auditLog,
     ITokenUsageReader usageReader,
+    Cortex.Infrastructure.Usage.BudgetAlerts budgetAlerts,
     IApprovalStore approvalStore,
     ISkillCatalog skillCatalog,
     ICurrentUser currentUser,
@@ -132,6 +133,20 @@ public sealed class AuthorizedAgentRunner(
             }
         }
 
+        // Tenant-wide monthly budget: the org-level cost ceiling. The pre-turn total also feeds the
+        // post-turn threshold-crossing alerts (80% warning / exhaustion) to the tenant's admins.
+        long monthConsumed = 0;
+        if (aiSettings.MaxMonthlyTokens > 0)
+        {
+            monthConsumed = await usageReader.GetTenantMonthTotalAsync(DateTimeOffset.UtcNow, cancellationToken);
+            if (TokenBudget.IsExceeded(monthConsumed, aiSettings.MaxMonthlyTokens))
+            {
+                yield return AgentStreamEvent.Failed(
+                    $"This organization has reached its monthly token budget ({aiSettings.MaxMonthlyTokens:N0} tokens). An administrator can raise it under AI settings.");
+                yield break;
+            }
+        }
+
         // Tools marked side-effecting are blocked pending human approval — both the module
         // manifest's declarations and per-tool flags on platform/connector tools (connector fetch
         // tools and skill scripts carry the flag on the ModuleTool itself, not in a manifest).
@@ -202,6 +217,12 @@ public sealed class AuthorizedAgentRunner(
         var sessionState = await SerializeSessionAsync(agent, session.Session, cancellationToken);
         await conversations.AppendTurnAsync(conversation.Id, request.Message, assistant.ToString(), sessionState, instructionsHash, cancellationToken);
         await RecordUsageAsync(request.ModuleId, conversation.Id, usage, cancellationToken);
+
+        if (aiSettings.MaxMonthlyTokens > 0 && usage.HasAny)
+        {
+            await budgetAlerts.NotifyCrossingsAsync(
+                monthConsumed, monthConsumed + usage.Effective, aiSettings.MaxMonthlyTokens, cancellationToken);
+        }
 
         // Persist any blocked side-effecting tool calls as pending approvals, then surface them to the client.
         foreach (var blocked in middleware.BlockedForApproval)

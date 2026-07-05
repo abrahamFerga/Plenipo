@@ -8,6 +8,21 @@ namespace Cortex.Application.Usage;
 public static class TokenBudget
 {
     /// <summary>True when a positive budget has been reached or exceeded by prior consumption.</summary>
-    public static bool IsExceeded(long consumedTokens, int budget) =>
+    public static bool IsExceeded(long consumedTokens, long budget) =>
         budget > 0 && consumedTokens >= budget;
+
+    /// <summary>
+    /// True when this turn moved consumption from below to at-or-above <paramref name="fraction"/>
+    /// of a positive budget — the once-per-crossing trigger for threshold alerts.
+    /// </summary>
+    public static bool CrossedFraction(long before, long after, long budget, double fraction)
+    {
+        if (budget <= 0)
+        {
+            return false;
+        }
+
+        var threshold = (long)(budget * fraction);
+        return before < threshold && after >= threshold;
+    }
 }

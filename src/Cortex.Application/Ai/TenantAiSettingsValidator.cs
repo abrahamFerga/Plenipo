@@ -16,11 +16,16 @@ public static class TenantAiSettingsValidator
     public const int MaxSystemPromptLength = 8000;
 
     /// <summary>Returns a human-readable error when the override is invalid, or <c>null</c> when it is acceptable.</summary>
-    public static string? Validate(string? systemPrompt, int? maxConversationTokens)
+    public static string? Validate(string? systemPrompt, int? maxConversationTokens, long? maxMonthlyTokens = null)
     {
         if (maxConversationTokens is < 0)
         {
             return "maxConversationTokens must be zero or greater.";
+        }
+
+        if (maxMonthlyTokens is < 0)
+        {
+            return "maxMonthlyTokens must be zero or greater.";
         }
 
         if (systemPrompt is { Length: > MaxSystemPromptLength })

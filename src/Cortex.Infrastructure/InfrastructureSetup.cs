@@ -273,6 +273,7 @@ public static class InfrastructureSetup
             client => client.Timeout = TimeSpan.FromSeconds(10));
         services.AddScoped<IConversationStore, ConversationStore>();
         services.AddScoped<ITokenUsageReader, TokenUsageReader>();
+        services.AddScoped<Usage.BudgetAlerts>();
         services.AddScoped<IApprovalStore, ApprovalStore>();
         services.AddScoped<ApprovalExecutor>();
         services.AddScoped<IAuthorizedAgentRunner, AuthorizedAgentRunner>();

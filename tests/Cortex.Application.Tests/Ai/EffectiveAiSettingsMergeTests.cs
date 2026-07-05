@@ -19,7 +19,7 @@ public sealed class EffectiveAiSettingsMergeTests
     [Fact]
     public void NoOverrides_InheritsBothDefaults()
     {
-        var effective = EffectiveAiSettings.Merge(overrideSystemPrompt: null, overrideMaxConversationTokens: null, Defaults());
+        var effective = EffectiveAiSettings.Merge(overrideSystemPrompt: null, overrideMaxConversationTokens: null, overrideMaxMonthlyTokens: null, Defaults());
 
         Assert.Equal("deployment default prompt", effective.SystemPrompt);
         Assert.Equal(50_000, effective.MaxConversationTokens);
@@ -31,7 +31,7 @@ public sealed class EffectiveAiSettingsMergeTests
     [InlineData(null)]
     public void BlankOrMissingOverridePrompt_InheritsTheDefault(string? overridePrompt)
     {
-        var effective = EffectiveAiSettings.Merge(overridePrompt, overrideMaxConversationTokens: null, Defaults());
+        var effective = EffectiveAiSettings.Merge(overridePrompt, overrideMaxConversationTokens: null, overrideMaxMonthlyTokens: null, Defaults());
 
         Assert.Equal("deployment default prompt", effective.SystemPrompt);
     }
@@ -39,7 +39,7 @@ public sealed class EffectiveAiSettingsMergeTests
     [Fact]
     public void ProvidedOverrides_TakeEffect()
     {
-        var effective = EffectiveAiSettings.Merge("tenant prompt", 5_000, Defaults());
+        var effective = EffectiveAiSettings.Merge("tenant prompt", 5_000, overrideMaxMonthlyTokens: null, Defaults());
 
         Assert.Equal("tenant prompt", effective.SystemPrompt);
         Assert.Equal(5_000, effective.MaxConversationTokens);
@@ -49,7 +49,7 @@ public sealed class EffectiveAiSettingsMergeTests
     public void TenantTokenBudgetOfZero_IsHonouredAsUnlimited_NotTreatedAsUnset()
     {
         // 0 means "unlimited" (matching AiOptions) — a real override, distinct from null which inherits the default.
-        var effective = EffectiveAiSettings.Merge(overrideSystemPrompt: null, overrideMaxConversationTokens: 0, Defaults());
+        var effective = EffectiveAiSettings.Merge(overrideSystemPrompt: null, overrideMaxConversationTokens: 0, overrideMaxMonthlyTokens: null, Defaults());
 
         Assert.Equal(0, effective.MaxConversationTokens);
     }
@@ -57,6 +57,6 @@ public sealed class EffectiveAiSettingsMergeTests
     [Fact]
     public void NullDefaults_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => EffectiveAiSettings.Merge("prompt", 1, defaults: null!));
+        Assert.Throws<ArgumentNullException>(() => EffectiveAiSettings.Merge("prompt", 1, null, defaults: null!));
     }
 }

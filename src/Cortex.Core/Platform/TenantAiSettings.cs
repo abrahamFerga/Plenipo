@@ -17,4 +17,7 @@ public sealed class TenantAiSettings : EntityBase, ITenantOwned
 
     /// <summary>Overrides the max tokens a conversation may consume before further turns are refused. Null = default.</summary>
     public int? MaxConversationTokens { get; set; }
+
+    /// <summary>Overrides the tenant's monthly token budget (UTC calendar month). Null = default; 0 = unlimited.</summary>
+    public long? MaxMonthlyTokens { get; set; }
 }

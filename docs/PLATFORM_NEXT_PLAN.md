@@ -83,7 +83,13 @@ KV references instead of env vars).
   local CLI); provider lock file committed. Multi-cloud stance unchanged: compose is the
   cloud-neutral path; per-cloud Terraform trees, not a leaky abstraction.
 - [ ] **Phase 6 — New ideas backlog** (grow as they land):
-  - **Per-tenant token budgets → org budgets + alerts** (usage page already tracks spend).
+  - [x] **Org (monthly) token budgets + admin alerts**: `MaxMonthlyTokens` (deployment default
+    in `Ai:` + per-tenant override in AI settings; null inherits, 0 unlimited). The runner
+    refuses turns tenant-wide once the UTC-month total reaches the cap, and alerts the tenant's
+    admins through the notification seam on the crossing turn — 80% warning, exhaustion notice
+    (single alert when one turn crosses both). Recipients = role-row tenant admins ∪ the acting
+    user when they hold platform.ai.manage (covers Token authorization mode, where no role rows
+    exist). Delivered.
   - [x] **Eval harness** (docs/EVALS.md): golden-conversation evals as JSON data under
     `samples/Cortex.Sample.Host.IntegrationTests/Evals/cases/` — one user turn + the
     behavioral contract (tools routed, approval gate fired, reply must/mustn't say).

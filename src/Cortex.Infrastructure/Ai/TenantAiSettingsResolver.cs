@@ -15,6 +15,6 @@ public sealed class TenantAiSettingsResolver(PlatformDbContext db, IOptions<AiOp
     public async Task<EffectiveAiSettings> ResolveAsync(CancellationToken cancellationToken = default)
     {
         var row = await db.TenantAiSettings.FirstOrDefaultAsync(cancellationToken);
-        return EffectiveAiSettings.Merge(row?.SystemPrompt, row?.MaxConversationTokens, aiOptions.Value);
+        return EffectiveAiSettings.Merge(row?.SystemPrompt, row?.MaxConversationTokens, row?.MaxMonthlyTokens, aiOptions.Value);
     }
 }

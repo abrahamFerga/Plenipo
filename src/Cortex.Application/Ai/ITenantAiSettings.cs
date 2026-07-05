@@ -1,20 +1,22 @@
 namespace Cortex.Application.Ai;
 
 /// <summary>The effective AI settings for the current tenant — deployment defaults with per-tenant overrides applied.</summary>
-public sealed record EffectiveAiSettings(string SystemPrompt, int MaxConversationTokens)
+public sealed record EffectiveAiSettings(string SystemPrompt, int MaxConversationTokens, long MaxMonthlyTokens)
 {
     /// <summary>
     /// Layer a tenant's overrides over the deployment defaults: a null or whitespace-only system prompt, and a
     /// null token budget, inherit the default — so an untouched (or blanked) override is transparent. A tenant
     /// token budget of <c>0</c> is honoured as "unlimited" (matching <see cref="AiOptions.MaxConversationTokens"/>),
-    /// distinct from <c>null</c> which inherits.
+    /// distinct from <c>null</c> which inherits. The same null/0 semantics apply to the monthly budget.
     /// </summary>
-    public static EffectiveAiSettings Merge(string? overrideSystemPrompt, int? overrideMaxConversationTokens, AiOptions defaults)
+    public static EffectiveAiSettings Merge(
+        string? overrideSystemPrompt, int? overrideMaxConversationTokens, long? overrideMaxMonthlyTokens, AiOptions defaults)
     {
         ArgumentNullException.ThrowIfNull(defaults);
         return new(
             string.IsNullOrWhiteSpace(overrideSystemPrompt) ? defaults.SystemPrompt : overrideSystemPrompt,
-            overrideMaxConversationTokens ?? defaults.MaxConversationTokens);
+            overrideMaxConversationTokens ?? defaults.MaxConversationTokens,
+            overrideMaxMonthlyTokens ?? defaults.MaxMonthlyTokens);
     }
 }
 

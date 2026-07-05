@@ -33,6 +33,12 @@ public sealed class AiOptions
     /// </summary>
     public int MaxConversationTokens { get; set; }
 
+    /// <summary>
+    /// Tenant-wide token cap per calendar month (UTC); 0 (the default) means unlimited. Chat is
+    /// refused once reached; tenant admins are notified at 80% and at exhaustion.
+    /// </summary>
+    public long MaxMonthlyTokens { get; set; }
+
     /// <summary>Upper bound on agent tool-calling iterations per turn.</summary>
     public int MaxToolIterations { get; set; } = 8;
 
