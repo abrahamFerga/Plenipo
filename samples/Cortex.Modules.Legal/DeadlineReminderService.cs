@@ -65,7 +65,7 @@ public sealed class DeadlineReminderService(
         var horizon = now.AddDays(MaxReminderDaysBefore);
         var candidates = await db.MatterDeadlines
             .IgnoreQueryFilters()
-            .Where(d => d.CompletedAt == null && d.ReminderSentAt == null && d.DueAt <= horizon)
+            .Where(d => d.CompletedAt == null && (d.ReminderSentAt == null || d.FinalNoticeSentAt == null) && d.DueAt <= horizon)
             // A CLOSED matter's dates never remind — closing (with its completeness check) is the
             // explicit decision that this file's obligations are done.
             .Join(db.Matters.IgnoreQueryFilters().Where(m => m.Status == MatterStatus.Open),
@@ -76,23 +76,47 @@ public sealed class DeadlineReminderService(
         foreach (var row in candidates)
         {
             var deadline = row.Deadline;
-            if (!deadline.IsReminderDue(now) || deadline.OwnerUserId is not Guid owner)
+            if (deadline.OwnerUserId is not Guid owner)
             {
                 continue;
             }
 
             var days = (int)Math.Ceiling((deadline.DueAt - now).TotalDays);
-            var when = days < 0 ? $"was due {-days} day(s) ago" : days == 0 ? "is due today" : $"is due in {days} day(s)";
-            await notifier.NotifyAsync(new Notification(
-                deadline.TenantId,
-                owner,
-                Category: "legal.deadline",
-                Title: $"Deadline: {deadline.Title}",
-                Body: $"'{deadline.Title}' on matter '{row.MatterName}' {when} ({deadline.DueAt:yyyy-MM-dd}).",
-                Link: "/legal/deadlines"), cancellationToken);
 
-            deadline.ReminderSentAt = now;
-            sent++;
+            // Stage 2 — the due-day final notice. It SUPERSEDES a pending early reminder (one
+            // urgent notification, not two in the same scan) by latching both stamps.
+            if (deadline.IsFinalNoticeDue(now))
+            {
+                var overdue = days < 0 ? $"is OVERDUE by {-days} day(s)" : "is DUE TODAY";
+                await notifier.NotifyAsync(new Notification(
+                    deadline.TenantId,
+                    owner,
+                    Category: "legal.deadline",
+                    Title: $"DEADLINE DUE: {deadline.Title}",
+                    Body: $"'{deadline.Title}' on matter '{row.MatterName}' {overdue} ({deadline.DueAt:yyyy-MM-dd}). Act now or mark it completed.",
+                    Link: "/legal/deadlines"), cancellationToken);
+
+                deadline.FinalNoticeSentAt = now;
+                deadline.ReminderSentAt ??= now;
+                sent++;
+                continue;
+            }
+
+            // Stage 1 — the early heads-up when the reminder window opens.
+            if (deadline.IsReminderDue(now))
+            {
+                var when = days == 0 ? "is due today" : $"is due in {days} day(s)";
+                await notifier.NotifyAsync(new Notification(
+                    deadline.TenantId,
+                    owner,
+                    Category: "legal.deadline",
+                    Title: $"Deadline: {deadline.Title}",
+                    Body: $"'{deadline.Title}' on matter '{row.MatterName}' {when} ({deadline.DueAt:yyyy-MM-dd}).",
+                    Link: "/legal/deadlines"), cancellationToken);
+
+                deadline.ReminderSentAt = now;
+                sent++;
+            }
         }
 
         if (sent > 0)

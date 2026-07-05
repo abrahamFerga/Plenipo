@@ -31,6 +31,7 @@ Derived from [research/legal-ai.md](../research/legal-ai.md) (Harvey + competito
 | 18. **Live demo verification + mock argument syntax**: the full legal workday exercised against the running Aspire stack over AG-UI (create matter -> approve -> docket deadline -> approve -> log time -> brief -> pre-bill -> approve -> real %PDF bytes served). Mock provider upgraded so multi-argument tools are demoable keylessly: quoted spans fill string params in order, ISO dates fill *date* params, numbers fill numerics | done |
 | 19. **Matter close-out**: close_matter refuses while deadlines/tasks are open (names the blockers; force only on explicit user confirmation, with a warning), reopen_matter restores; a closed matter's items leave every open list and its deadlines NEVER remind (scanner filters on status) | done |
 | 20. **Client status letter**: draft_status_update composes a client-facing letter from real matter state (30-day completions, 60-day upcoming dates, hours - never internal notes/assignees/strategy) and files it as an explicit DRAFT for attorney review | done |
+| 21. **Two-stage deadline reminders**: early heads-up when the window opens + a DUE-DAY final notice at/after the due moment ('DEADLINE DUE ... act now'); the final notice supersedes a pending early reminder (one urgent notification, never two); independent one-shot latches | done |
 
 Pending user decisions: **product name** (EnBanc vs AdLitem, below) and **repo extraction timing**
 (recommended: at first tagged release — see Repo strategy).

@@ -29,12 +29,25 @@ public sealed class MatterDeadline : TenantEntityBase
     /// <summary>How many days before <see cref="DueAt"/> the reminder fires.</summary>
     public int ReminderDaysBefore { get; set; } = 3;
 
-    /// <summary>Set when the reminder notification was produced, so it fires exactly once.</summary>
+    /// <summary>Set when the early reminder was produced, so it fires exactly once.</summary>
     public DateTimeOffset? ReminderSentAt { get; set; }
 
-    /// <summary>Whether the reminder should fire now: open, not yet reminded, inside the window.</summary>
+    /// <summary>
+    /// Set when the DUE-DAY final notice was produced. Reminders are two-stage — an early
+    /// heads-up when the window opens, and a final notice at/after the due moment — because a
+    /// single reminder weeks ahead is exactly how docketed dates still get missed.
+    /// </summary>
+    public DateTimeOffset? FinalNoticeSentAt { get; set; }
+
+    /// <summary>Whether the early reminder should fire now: open, not yet reminded, inside the window.</summary>
     public bool IsReminderDue(DateTimeOffset now) =>
         CompletedAt is null &&
         ReminderSentAt is null &&
         DueAt <= now.AddDays(ReminderDaysBefore);
+
+    /// <summary>Whether the final notice should fire now: open, not yet noticed, at/after the due moment.</summary>
+    public bool IsFinalNoticeDue(DateTimeOffset now) =>
+        CompletedAt is null &&
+        FinalNoticeSentAt is null &&
+        DueAt <= now;
 }
