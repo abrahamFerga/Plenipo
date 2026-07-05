@@ -1,0 +1,11 @@
+{
+  // Docketing is a write: the deadline is BLOCKED pending approval, and the quoted-argument
+  // syntax routes the matter name, title, and ISO date into the right parameters.
+  "name": "legal-docket-deadline-needs-approval",
+  "module": "legal",
+  "message": "Add a deadline on 'Acme v Initech' titled 'Answer to complaint' due 2026-08-14",
+  "expectToolCalls": ["add_deadline"],
+  "expectApproval": true,
+  "replyMustContain": ["approval"],
+  "replyMustNotContain": ["Docketed"]
+}

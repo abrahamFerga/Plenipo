@@ -1,0 +1,8 @@
+{
+  // Reading the docket is friction-free: no approval on a date lookup.
+  "name": "legal-list-deadlines",
+  "module": "legal",
+  "message": "List the upcoming deadlines",
+  "expectToolCalls": ["list_deadlines"],
+  "expectApproval": false
+}

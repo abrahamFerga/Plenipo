@@ -1,0 +1,8 @@
+{
+  // 'Brief me / where does it stand' routes to the composed overview, read-only.
+  "name": "legal-matter-brief",
+  "module": "legal",
+  "message": "Give me the matter overview for 'Acme v Initech'",
+  "expectToolCalls": ["get_matter_overview"],
+  "expectApproval": false
+}

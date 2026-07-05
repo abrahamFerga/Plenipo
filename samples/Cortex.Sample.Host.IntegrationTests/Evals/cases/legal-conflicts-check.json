@@ -1,0 +1,9 @@
+{
+  // The intake gate: a conflicts check runs read-only, before any engagement opens.
+  "name": "legal-conflicts-check",
+  "module": "legal",
+  "message": "Run a conflicts check for Initech Corporation",
+  "expectToolCalls": ["check_conflicts"],
+  "expectApproval": false,
+  "replyMustContain": ["CONFLICT CHECK"]
+}

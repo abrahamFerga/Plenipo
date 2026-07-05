@@ -1,0 +1,9 @@
+{
+  // THE deliberate exception: time capture is a write that must stay friction-free —
+  // approval on every entry is why lawyers under-record. Pinned so it can't silently flip.
+  "name": "legal-log-time-no-approval",
+  "module": "legal",
+  "message": "Log 2 hours of time on 'Acme v Initech' for the NDA call",
+  "expectToolCalls": ["log_time"],
+  "expectApproval": false
+}

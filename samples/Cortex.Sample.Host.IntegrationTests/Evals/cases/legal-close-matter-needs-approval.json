@@ -1,0 +1,9 @@
+{
+  // Close-out is a state change with a completeness check behind it: blocked for approval.
+  "name": "legal-close-matter-needs-approval",
+  "module": "legal",
+  "message": "Close the matter 'Acme v Initech'",
+  "expectToolCalls": ["close_matter"],
+  "expectApproval": true,
+  "replyMustContain": ["approval"]
+}
