@@ -13,6 +13,9 @@ ship it. It unifies the patterns proven in two earlier apps — **NutriForge** (
 > **New here?** [**GETTING_STARTED.md**](GETTING_STARTED.md) gets you from clone to a running chat with
 > three demo verticals and the admin dashboard in three steps — no AI key required.
 > [**ARCHITECTURE.md**](ARCHITECTURE.md) explains how it all fits together (with diagrams).
+> [**docs/CONFIGURATION.md**](docs/CONFIGURATION.md) is the single answer to "how is this configured,
+> by whom, and where do secrets (API keys) go" — including the `cortex init` wizard.
+> [**docs/TESTING.md**](docs/TESTING.md) is how the base platform itself is run and tested.
 
 ## Core ideas
 
