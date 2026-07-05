@@ -2,6 +2,7 @@ using Cortex.Application.Ai;
 using Cortex.Application.Auditing;
 using Cortex.Application.Authorization;
 using Cortex.Application.Modules;
+using Cortex.Application.Usage;
 using Cortex.AspNetCore.Setup;
 using Cortex.Core.Identity;
 using Cortex.Core.Platform;
@@ -30,9 +31,79 @@ public static class AdminEndpoints
         MapTenants(group);
         MapAiSettings(group);
         MapNotificationSettings(group);
+        MapOps(group);
         MapAgentProfiles(group);
         MapAuditAndUsage(group);
     }
+
+    // ── Ops overview: one tenant-scoped health snapshot (platform.audit.view) ──
+
+    private static void MapOps(RouteGroupBuilder group)
+    {
+        // Everything an admin checks when "something feels slow": queue depth and failures,
+        // connector sync recency, knowledge-index freshness, budget posture. Read-only
+        // aggregation over tenant-scoped tables — one call for the whole picture.
+        group.MapGet("/ops", async (
+            PlatformDbContext db, ITokenUsageReader usage, ITenantAiSettings aiSettings,
+            IOptions<AiOptions> ai, CancellationToken ct) =>
+        {
+            var now = DateTimeOffset.UtcNow;
+            var dayAgo = now.AddHours(-24);
+
+            var jobCounts = await db.BackgroundJobs
+                .GroupBy(j => j.Status)
+                .Select(g => new { Status = g.Key, Count = g.Count() })
+                .ToListAsync(ct);
+            var oldestQueued = await db.BackgroundJobs
+                .Where(j => j.Status == JobStatus.Queued)
+                .OrderBy(j => j.CreatedAt)
+                .Select(j => (DateTimeOffset?)j.CreatedAt)
+                .FirstOrDefaultAsync(ct);
+            var failed24h = await db.BackgroundJobs
+                .CountAsync(j => j.Status == JobStatus.Failed && j.CompletedAt >= dayAgo, ct);
+
+            var connectors = await db.TenantConnectors
+                .Where(c => c.Enabled)
+                .Select(c => new OpsConnectorDto(
+                    c.ConnectorId,
+                    db.ConnectorBindings.Count(b => b.ConnectorId == c.ConnectorId),
+                    db.ConnectorBindings.Where(b => b.ConnectorId == c.ConnectorId)
+                        .Max(b => (DateTimeOffset?)b.LastSyncedAt)))
+                .ToListAsync(ct);
+
+            var ragCollections = await db.RagCollections.CountAsync(ct);
+            var ragChunks = await db.RagChunks.CountAsync(ct);
+            var lastIngestAt = await db.RagChunks.MaxAsync(c => (DateTimeOffset?)c.CreatedAt, ct);
+
+            var webhookConfigured = await db.NotificationSettings
+                .AnyAsync(s => s.WebhookUrl != null, ct);
+
+            var effective = await aiSettings.ResolveAsync(ct);
+            var monthTokens = await usage.GetTenantMonthTotalAsync(now, ct);
+
+            return Results.Ok(new OpsDto(
+                new OpsJobsDto(
+                    Queued: jobCounts.FirstOrDefault(c => c.Status == JobStatus.Queued)?.Count ?? 0,
+                    Running: jobCounts.FirstOrDefault(c => c.Status == JobStatus.Running)?.Count ?? 0,
+                    Failed24h: failed24h,
+                    OldestQueuedAgeSeconds: oldestQueued is { } t ? (long)(now - t).TotalSeconds : null),
+                connectors,
+                new OpsRagDto(ragCollections, ragChunks, lastIngestAt),
+                new OpsNotificationsDto(webhookConfigured),
+                new OpsAiDto(ai.Value.Provider, ai.Value.Model, monthTokens, effective.MaxMonthlyTokens)));
+        })
+        .RequireAuthorization(PermissionRequirement.PolicyName(Permissions.ViewAuditLog))
+        .WithName("Admin_Ops");
+    }
+
+    private sealed record OpsJobsDto(int Queued, int Running, int Failed24h, long? OldestQueuedAgeSeconds);
+    private sealed record OpsConnectorDto(string ConnectorId, int BindingCount, DateTimeOffset? LastSyncedAt);
+    private sealed record OpsRagDto(int Collections, int Chunks, DateTimeOffset? LastIngestAt);
+    private sealed record OpsNotificationsDto(bool WebhookConfigured);
+    private sealed record OpsAiDto(string Provider, string Model, long MonthTokens, long MaxMonthlyTokens);
+    private sealed record OpsDto(
+        OpsJobsDto Jobs, IReadOnlyList<OpsConnectorDto> Connectors, OpsRagDto Rag,
+        OpsNotificationsDto Notifications, OpsAiDto Ai);
 
     // ── Notification delivery settings (platform.notifications.manage) ──────
 

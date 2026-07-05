@@ -116,4 +116,8 @@ KV references instead of env vars).
     Remaining follow-ups: calendar-reminder producer (module-side), UI bell/badge in @cortex/ui.
   - **Cross-module handoff**: MAF handoff workflow between module agents ("ask finance" from
     legal chat) — the cortex-peer connector already covers the cross-system case.
-  - **Admin ops tab**: job queue depth, connector sync health, RAG index freshness in one view.
+  - [x] **Admin ops snapshot**: GET `/api/admin/ops` (platform.audit.view) — job queue depth /
+    running / failed-24h / oldest-queued age, enabled connectors with binding counts and last
+    sync, RAG collections/chunks/last-ingest, webhook-configured flag, AI provider + month
+    tokens vs monthly budget. One tenant-scoped call for "something feels slow". The @cortex/
+    admin-ui tab over it is queued with the UI bell/badge as one frontend pass. Delivered.
