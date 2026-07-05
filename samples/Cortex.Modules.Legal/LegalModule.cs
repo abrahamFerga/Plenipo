@@ -31,8 +31,8 @@ public sealed class LegalModule : IModule
     {
         Id = Id,
         DisplayName = "Legal",
-        Version = "1.5.0",
-        Description = "Matter-centric legal assistant. Organize case documents into matters, docket deadlines with reminders, run conflict checks at intake, search a clause library, and draft clauses for review.",
+        Version = "1.6.0",
+        Description = "Matter-centric legal assistant. Organize case documents into matters, docket deadlines with reminders, run conflict checks at intake, track billable time, search a clause library, and draft clauses for review.",
         Icon = "scale",
         AgentInstructions =
             "You are Cortex's legal assistant, organized around MATTERS (engagement workspaces). " +
@@ -54,6 +54,8 @@ public sealed class LegalModule : IModule
             "INTAKE: before creating a matter for a new client or engagement, run check_conflicts on the client and " +
             "every known opposing party, and report the result before proceeding; record parties with add_party " +
             "(client / adverse / related) as they emerge — the conflict check is only as good as the recorded parties. " +
+            "TIME: when the user mentions work done ('spent an hour on', 'log 0.5h'), capture it immediately with " +
+            "log_time (matter, hours, narrative description); answer 'what did I work on' with list_time. " +
             "Always make clear that " +
             "output is a starting template, not legal advice, and recommend review by a licensed attorney. Never " +
             "invent statutes, case citations, or jurisdiction-specific rules; if asked for those, say a qualified " +
@@ -172,6 +174,18 @@ public sealed class LegalModule : IModule
             },
             new ToolDescriptor
             {
+                Name = "log_time",
+                Description = "Log time worked on a matter (billable by default). Quick capture — appends an entry without an approval step.",
+                Permission = Permissions.ForTool(Id, "log_time"),
+            },
+            new ToolDescriptor
+            {
+                Name = "list_time",
+                Description = "List logged time: a matter's entries with billable totals, or the caller's own recent time across matters.",
+                Permission = Permissions.ForTool(Id, "list_time"),
+            },
+            new ToolDescriptor
+            {
                 Name = "restrict_matter_access",
                 Description = "Put a matter behind an ethical wall (only the caller keeps access). Side-effecting and requires human approval.",
                 Permission = Permissions.ForTool(Id, "restrict_matter_access"),
@@ -226,14 +240,25 @@ public sealed class LegalModule : IModule
             },
             new TabDescriptor
             {
-                Id = "clauses", Label = "Clauses", Route = "/legal/clauses", Icon = "file-text", Order = 3,
+                Id = "time", Label = "Time", Route = "/legal/time", Icon = "timer", Order = 3,
+                Permission = ViewMatters,
+                DataEndpoint = "/api/legal/time",
+                Columns =
+                [
+                    new("workedOn", "Date"), new("matterName", "Matter"), new("hours", "Hours"),
+                    new("description", "Narrative"), new("userDisplay", "By"), new("billable", "Billable"),
+                ],
+            },
+            new TabDescriptor
+            {
+                Id = "clauses", Label = "Clauses", Route = "/legal/clauses", Icon = "file-text", Order = 4,
                 Permission = ViewClauses,
                 DataEndpoint = "/api/legal/clauses",
                 Columns = [new("title", "Clause"), new("category", "Category"), new("summary", "Summary")],
             },
             new TabDescriptor
             {
-                Id = "playbook", Label = "Playbook", Route = "/legal/playbook", Icon = "shield-check", Order = 4,
+                Id = "playbook", Label = "Playbook", Route = "/legal/playbook", Icon = "shield-check", Order = 5,
                 Permission = ViewClauses,
                 DataEndpoint = "/api/legal/playbook",
                 Columns = [new("severity", "Severity"), new("title", "Rule"), new("guidance", "Guidance")],
@@ -482,6 +507,30 @@ public sealed class LegalModule : IModule
             .RequireAuthorization(PermissionRequirement.PolicyName(ViewMatters))
             .WithName("Legal_GetDeadlines");
 
+        // Recent time entries across the tenant's matters — drives the Time tab. Walled matters
+        // keep their entries invisible to outsiders, like every other matter surface.
+        group.MapGet("/time", async (
+                LegalDbContext db, Cortex.Core.Identity.ICurrentUser current, CancellationToken cancellationToken) =>
+            {
+                var rows = (await db.TimeEntries
+                        .OrderByDescending(t => t.WorkedOn)
+                        .ThenByDescending(t => t.CreatedAt)
+                        .Take(200)
+                        .Join(db.Matters, t => t.MatterId, m => m.Id, (t, m) => new
+                        {
+                            t.Id, t.WorkedOn, t.Hours, t.Description, t.UserDisplay, t.Billable,
+                            MatterName = m.Name, m.RestrictedUserIdsJson,
+                        })
+                        .ToListAsync(cancellationToken))
+                    .Where(t => Matter.WallAllows(t.RestrictedUserIdsJson, current.UserId))
+                    .Select(t => new TimeEntryDto(
+                        t.Id, t.WorkedOn, t.MatterName, t.Hours, t.Description, t.UserDisplay,
+                        t.Billable ? "Yes" : "No"));
+                return Results.Ok(rows);
+            })
+            .RequireAuthorization(PermissionRequirement.PolicyName(ViewMatters))
+            .WithName("Legal_GetTime");
+
         // A matter's attached documents (file ids resolve against /api/files/{id}). Outside the
         // wall, the matter 404s — indistinguishable from missing, like cross-tenant ids.
         group.MapGet("/matters/{matterId:guid}/documents", async (
@@ -508,6 +557,8 @@ public sealed class LegalModule : IModule
     private sealed record MatterDto(Guid Id, string Name, string? ClientName, string Status, int DocumentCount, DateOnly CreatedAt);
 
     private sealed record DeadlineDto(Guid Id, DateOnly DueAt, string Title, string MatterName, string Status, string? Notes);
+
+    private sealed record TimeEntryDto(Guid Id, DateOnly WorkedOn, string MatterName, decimal Hours, string Description, string? UserDisplay, string Billable);
 
     private sealed record MatterDocumentDto(Guid FileId, string FileName, string? Note, DateTimeOffset AttachedAt);
 

@@ -20,6 +20,7 @@ public sealed class LegalDbContext(
     public DbSet<MatterDocument> MatterDocuments => Set<MatterDocument>();
     public DbSet<MatterDeadline> MatterDeadlines => Set<MatterDeadline>();
     public DbSet<MatterParty> MatterParties => Set<MatterParty>();
+    public DbSet<TimeEntry> TimeEntries => Set<TimeEntry>();
     public DbSet<TenantClause> Clauses => Set<TenantClause>();
     public DbSet<PlaybookRule> PlaybookRules => Set<PlaybookRule>();
 
@@ -72,6 +73,19 @@ public sealed class LegalDbContext(
             b.Property(x => x.Role).HasConversion<string>().HasMaxLength(16);
             b.HasIndex(x => x.MatterId);
             b.HasIndex(x => x.TenantId); // the conflicts check scans the whole tenant's parties
+            b.HasOne<Matter>().WithMany().HasForeignKey(x => x.MatterId).OnDelete(DeleteBehavior.Cascade);
+            b.HasQueryFilter(x => x.TenantId == tenantContext.TenantId);
+        });
+
+        modelBuilder.Entity<TimeEntry>(b =>
+        {
+            b.ToTable("time_entries");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Description).HasMaxLength(1000).IsRequired();
+            b.Property(x => x.UserDisplay).HasMaxLength(200);
+            b.Property(x => x.Hours).HasPrecision(5, 2);
+            b.HasIndex(x => x.MatterId);
+            b.HasIndex(x => new { x.TenantId, x.WorkedOn });
             b.HasOne<Matter>().WithMany().HasForeignKey(x => x.MatterId).OnDelete(DeleteBehavior.Cascade);
             b.HasQueryFilter(x => x.TenantId == tenantContext.TenantId);
         });

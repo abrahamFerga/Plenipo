@@ -161,6 +161,22 @@ public sealed class LegalToolSource : IModuleToolSource
                 Permission = Permissions.ForTool(ModuleId, "check_conflicts"),
                 Function = AIFunctionFactory.Create(matters.CheckConflicts, name: "check_conflicts"),
             },
+            new ModuleTool
+            {
+                ModuleId = ModuleId,
+                // Quick capture by design: NOT approval-gated (see LogTime) — entries are
+                // append-only, own-user, and low-stakes; approval friction kills time-keeping.
+                Name = "log_time",
+                Permission = Permissions.ForTool(ModuleId, "log_time"),
+                Function = AIFunctionFactory.Create(matters.LogTime, name: "log_time"),
+            },
+            new ModuleTool
+            {
+                ModuleId = ModuleId,
+                Name = "list_time",
+                Permission = Permissions.ForTool(ModuleId, "list_time"),
+                Function = AIFunctionFactory.Create(matters.ListTime, name: "list_time"),
+            },
         ];
     }
 }
