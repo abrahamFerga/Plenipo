@@ -31,7 +31,7 @@ public sealed class LegalModule : IModule
     {
         Id = Id,
         DisplayName = "Legal",
-        Version = "1.12.0",
+        Version = "1.13.0",
         Description = "Matter-centric legal assistant. Organize case documents into matters, docket deadlines with reminders, run conflict checks at intake, track billable time, manage matter tasks, search a clause library, and draft clauses for review.",
         Icon = "scale",
         AgentInstructions =
@@ -60,6 +60,9 @@ public sealed class LegalModule : IModule
             "it files the PDF on the matter for billing review. " +
             "TASKS: track to-dos with add_task (matter, title, optional assignee and target date), list_tasks, and " +
             "complete_task; use tasks for work items and add_deadline for hard dates that must remind. " +
+            "LIBRARY CURATION: administrators refine the firm's standards from chat — save_clause / remove_clause " +
+            "for the clause library and add_playbook_rule / remove_playbook_rule for the review playbook; every " +
+            "change immediately affects future drafting and reviews, so confirm the exact wording before saving. " +
             "STATUS UPDATES: when the client should hear where things stand, use draft_status_update — it composes " +
             "a client-facing letter (progress, upcoming dates, hours; never internal notes or strategy) and files it " +
             "as a DRAFT for attorney review; never present it as sent. " +
@@ -137,6 +140,34 @@ public sealed class LegalModule : IModule
                 Name = "get_playbook",
                 Description = "Get the firm's contract-review playbook rules with severity.",
                 Permission = Permissions.ForTool(Id, "get_playbook"),
+            },
+            new ToolDescriptor
+            {
+                Name = "save_clause",
+                Description = "Add or replace a clause in the firm's library (curation). Side-effecting: writes firm standards and requires human approval.",
+                Permission = Permissions.ForTool(Id, "save_clause"),
+                RequiresApproval = true,
+            },
+            new ToolDescriptor
+            {
+                Name = "remove_clause",
+                Description = "Remove a clause from the firm's library. Side-effecting and requires human approval.",
+                Permission = Permissions.ForTool(Id, "remove_clause"),
+                RequiresApproval = true,
+            },
+            new ToolDescriptor
+            {
+                Name = "add_playbook_rule",
+                Description = "Add a rule to the firm's contract-review playbook. Side-effecting: changes the review standard and requires human approval.",
+                Permission = Permissions.ForTool(Id, "add_playbook_rule"),
+                RequiresApproval = true,
+            },
+            new ToolDescriptor
+            {
+                Name = "remove_playbook_rule",
+                Description = "Remove a playbook rule by title. Side-effecting and requires human approval.",
+                Permission = Permissions.ForTool(Id, "remove_playbook_rule"),
+                RequiresApproval = true,
             },
             new ToolDescriptor
             {

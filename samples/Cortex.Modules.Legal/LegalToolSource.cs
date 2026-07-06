@@ -71,6 +71,38 @@ public sealed class LegalToolSource : IModuleToolSource
             new ModuleTool
             {
                 ModuleId = ModuleId,
+                Name = "save_clause",
+                Permission = Permissions.ForTool(ModuleId, "save_clause"),
+                Function = AIFunctionFactory.Create(clauses.SaveClause, name: "save_clause"),
+                RequiresApproval = true,
+            },
+            new ModuleTool
+            {
+                ModuleId = ModuleId,
+                Name = "remove_clause",
+                Permission = Permissions.ForTool(ModuleId, "remove_clause"),
+                Function = AIFunctionFactory.Create(clauses.RemoveClause, name: "remove_clause"),
+                RequiresApproval = true,
+            },
+            new ModuleTool
+            {
+                ModuleId = ModuleId,
+                Name = "add_playbook_rule",
+                Permission = Permissions.ForTool(ModuleId, "add_playbook_rule"),
+                Function = AIFunctionFactory.Create(clauses.AddPlaybookRule, name: "add_playbook_rule"),
+                RequiresApproval = true,
+            },
+            new ModuleTool
+            {
+                ModuleId = ModuleId,
+                Name = "remove_playbook_rule",
+                Permission = Permissions.ForTool(ModuleId, "remove_playbook_rule"),
+                Function = AIFunctionFactory.Create(clauses.RemovePlaybookRule, name: "remove_playbook_rule"),
+                RequiresApproval = true,
+            },
+            new ModuleTool
+            {
+                ModuleId = ModuleId,
                 Name = "start_bulk_review",
                 Permission = Permissions.ForTool(ModuleId, "start_bulk_review"),
                 Function = AIFunctionFactory.Create(matters.StartBulkReview, name: "start_bulk_review"),
