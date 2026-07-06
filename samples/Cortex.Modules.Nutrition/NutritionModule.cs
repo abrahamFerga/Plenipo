@@ -84,6 +84,19 @@ public sealed class NutritionModule : IModule
                     new("date", "Date"), new("foodName", "Food"), new("grams", "g"), new("kcal", "kcal"),
                     new("proteinG", "Protein"), new("fatG", "Fat"), new("carbG", "Carbs"),
                 ],
+                // Add-only (no KeyField/DeleteEndpoint): entries are records of what was eaten, and the
+                // endpoint computes the macros from the catalog — the form only takes food + portion.
+                Editor = new TabEditor
+                {
+                    UpsertEndpoint = "/api/nutrition/diary",
+                    Permission = Permissions.ForTool(Id, "log_meal"),
+                    Fields =
+                    [
+                        new("foodName", "Food (catalog name)"),
+                        new("grams", "Portion (grams)", Numeric: true),
+                        new("date", "Date (YYYY-MM-DD, blank = today)", Required: false),
+                    ],
+                },
             },
             new TabDescriptor
             {

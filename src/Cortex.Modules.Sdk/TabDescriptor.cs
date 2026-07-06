@@ -1,5 +1,9 @@
 namespace Cortex.Modules.Sdk;
 
+// Field names here (TabColumn.Field, TabEditorField.Field, {field} placeholders) address the
+// endpoint's JSON — which the host serializes camelCase — so declare them camelCase
+// ("monthlyLimit"), even though the C# property they came from is PascalCase.
+
 /// <summary>A column in a tab's server-driven data view: which row field to show, and its header.</summary>
 public sealed record TabColumn(string Field, string Header);
 

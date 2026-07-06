@@ -88,6 +88,21 @@ public sealed class ApiIntegrationTests(IntegrationFixture fixture)
         Assert.True(limit.GetProperty("numeric").GetBoolean());
     }
 
+    [Fact]
+    public async Task TabEditor_DiaryIsAddOnly()
+    {
+        var modules = await fixture.ClientFor("system_admin").GetFromJsonAsync<JsonElement>("/api/platform/modules");
+        var diary = modules.EnumerateArray().First(m => m.GetProperty("id").GetString() == "nutrition")
+            .GetProperty("tabs").EnumerateArray().First(t => t.GetProperty("id").GetString() == "diary");
+
+        // No keyField and no deleteEndpoint: the shell offers Add but no per-row Edit/Delete —
+        // diary entries are records of what was eaten, not editable documents.
+        var editor = diary.GetProperty("editor");
+        Assert.Equal("/api/nutrition/diary", editor.GetProperty("upsertEndpoint").GetString());
+        Assert.True(editor.GetProperty("keyField").ValueKind == JsonValueKind.Null);
+        Assert.True(!editor.TryGetProperty("deleteEndpoint", out var del) || del.ValueKind == JsonValueKind.Null);
+    }
+
     [Theory]
     [InlineData("finance", "/api/finance/transactions")]
     [InlineData("nutrition", "/api/nutrition/foods")]

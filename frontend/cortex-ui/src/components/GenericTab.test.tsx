@@ -111,7 +111,7 @@ describe("GenericTab (server-driven table)", () => {
     });
   });
 
-  it("numeric editor fields post JSON numbers, not strings", async () => {
+  it("numeric fields post JSON numbers; empty optional fields are omitted, not sent as \"\"", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       void input;
       void init;
@@ -137,6 +137,7 @@ describe("GenericTab (server-driven table)", () => {
               fields: [
                 { field: "category", label: "Category" },
                 { field: "monthlyLimit", label: "Monthly limit", numeric: true },
+                { field: "currency", label: "Currency", required: false },
               ],
             },
           }}
@@ -152,7 +153,8 @@ describe("GenericTab (server-driven table)", () => {
     await waitFor(() => {
       const post = fetchMock.mock.calls.find((c) => (c[1] as RequestInit | undefined)?.method === "POST");
       expect(post).toBeTruthy();
-      // The decimal-bound endpoint gets a real number — not "2500.5".
+      // The decimal-bound endpoint gets a real number — not "2500.5" — and the untouched optional
+      // currency field is absent entirely (a "" would bind poorly; Number("") would post 0).
       expect(JSON.parse((post![1] as RequestInit).body as string)).toEqual({
         category: "Dining",
         monthlyLimit: 2500.5,

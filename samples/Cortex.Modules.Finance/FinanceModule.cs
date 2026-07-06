@@ -12,8 +12,8 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Cortex.Modules.Finance;
 
 /// <summary>
-/// The Finance vertical — the first domain module and the migration target for the-ledger. Demonstrates
-/// the full module contract: a manifest declaring tools and tabs, a tool source, and its own endpoints.
+/// The Finance vertical — the first domain module, ported from the-ledger. Demonstrates the full
+/// module contract: a manifest declaring tools and tabs, a tool source, and its own endpoints.
 /// </summary>
 public sealed class FinanceModule : IModule
 {

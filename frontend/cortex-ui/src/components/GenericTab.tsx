@@ -110,16 +110,17 @@ function EditorForm({
   );
 
   const save = useMutation({
-    // Numeric fields post as JSON numbers so endpoints binding decimal/int work as-is.
+    // Numeric fields post as JSON numbers so endpoints binding decimal/int work as-is. Fields left
+    // empty are OMITTED (not sent as "" — which nullable value types reject, and Number("") is 0):
+    // only optional fields can be empty here, and absent binds server-side as null.
     mutationFn: () =>
       apiSend(
         editor.upsertEndpoint,
         "POST",
         Object.fromEntries(
-          editor.fields.map((f) => [
-            f.field,
-            f.numeric ? Number(values[f.field]) : values[f.field],
-          ]),
+          editor.fields
+            .filter((f) => values[f.field].trim() !== "")
+            .map((f) => [f.field, f.numeric ? Number(values[f.field]) : values[f.field]]),
         ),
       ),
     onSuccess: () => {
