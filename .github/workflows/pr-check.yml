@@ -36,6 +36,10 @@ env:
 jobs:
   terraform:
     name: fmt / validate / plan
+    # Gated like deploy.yml: the plan needs an Azure OIDC login, which fails red until the
+    # subscription is provisioned. Set the AZURE_DEPLOY_ENABLED repository variable to "true"
+    # (with the OIDC secrets) to arm both workflows.
+    if: vars.AZURE_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
