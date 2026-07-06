@@ -8,6 +8,7 @@ import {
 import { api, uploadFile, type StoredFileInfo } from "../lib/api";
 import { messageId, runAgui } from "../lib/agui";
 import { parseAttachmentRefs, withAttachmentRefs } from "../lib/attachments";
+import { useInfo } from "../hooks/useInfo";
 import { Markdown } from "./Markdown";
 import { PendingApprovals } from "./PendingApprovals";
 
@@ -84,6 +85,7 @@ export function ChatPanel({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const queryClient = useQueryClient();
+  const { data: info } = useInfo();
 
   const connectionRef = useRef<HubConnection | null>(null);
   const conversationIdRef = useRef<string | undefined>(undefined);
@@ -108,6 +110,15 @@ export function ChatPanel({
     setError(null);
     try {
       for (const file of Array.from(list)) {
+        // Preflight against the server's published limit — same check FileEndpoints enforces
+        // with a 413, but caught before the bytes leave the browser. Unknown limit → let the
+        // server decide.
+        if (info?.maxUploadBytes && file.size > info.maxUploadBytes) {
+          setError(
+            `"${file.name}" (${formatBytes(file.size)}) exceeds the ${formatBytes(info.maxUploadBytes)} upload limit.`,
+          );
+          continue;
+        }
         const stored = await uploadFile(file);
         setAttachments((prev) => [...prev, stored]);
       }

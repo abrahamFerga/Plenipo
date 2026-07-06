@@ -101,6 +101,8 @@ export interface ConversationMessage {
 export interface PlatformInfo {
   chatEnabled: boolean;
   demoMode: boolean;
+  /** The server's attachment limit (bytes) — the composer preflights against it. */
+  maxUploadBytes: number;
 }
 
 /** A side-effecting tool call awaiting human approval, from GET /api/chat/approvals. */

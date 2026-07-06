@@ -1,4 +1,5 @@
 using Cortex.Application.Ai;
+using Cortex.Application.Files;
 using Cortex.Application.Modules;
 using Cortex.Core.Identity;
 using Cortex.Modules.Sdk;
@@ -37,12 +38,15 @@ public static class PlatformEndpoints
 
         // Deployment-level facts the shell uses to set expectations (e.g. a "demo mode" banner when the
         // chat assistant is running on the dependency-free Mock provider rather than a real LLM).
-        group.MapGet("/info", (IOptions<AiOptions> ai) =>
+        group.MapGet("/info", (IOptions<AiOptions> ai, IOptions<FileStorageOptions> files) =>
         {
             var options = ai.Value;
             return Results.Ok(new PlatformInfoDto(
                 ChatEnabled: options.IsEnabled,
-                DemoMode: string.Equals(options.Provider, "Mock", StringComparison.OrdinalIgnoreCase)));
+                DemoMode: string.Equals(options.Provider, AiProviders.Mock, StringComparison.OrdinalIgnoreCase),
+                // Published so the composer can refuse an oversized attachment BEFORE uploading —
+                // the same limit FileEndpoints enforces with a 413.
+                MaxUploadBytes: files.Value.MaxUploadBytes));
         })
         .WithName("Platform_GetInfo");
     }
@@ -86,5 +90,5 @@ public static class PlatformEndpoints
 
     private sealed record MeDto(Guid? UserId, string? DisplayName, Guid? TenantId, string[] Permissions);
 
-    private sealed record PlatformInfoDto(bool ChatEnabled, bool DemoMode);
+    private sealed record PlatformInfoDto(bool ChatEnabled, bool DemoMode, long MaxUploadBytes);
 }

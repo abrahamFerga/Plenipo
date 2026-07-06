@@ -232,6 +232,37 @@ describe("ChatPanel", () => {
     expect(screen.queryByLabelText("Attachments")).toBeNull();
   });
 
+  it("refuses an attachment over the server's published limit without uploading it", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/api/files") && init?.method === "POST") {
+        throw new Error("an oversized file must never be uploaded");
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ permissions: [] }) } as unknown as Response);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    // Seed the deployment facts (staleTime: Infinity) so the preflight limit is present up front.
+    client.setQueryData(["info"], { chatEnabled: true, demoMode: true, maxUploadBytes: 10 });
+    render(
+      <QueryClientProvider client={client}>
+        <ChatPanel moduleId="legal" transport="signalr" />
+      </QueryClientProvider>,
+    );
+
+    const big = new File(["this content is larger than ten bytes"], "huge.pdf", { type: "application/pdf" });
+    fireEvent.change(screen.getByLabelText("Attach file"), { target: { files: [big] } });
+
+    // Friendly refusal names the file and the limit; no chip, no POST.
+    expect(await screen.findByText(/"huge\.pdf" .* exceeds the 10 B upload limit/)).toBeTruthy();
+    expect(screen.queryByText("huge.pdf")).toBeNull();
+    expect(
+      fetchMock.mock.calls.some(
+        (c) => String(c[0]).includes("/api/files") && (c[1] as RequestInit | undefined)?.method === "POST",
+      ),
+    ).toBe(false);
+  });
+
   it("resumes a conversation by loading and rendering its message history", async () => {
     vi.stubGlobal(
       "fetch",

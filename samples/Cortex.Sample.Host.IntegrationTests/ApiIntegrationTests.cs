@@ -196,6 +196,8 @@ public sealed class ApiIntegrationTests(IntegrationFixture fixture)
 
         Assert.True(info.GetProperty("chatEnabled").GetBoolean());
         Assert.True(info.GetProperty("demoMode").GetBoolean()); // the test host runs the Mock provider
+        // The upload limit the composer preflights against — same value FileEndpoints enforces.
+        Assert.Equal(20 * 1024 * 1024, info.GetProperty("maxUploadBytes").GetInt64());
     }
 
     [Fact]
