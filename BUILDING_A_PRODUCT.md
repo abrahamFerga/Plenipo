@@ -68,8 +68,10 @@ app.Run();
 
 - **Admin console pages** — the console is a fixed surface; product-specific admin UI lives in
   your product's own frontend for now.
-- **Inbound conversation channels** — WhatsApp is the only inbound lane; an inbound-channel
-  SDK is on the roadmap. Outbound (notification) channels are open — seam #5.
+- **Inbound conversation channels** — WhatsApp is the only inbound lane today. The
+  inbound-channel SDK (SMS/Telegram/email-intake adapters, WhatsApp as the first one) is
+  designed in [docs/INBOUND_CHANNELS.md](docs/INBOUND_CHANNELS.md). Outbound (notification)
+  channels are already open — seam #5.
 
 When one of these blocks you, open an issue rather than forking — the seam list above grew
 exactly that way.
