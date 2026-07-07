@@ -12,6 +12,12 @@ public sealed class Tenant : EntityBase
 
     public bool IsActive { get; set; } = true;
 
+    /// <summary>
+    /// Seat limit from the tenant's subscription (enforced at user creation/JIT provisioning).
+    /// Null = unlimited (operator-created tenants, dedicated deployments).
+    /// </summary>
+    public int? MaxSeats { get; set; }
+
     public ICollection<TenantModule> Modules { get; set; } = [];
     public ICollection<User> Users { get; set; } = [];
 }
