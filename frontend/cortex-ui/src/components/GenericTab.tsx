@@ -354,10 +354,7 @@ function DataTable({
 export function GenericTab({ tab, children }: GenericTabProps) {
   return (
     <section>
-      <h1 className="mb-1 text-xl font-semibold text-slate-900 dark:text-slate-100">{tab.label}</h1>
-      <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
-        Route: <code className="font-mono">{tab.route}</code>
-      </p>
+      <h1 className="mb-4 text-xl font-semibold text-slate-900 dark:text-slate-100">{tab.label}</h1>
 
       {children ??
         (tab.dataEndpoint ? (

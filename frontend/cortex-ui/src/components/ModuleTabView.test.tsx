@@ -27,8 +27,8 @@ describe("ModuleTabView", () => {
     render(<ModuleTabView moduleId="finance" tab={tab} component={Custom} />);
 
     expect(screen.getByText("custom:finance/transactions")).toBeTruthy();
-    // The generic renderer's tell-tale "Route:" label must be absent.
-    expect(screen.queryByText(/Route:/)).toBeNull();
+    // The generic renderer's tell-tale label heading must be absent.
+    expect(screen.queryByRole("heading", { name: "Transactions" })).toBeNull();
   });
 
   it("falls back to the server-driven GenericTab when no component is registered", () => {
