@@ -3,6 +3,7 @@ using Cortex.Application.Ai;
 using Cortex.Application.Approvals;
 using Cortex.Application.Auditing;
 using Cortex.Application.Authorization;
+using Cortex.Application.Channels;
 using Cortex.Application.Connectors;
 using Cortex.Application.Conversations;
 using Cortex.Application.Files;
@@ -320,5 +321,8 @@ public static class InfrastructureSetup
         services.AddScoped<IApprovalStore, ApprovalStore>();
         services.AddScoped<ApprovalExecutor>();
         services.AddScoped<IAuthorizedAgentRunner, AuthorizedAgentRunner>();
+
+        // The channel-agnostic core every inbound conversation channel runs through (WhatsApp today).
+        services.AddScoped<IChannelTurnService, Channels.ChannelTurnService>();
     }
 }

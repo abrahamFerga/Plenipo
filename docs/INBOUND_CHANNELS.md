@@ -98,6 +98,8 @@ land as an agent turn ("client intake" with documents filed), optionally answere
 
 1. **Extract `ChannelTurnService`** from `WhatsAppChannelService` — no contract change, the
    WhatsApp tests keep passing untouched. (The seat gate and JIT code stop being duplicated.)
+   **✅ Shipped** — `IChannelTurnService` in `Cortex.Application/Channels`, the implementation in
+   `Cortex.Infrastructure/Channels/ChannelTurnService.cs`; WhatsApp is now a thin adapter.
 2. **Introduce the SDK contracts** + rewrite WhatsApp as the first `IWebhookChannelAdapter`
    (its payload/signature/media code moves into the adapter; the endpoint mapping generalizes
    to `/channels/{id}/webhook` with `/whatsapp/webhook` kept as an alias).
