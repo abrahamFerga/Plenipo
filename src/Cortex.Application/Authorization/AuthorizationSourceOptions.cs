@@ -24,6 +24,14 @@ public sealed class AuthorizationSourceOptions
     /// <summary>True when the external IdP's token is the only source of roles and grants.</summary>
     public bool IsTokenSourced => string.Equals(PermissionSource, "Token", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// The role a just-in-time-provisioned user gets in Database mode when their token asserts no
+    /// roles of its own. Products override per deployment (e.g. "guest" for approval-first
+    /// onboarding); empty = no role, a permission-less user until an admin assigns one. Ignored
+    /// entirely in Token mode — there the IdP is the single authority.
+    /// </summary>
+    public string? DefaultRole { get; set; } = "user";
+
     public void ThrowIfInvalid()
     {
         if (!IsTokenSourced && !string.Equals(PermissionSource, "Database", StringComparison.OrdinalIgnoreCase))

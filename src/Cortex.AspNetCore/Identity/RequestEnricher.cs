@@ -100,15 +100,17 @@ public sealed class RequestEnricher(
                 Email = email ?? subject,
                 DisplayName = name,
             };
-            // Default the new user to the "user" role ONLY when the token asserts no roles of its own.
-            // A principal whose IdP already scopes it (e.g. "guest") must not silently escalate to the
-            // user baseline via a DB role the platform invented. In Token mode the platform NEVER
-            // invents a role — the external IdP is the single authority, so a role-less token means
-            // a permission-less user until the IdP says otherwise.
+            // Default the new user to the configured role (Auth:DefaultRole, "user" unless the
+            // product overrides it) ONLY when the token asserts no roles of its own. A principal
+            // whose IdP already scopes it (e.g. "guest") must not silently escalate via a DB role
+            // the platform invented. In Token mode the platform NEVER invents a role — the
+            // external IdP is the single authority, so a role-less token means a permission-less
+            // user until the IdP says otherwise.
             var hasTokenRoles = principal.FindAll(ClaimTypes.Role).Concat(principal.FindAll("roles")).Any();
-            if (!hasTokenRoles && !authorizationSource.Value.IsTokenSourced)
+            if (!hasTokenRoles && !authorizationSource.Value.IsTokenSourced &&
+                !string.IsNullOrWhiteSpace(authorizationSource.Value.DefaultRole))
             {
-                user.Roles.Add(new UserRole { TenantId = tenant.Id, UserId = user.Id, Role = Roles.User });
+                user.Roles.Add(new UserRole { TenantId = tenant.Id, UserId = user.Id, Role = authorizationSource.Value.DefaultRole });
             }
 
             db.Users.Add(user);

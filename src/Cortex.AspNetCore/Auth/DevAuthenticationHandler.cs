@@ -23,7 +23,12 @@ public sealed class DevAuthenticationHandler(
         var email = Header("X-Dev-Email", "dev@cortex.local");
         var name = Header("X-Dev-Name", "Dev User");
         var tenant = Header("X-Dev-Tenant", "dev");
-        var roles = Header("X-Dev-Roles", "system_admin").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        // Roles: an ABSENT header defaults to system_admin (dev convenience); a PRESENT-but-empty
+        // header is an explicitly role-less token — how a real IdP presents an unscoped principal
+        // (exercises the Auth:DefaultRole JIT path).
+        var roles = Request.Headers.TryGetValue("X-Dev-Roles", out var rolesHeader)
+            ? rolesHeader.ToString().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            : ["system_admin"];
 
         var claims = new List<Claim>
         {

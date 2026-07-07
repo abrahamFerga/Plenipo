@@ -3,6 +3,7 @@ using Cortex.Application.Modules;
 using Cortex.Core.Platform;
 using Cortex.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Cortex.Infrastructure.Commerce;
 
@@ -11,7 +12,11 @@ namespace Cortex.Infrastructure.Commerce;
 /// the new tenant's id on every row so it works from ANY context — an operator's admin request or
 /// the billing worker's background scope (no ambient tenant). One SaveChanges: all or nothing.
 /// </summary>
-public sealed class TenantProvisioningService(PlatformDbContext db, IModuleCatalog catalog) : ITenantProvisioningService
+public sealed class TenantProvisioningService(
+    PlatformDbContext db,
+    IModuleCatalog catalog,
+    IEnumerable<ITenantProvisionedHook> hooks,
+    ILogger<TenantProvisioningService> logger) : ITenantProvisioningService
 {
     public async Task<ProvisionResult> ProvisionAsync(
         ProvisionTenantCommand command, CancellationToken cancellationToken = default)
@@ -88,7 +93,26 @@ public sealed class TenantProvisioningService(PlatformDbContext db, IModuleCatal
         }
 
         await db.SaveChangesAsync(cancellationToken); // one transaction — all of it lands or none of it
-        return new(ProvisionError.None, null, tenant.Id, admin.Id, admin.Subject,
-            (command.Modules ?? catalog.Manifests.Select(m => m.Id).ToList()).ToArray());
+
+        // Product hooks run AFTER the commit: the tenant exists whatever a hook does. Failures are
+        // logged, never propagated — a broken welcome email must not roll back a paid workspace.
+        var enabledModules = (command.Modules ?? catalog.Manifests.Select(m => m.Id).ToList()).ToArray();
+        var context = new TenantProvisionedContext(
+            tenant.Id, tenant.Slug, tenant.Name, admin.Id, admin.Email, admin.Subject,
+            enabledModules, tenant.MaxSeats, command.MonthlyTokenBudget);
+        foreach (var hook in hooks)
+        {
+            try
+            {
+                await hook.OnTenantProvisionedAsync(context, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "Tenant-provisioned hook {Hook} failed for tenant {Slug}.",
+                    hook.GetType().Name, tenant.Slug);
+            }
+        }
+
+        return new(ProvisionError.None, null, tenant.Id, admin.Id, admin.Subject, enabledModules);
     }
 }

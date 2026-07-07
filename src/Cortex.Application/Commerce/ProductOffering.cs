@@ -64,4 +64,12 @@ public static class ProductOfferingRegistration
         services.AddSingleton(offering);
         return services;
     }
+
+    /// <summary>Runs after every successful tenant provisioning (see <see cref="ITenantProvisionedHook"/>).</summary>
+    public static IServiceCollection AddCortexTenantProvisionedHook<THook>(this IServiceCollection services)
+        where THook : class, ITenantProvisionedHook
+    {
+        services.AddScoped<ITenantProvisionedHook, THook>();
+        return services;
+    }
 }

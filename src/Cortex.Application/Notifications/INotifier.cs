@@ -29,3 +29,21 @@ public interface INotifier
 {
     public Task NotifyAsync(Notification notification, CancellationToken cancellationToken = default);
 }
+
+/// <summary>First-class host extension points for notifications.</summary>
+public static class NotificationRegistration
+{
+    /// <summary>
+    /// Adds a delivery channel (email, SMS, chat-ops, …) alongside the built-in in-app and
+    /// webhook channels. The notifier fans every notification out to ALL registered channels;
+    /// a channel that fails is logged and never blocks the others.
+    /// </summary>
+    public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddCortexNotificationChannel<TChannel>(
+        this Microsoft.Extensions.DependencyInjection.IServiceCollection services)
+        where TChannel : class, INotificationChannel
+    {
+        Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions
+            .AddScoped<INotificationChannel, TChannel>(services);
+        return services;
+    }
+}
