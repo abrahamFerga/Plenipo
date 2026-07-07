@@ -33,6 +33,15 @@ public sealed class CommerceOptions
     /// <summary>How often accumulated usage is pushed to the meter.</summary>
     public int UsageExportSeconds { get; set; } = 60;
 
+    /// <summary>Stripe Price id per product per plan (Commerce:Prices:the-lawyer:team = "price_…"). Not secret.</summary>
+    public Dictionary<string, Dictionary<string, string>> Prices { get; set; } = [];
+
+    /// <summary>Where Stripe Checkout returns the buyer (e.g. the site's /welcome page).</summary>
+    public string? CheckoutSuccessUrl { get; set; }
+
+    /// <summary>Where an abandoned checkout returns (e.g. the pricing page).</summary>
+    public string? CheckoutCancelUrl { get; set; }
+
     public bool IsEnabled => Enabled && !string.IsNullOrWhiteSpace(WebhookSecret);
 }
 

@@ -243,6 +243,8 @@ public static class InfrastructureSetup
         services.AddHttpClient(nameof(Commerce.GitHubDedicatedEnvironmentProvisioner));
         services.AddHttpClient(nameof(Commerce.StripeBillingMeter));
         services.AddSingleton<Cortex.Application.Commerce.IBillingMeter, Commerce.StripeBillingMeter>();
+        services.AddHttpClient(nameof(Commerce.StripeCheckout));
+        services.AddSingleton<Cortex.Application.Commerce.IStripeCheckout, Commerce.StripeCheckout>();
         services.AddSingleton<Cortex.Application.Commerce.IDedicatedEnvironmentProvisioner, Commerce.GitHubDedicatedEnvironmentProvisioner>();
         services.AddHostedService<Commerce.BillingEventProcessor>(); // no-ops unless commerce is enabled
         services.AddSingleton<ISkillCatalog, FileSkillCatalog>();
