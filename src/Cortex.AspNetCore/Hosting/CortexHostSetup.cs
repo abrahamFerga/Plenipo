@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using Cortex.AspNetCore.Auth;
 using Cortex.AspNetCore.Channels;
+using Cortex.AspNetCore.Commerce;
 using Cortex.AspNetCore.Endpoints;
 using Cortex.AspNetCore.Identity;
 using Cortex.AspNetCore.Middleware;
@@ -125,6 +126,7 @@ public static class CortexHostSetup
         app.MapConnectorAdminEndpoints();
         app.MapConnectorOAuthEndpoints();
         app.MapAgui();
+        app.MapCommerceEndpoints();
         app.MapWhatsAppChannel();
         app.MapHub<AgentHub>("/hubs/agent");
         app.MapCortexModules();

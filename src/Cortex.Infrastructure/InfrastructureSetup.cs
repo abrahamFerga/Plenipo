@@ -236,6 +236,8 @@ public static class InfrastructureSetup
         var services = builder.Services;
 
         services.Configure<SkillsOptions>(builder.Configuration.GetSection(SkillsOptions.SectionName));
+        services.Configure<Cortex.Application.Commerce.CommerceOptions>(
+            builder.Configuration.GetSection(Cortex.Application.Commerce.CommerceOptions.SectionName));
         services.AddSingleton<ISkillCatalog, FileSkillCatalog>();
 
         // The skill tools only exist as a tool source when skills are on — a deployment without

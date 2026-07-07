@@ -38,6 +38,33 @@ internal sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
     }
 }
 
+internal sealed class BillingEventConfiguration : IEntityTypeConfiguration<BillingEvent>
+{
+    public void Configure(EntityTypeBuilder<BillingEvent> b)
+    {
+        b.Property(x => x.Provider).HasMaxLength(32);
+        b.Property(x => x.EventId).HasMaxLength(128);
+        b.Property(x => x.Type).HasMaxLength(128);
+        // The idempotency key: a redelivered event is the same row, never a second one.
+        b.HasIndex(x => new { x.Provider, x.EventId }).IsUnique();
+        b.HasIndex(x => x.ProcessedAt); // the worker's pending scan
+    }
+}
+
+internal sealed class TenantEntitlementConfiguration : IEntityTypeConfiguration<TenantEntitlement>
+{
+    public void Configure(EntityTypeBuilder<TenantEntitlement> b)
+    {
+        b.Property(x => x.ProductId).HasMaxLength(64);
+        b.Property(x => x.Plan).HasMaxLength(64);
+        b.Property(x => x.SubscriptionRef).HasMaxLength(128);
+        b.Property(x => x.CustomerRef).HasMaxLength(128);
+        // Lifecycle events correlate by the provider's subscription id.
+        b.HasIndex(x => x.SubscriptionRef).IsUnique();
+        b.HasIndex(x => x.TenantId);
+    }
+}
+
 internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
 {
     public void Configure(EntityTypeBuilder<User> b)
