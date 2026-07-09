@@ -18,3 +18,19 @@ export const BrandingContext = createContext<CortexBranding>({});
 export function useBranding(): CortexBranding {
   return useContext(BrandingContext);
 }
+
+/**
+ * Resolves the effective product name from the two sources the app shell has:
+ * the host's runtime answer (`/api/platform/branding`) wins when it names an actual product;
+ * a runtime "Cortex" is the endpoint's default and must not override a build-time brand
+ * (a host that truly wants "Cortex" gets it anyway — it is also the final fallback).
+ */
+export function resolveBrandName(
+  buildTime: string | undefined,
+  runtime: string | undefined,
+): string | undefined {
+  if (runtime && runtime !== "Cortex") {
+    return runtime;
+  }
+  return buildTime;
+}

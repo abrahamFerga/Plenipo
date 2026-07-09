@@ -45,6 +45,15 @@ public static class PlatformEndpoints
             user.Permissions.OrderBy(p => p, StringComparer.Ordinal).ToArray())))
         .WithName("Platform_GetMe");
 
+        // The product's public identity, resolved at RUNTIME from host configuration
+        // (Branding:ProductName). This is what lets ONE prebuilt @cortex/ui bundle serve every
+        // product — the shell asks the host who it is instead of baking the name in at build
+        // time. Anonymous on purpose: the name must render before any sign-in.
+        group.MapGet("/branding", (IConfiguration configuration) =>
+                Results.Ok(new BrandingDto(configuration["Branding:ProductName"] ?? "Cortex")))
+            .AllowAnonymous()
+            .WithName("Platform_Branding");
+
         // Deployment-level facts the shell uses to set expectations (e.g. a "demo mode" banner when the
         // chat assistant is running on the dependency-free Mock provider rather than a real LLM).
         group.MapGet("/info", (IOptions<AiOptions> ai, IOptions<FileStorageOptions> files) =>
@@ -127,6 +136,9 @@ public static class PlatformEndpoints
     private sealed record TabEditorFieldDto(string Field, string Label, bool Multiline, bool Required, bool Numeric);
 
     private sealed record MeDto(Guid? UserId, string? DisplayName, Guid? TenantId, string[] Permissions);
+
+    /// <summary>The host's product identity; extensible (logo URL, accent color) without a breaking change.</summary>
+    private sealed record BrandingDto(string Name);
 
     private sealed record PlatformInfoDto(
         bool ChatEnabled, bool DemoMode, long MaxUploadBytes, string[] AvailableModels);
