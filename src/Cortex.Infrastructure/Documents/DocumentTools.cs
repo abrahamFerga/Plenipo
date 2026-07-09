@@ -5,6 +5,7 @@ using Cortex.Application.Files;
 using UglyToad.PdfPig;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Core;
+using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
 using UglyToad.PdfPig.Writer;
 
 namespace Cortex.Infrastructure.Documents;
@@ -155,7 +156,9 @@ public sealed class DocumentTools(IFileStore files, IOcrEngine? ocr = null)
         contentType.Contains("pdf", StringComparison.OrdinalIgnoreCase) ||
         fileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
 
-    internal static string ExtractPdfText(Stream content)
+    /// <summary>Line-preserving PDF text extraction. Public alongside <see cref="BuildPdf"/> so
+    /// module code can read what it (or a bank) generated without going through the tool.</summary>
+    public static string ExtractPdfText(Stream content)
     {
         using var pdf = PdfDocument.Open(content);
         var sb = new StringBuilder();
@@ -166,7 +169,10 @@ public sealed class DocumentTools(IFileStore files, IOcrEngine? ocr = null)
                 break;
             }
 
-            sb.AppendLine(page.Text);
+            // Reading-order extraction keeps the page's LINE structure ("date  description  amount"
+            // stays one line). page.Text would concatenate every glyph run with no separators, which
+            // destroys tables and statements for every consumer (read_document, RAG chunking, modules).
+            sb.AppendLine(ContentOrderTextExtractor.GetText(page));
         }
 
         return sb.ToString().Trim();
