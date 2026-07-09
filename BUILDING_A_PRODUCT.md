@@ -64,6 +64,21 @@ app.Run();
   and recording seams — a product's CI needs no external accounts. Copy the patterns in
   `samples/Cortex.Sample.Host.IntegrationTests`.
 
+## Shipping the web UI (no npm registry needed)
+
+The `@cortex/*` frontend packages don't need a registry to reach production. Build them with
+your product's identity baked in and drop the outputs into the host — the API serves the SPA
+itself, same origin, no CORS, no asset host:
+
+1. `VITE_BRAND_NAME=YourProduct VITE_API_BASE= pnpm -C frontend/cortex-ui build` → copy
+   `dist/` to your host's `wwwroot/app` (served at `/`, with an `index.html` fallback for
+   client-side deep links; `/api`, `/admin`, `/hubs`, health, and OpenAPI are never shadowed).
+2. `pnpm -C frontend/admin-ui build` → copy `dist/` to `wwwroot/admin` (served at `/admin`).
+
+Both mounts are no-ops when the directories are absent, so an API-only host and the dev-time
+Vite servers (which the sample AppHosts launch with hot reload) keep working unchanged. See
+casewell's `scripts/build-ui.ps1` for a worked one-command version.
+
 ## What's deliberately NOT extensible (yet)
 
 - **Admin console pages** — the console is a fixed surface; product-specific admin UI lives in
