@@ -113,6 +113,33 @@ export interface ModuleSkill {
 }
 
 /** A module returned from GET /api/platform/modules. */
+/** One step of a module's first-run setup wizard. */
+export interface OnboardingStep {
+  id: string;
+  title: string;
+  blurb: string;
+  /** info | form | upload. */
+  kind: string;
+  /** form: POST target. upload: the follow-up POST receiving the stored file id. */
+  endpoint?: string | null;
+  fields?: TabEditorField[];
+  /** Constant values merged into every POST body (e.g. direction=income). */
+  preset?: Record<string, string> | null;
+  /** upload: the body field carrying the stored file id. */
+  fileIdField?: string | null;
+  /** upload: accepted file types, e.g. ".csv,.ofx,.qfx,.pdf". */
+  accept?: string | null;
+  optional?: boolean;
+}
+
+/** A module's declared setup wizard; present only for callers who may run it. */
+export interface Onboarding {
+  /** GET endpoint returning an array; empty = unconfigured, the shell offers the wizard. */
+  probeEndpoint: string;
+  title: string;
+  steps: OnboardingStep[];
+}
+
 export interface Module {
   id: string;
   displayName: string;
@@ -125,6 +152,8 @@ export interface Module {
   agents?: ModuleAgent[];
   /** Skills invocable in this module's chat (global library + module-shipped). */
   skills?: ModuleSkill[];
+  /** First-run setup wizard, when the module declares one and the caller may run it. */
+  onboarding?: Onboarding | null;
 }
 
 /** A chat conversation from GET /api/chat/conversations. */

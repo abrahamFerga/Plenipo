@@ -116,16 +116,34 @@ public static class PlatformEndpoints
                     .ToArray()))
             .ToArray();
 
+        // The wizard ships only to callers who may run it — same rule as editors and actions.
+        var onboarding = manifest.Onboarding is { } setup && user.HasPermission(setup.Permission)
+            ? new OnboardingDto(
+                setup.ProbeEndpoint, setup.Title,
+                setup.Steps.Select(s => new OnboardingStepDto(
+                    s.Id, s.Title, s.Blurb, s.Kind, s.Endpoint,
+                    s.Fields.Select(f => new TabEditorFieldDto(f.Field, f.Label, f.Multiline, f.Required, f.Numeric)).ToArray(),
+                    s.Preset.Count > 0 ? new Dictionary<string, string>(s.Preset) : null,
+                    s.FileIdField, s.Accept, s.Optional)).ToArray())
+            : null;
+
         return new ModuleDto(
             manifest.Id, manifest.DisplayName, manifest.Description, manifest.Icon, tabs,
             manifest.SuggestedPrompts.ToArray(), agents,
             // Slash-invocable in this module's chat: the global library + the module's own bundles.
-            skills.Select(s => new ModuleSkillDto(s.Name, s.Description)).ToArray());
+            skills.Select(s => new ModuleSkillDto(s.Name, s.Description)).ToArray(),
+            onboarding);
     }
 
     private sealed record ModuleDto(
         string Id, string DisplayName, string? Description, string? Icon, TabDto[] Tabs, string[] SuggestedPrompts,
-        ModuleAgentDto[] Agents, ModuleSkillDto[] Skills);
+        ModuleAgentDto[] Agents, ModuleSkillDto[] Skills, OnboardingDto? Onboarding);
+
+    private sealed record OnboardingDto(string ProbeEndpoint, string Title, OnboardingStepDto[] Steps);
+
+    private sealed record OnboardingStepDto(
+        string Id, string Title, string Blurb, string Kind, string? Endpoint, TabEditorFieldDto[] Fields,
+        Dictionary<string, string>? Preset, string? FileIdField, string? Accept, bool Optional);
 
     /// <summary>A skill the composer's "/" autocomplete offers for this module.</summary>
     private sealed record ModuleSkillDto(string Name, string Description);

@@ -6,6 +6,8 @@ import { ChatView } from "../components/ChatView";
 import { ConnectedAccounts } from "../components/ConnectedAccounts";
 import { ModuleTabView } from "../components/ModuleTabView";
 import { DemoModeBanner } from "../components/DemoModeBanner";
+import { OnboardingOffer } from "../components/OnboardingOffer";
+import { OnboardingWizard } from "../components/OnboardingWizard";
 import { ApiUnreachable } from "../components/ApiUnreachable";
 import { AccessDenied } from "../components/AccessDenied";
 import { useModules } from "../hooks/useModules";
@@ -149,6 +151,7 @@ export function AppShell({ moduleUi, branding }: AppShellProps = {}) {
           onToggleSidebar={() => setSidebarOpen((open) => !open)}
         />
         <DemoModeBanner />
+        <OnboardingOffer module={activeModule} />
         <div className="flex min-h-0 flex-1">
           <Sidebar
             moduleId={activeModuleId}
@@ -185,6 +188,21 @@ export function AppShell({ moduleUi, branding }: AppShellProps = {}) {
               )}
               {/* Module-agnostic, like /chat: the caller's own delegated-connector logins. */}
               <Route path="/account/connections" element={<ConnectedAccounts />} />
+              {/* The active module's first-run setup wizard, when it declares one. */}
+              {activeModule?.onboarding && (
+                <Route
+                  path="/setup"
+                  element={
+                    <OnboardingWizard
+                      module={activeModule}
+                      onDone={() => {
+                        const first = tabs.find((t) => t.id !== "chat") ?? tabs[0];
+                        navigate(first?.route ?? "/chat");
+                      }}
+                    />
+                  }
+                />
+              )}
               {/* Dynamic routes generated from the active module's tabs. Each renders a
                   host-registered component when one exists, else the generic server-driven view. */}
               {tabs

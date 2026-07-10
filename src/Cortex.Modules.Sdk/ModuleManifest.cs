@@ -28,6 +28,9 @@ public sealed record ModuleManifest
     /// <summary>Dashboard tabs this module contributes.</summary>
     public IReadOnlyList<TabDescriptor> Tabs { get; init; } = [];
 
+    /// <summary>Optional first-run setup wizard the shell renders when the module has no data yet.</summary>
+    public OnboardingDescriptor? Onboarding { get; init; }
+
     /// <summary>Roles that, when assigned to a user, grant access to this module.</summary>
     public IReadOnlyList<string> Roles { get; init; } = [];
 
