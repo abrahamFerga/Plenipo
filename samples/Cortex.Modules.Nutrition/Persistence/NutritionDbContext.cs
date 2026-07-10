@@ -11,7 +11,7 @@ namespace Cortex.Modules.Nutrition.Persistence;
 /// </summary>
 public sealed class NutritionDbContext(
     DbContextOptions<NutritionDbContext> options,
-    ITenantContext tenantContext) : DbContext(options)
+    ITenantContext tenantContext) : Cortex.Modules.Sdk.ModuleDbContext(options)
 {
     /// <summary>Connection shared with the platform database (separate schema).</summary>
     public const string ConnectionName = "cortex-platform";

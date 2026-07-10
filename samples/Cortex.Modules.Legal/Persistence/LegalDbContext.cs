@@ -10,7 +10,7 @@ namespace Cortex.Modules.Legal.Persistence;
 /// </summary>
 public sealed class LegalDbContext(
     DbContextOptions<LegalDbContext> options,
-    ITenantContext tenantContext) : DbContext(options)
+    ITenantContext tenantContext) : Cortex.Modules.Sdk.ModuleDbContext(options)
 {
     /// <summary>Connection shared with the platform database (separate schema).</summary>
     public const string ConnectionName = "cortex-platform";
