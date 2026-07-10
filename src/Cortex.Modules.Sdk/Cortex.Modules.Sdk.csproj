@@ -14,6 +14,9 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Microsoft.Extensions.AI" />
+    <!-- ModuleDbContext (audit-stamping base for module persistence). The core EF package
+         only — providers (Npgsql, …) remain the module's own choice. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
   </ItemGroup>
 
   <ItemGroup>

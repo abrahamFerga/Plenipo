@@ -39,6 +39,27 @@ export interface TabEditor {
   fields: TabEditorField[];
 }
 
+/** Render the tab's dataEndpoint rows as a time-series line chart instead of a table. */
+export interface TabChart {
+  /** Row field holding the x value — an ISO date string. */
+  xField: string;
+  /** Row field holding the numeric y value. */
+  yField: string;
+  /** Optional row field splitting rows into one line per value (e.g. a currency code). */
+  seriesField?: string | null;
+  /** Axis label for the measure. */
+  yLabel?: string | null;
+}
+
+/** A tab-level command button: POST (empty body) to `endpoint`, show the response, refresh. */
+export interface TabAction {
+  id: string;
+  label: string;
+  endpoint: string;
+  /** Confirmation prompt shown before the POST, for consequential actions. */
+  confirm?: string | null;
+}
+
 /** A tab inside a module. */
 export interface ModuleTab {
   id: string;
@@ -54,6 +75,10 @@ export interface ModuleTab {
   editor?: TabEditor | null;
   /** Drill-down endpoint with one `{field}` placeholder resolved from the row; returns a TabDetailDocument. */
   detailEndpoint?: string | null;
+  /** When set, the shell renders the dataEndpoint rows as a line chart instead of a table. */
+  chart?: TabChart | null;
+  /** Command buttons; present only for callers allowed to invoke them. */
+  actions?: TabAction[];
 }
 
 /** A section of a drill-down detail document: prose, or a sub-table. */
@@ -444,6 +469,28 @@ export async function apiGet<T>(path: string): Promise<T> {
   }
 
   return (await res.json()) as T;
+}
+
+/**
+ * POST for a tab-level action button (empty body). Returns the endpoint's `message` when the
+ * response carries one — actions answer with what happened ("Posted 3 transaction(s)…"), and
+ * the shell surfaces that instead of a mute refresh.
+ */
+export async function apiAction(path: string): Promise<string | undefined> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: { Accept: "application/json", ...devAuthHeaders },
+  });
+  if (!res.ok) {
+    throw await toApiError("POST", path, res);
+  }
+
+  try {
+    const json = (await res.json()) as { message?: unknown };
+    return typeof json?.message === "string" && json.message.trim() ? json.message.trim() : undefined;
+  } catch {
+    return undefined; // 204 or non-JSON success — nothing to show, the refresh speaks.
+  }
 }
 
 /** Fetch wrapper for mutations (POST / PUT / DELETE). Returns nothing; throws on non-2xx. */

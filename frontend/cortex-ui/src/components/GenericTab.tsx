@@ -1,14 +1,17 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  apiAction,
   apiGet,
   apiSend,
   type ModuleTab,
+  type TabAction,
   type TabColumn,
   type TabDetailDocument,
   type TabEditor,
 } from "../lib/api";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { TabChartView } from "./TabChart";
 
 interface GenericTabProps {
   tab: ModuleTab;
@@ -349,17 +352,77 @@ function DataTable({
 }
 
 /**
- * Server-driven tab content. If the tab declares a `dataEndpoint`, its data renders as a table; otherwise
- * the consuming app may supply content as children, or a placeholder is shown. The base library has no
- * knowledge of any particular vertical.
+ * Tab-level command buttons: POST (empty body), surface the endpoint's message, refresh the tab
+ * data. Consequential actions declare `confirm` and get a dialog first. The server only sends
+ * actions the caller may invoke; the endpoints stay authorization-gated regardless.
+ */
+function ActionBar({ actions }: { actions: TabAction[] }) {
+  const qc = useQueryClient();
+  const [message, setMessage] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<TabAction | null>(null);
+
+  const run = useMutation({
+    mutationFn: (action: TabAction) => apiAction(action.endpoint),
+    onSuccess: (result) => {
+      setMessage(result ?? "Done.");
+      void qc.invalidateQueries({ queryKey: ["tab-data"] });
+    },
+    onError: (error) => setMessage((error as Error).message),
+  });
+
+  return (
+    <div className="mb-3 space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {actions.map((action) => (
+          <button
+            key={action.id}
+            type="button"
+            disabled={run.isPending}
+            onClick={() => (action.confirm ? setConfirming(action) : run.mutate(action))}
+            className="focus-ring rounded bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-40"
+          >
+            {run.isPending ? "Working…" : action.label}
+          </button>
+        ))}
+      </div>
+      {message && (
+        <p className={`text-sm ${run.isError ? "text-red-600" : "text-slate-600 dark:text-slate-300"}`} data-testid="action-message">
+          {message}
+        </p>
+      )}
+
+      <ConfirmDialog
+        open={confirming !== null}
+        title={confirming?.label ?? ""}
+        body={confirming?.confirm ?? ""}
+        confirmLabel={confirming?.label ?? "Confirm"}
+        onConfirm={() => {
+          if (confirming) run.mutate(confirming);
+          setConfirming(null);
+        }}
+        onCancel={() => setConfirming(null)}
+      />
+    </div>
+  );
+}
+
+/**
+ * Server-driven tab content. If the tab declares a `dataEndpoint`, its data renders as a table —
+ * or as a time-series line chart when the tab declares `chart`. Otherwise the consuming app may
+ * supply content as children, or a placeholder is shown. The base library has no knowledge of
+ * any particular vertical.
  */
 export function GenericTab({ tab, children }: GenericTabProps) {
   return (
     <section>
       <h1 className="mb-4 text-xl font-semibold text-slate-900 dark:text-slate-100">{tab.label}</h1>
 
+      {(tab.actions?.length ?? 0) > 0 && <ActionBar actions={tab.actions!} />}
+
       {children ??
-        (tab.dataEndpoint ? (
+        (tab.dataEndpoint && tab.chart ? (
+          <TabChartView endpoint={tab.dataEndpoint} spec={tab.chart} />
+        ) : tab.dataEndpoint ? (
           <DataTable
             endpoint={tab.dataEndpoint}
             columns={tab.columns ?? []}

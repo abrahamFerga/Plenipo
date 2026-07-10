@@ -45,6 +45,49 @@ public sealed record TabEditor
 }
 
 /// <summary>
+/// A time-series chart rendered over the tab's <see cref="TabDescriptor.DataEndpoint"/> rows —
+/// the shell draws a line chart instead of the generic table. One y-scale by design (never a
+/// dual axis); one line per distinct <see cref="SeriesField"/> value when set.
+/// </summary>
+public sealed record TabChart
+{
+    /// <summary>Row field holding the x value — an ISO date string (e.g. "takenOn").</summary>
+    public required string XField { get; init; }
+
+    /// <summary>Row field holding the numeric y value (e.g. "netWorth").</summary>
+    public required string YField { get; init; }
+
+    /// <summary>Optional row field splitting rows into one line per value (e.g. "currencyCode").</summary>
+    public string? SeriesField { get; init; }
+
+    /// <summary>Axis label for the measure (e.g. "Net worth").</summary>
+    public string? YLabel { get; init; }
+}
+
+/// <summary>
+/// A tab-level command button: the shell POSTs (empty body) to <see cref="Endpoint"/> and
+/// refreshes the tab's data with the returned message shown to the user. The UI shows the button
+/// only to callers holding <see cref="Permission"/>; the endpoint stays authorization-gated
+/// server-side regardless.
+/// </summary>
+public sealed record TabAction
+{
+    public required string Id { get; init; }
+
+    /// <summary>Button label (e.g. "Approve batch").</summary>
+    public required string Label { get; init; }
+
+    /// <summary>POST target (e.g. "/api/finance/imports/latest/approve").</summary>
+    public required string Endpoint { get; init; }
+
+    /// <summary>Permission gating the button. Null = any user who can see the tab.</summary>
+    public string? Permission { get; init; }
+
+    /// <summary>Optional confirmation prompt shown before the POST (for consequential actions).</summary>
+    public string? Confirm { get; init; }
+}
+
+/// <summary>
 /// A navigation tab a module contributes to the dashboard. The React shell builds its sidebar and
 /// routes purely from the tabs returned by the API, filtered by the caller's permissions — the
 /// frontend hardcodes no domain routes.
@@ -84,6 +127,12 @@ public sealed record TabDescriptor
 
     /// <summary>Optional add/edit/delete affordances for the <see cref="DataEndpoint"/> table.</summary>
     public TabEditor? Editor { get; init; }
+
+    /// <summary>Optional: render <see cref="DataEndpoint"/> rows as a time-series line chart instead of a table.</summary>
+    public TabChart? Chart { get; init; }
+
+    /// <summary>Optional tab-level command buttons (POST + refresh), permission-gated per action.</summary>
+    public IReadOnlyList<TabAction> Actions { get; init; } = [];
 
     /// <summary>
     /// Optional drill-down: a GET endpoint with one <c>{field}</c> placeholder substituted from the

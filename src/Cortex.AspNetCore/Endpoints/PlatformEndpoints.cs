@@ -105,7 +105,15 @@ public static class PlatformEndpoints
                         e.UpsertEndpoint, e.DeleteEndpoint, e.KeyField,
                         e.Fields.Select(f => new TabEditorFieldDto(f.Field, f.Label, f.Multiline, f.Required, f.Numeric)).ToArray())
                     : null,
-                t.DetailEndpoint))
+                t.DetailEndpoint,
+                t.Chart is { } chart
+                    ? new TabChartDto(chart.XField, chart.YField, chart.SeriesField, chart.YLabel)
+                    : null,
+                // Same rule as the editor: only advertise actions the caller can actually invoke.
+                t.Actions
+                    .Where(a => a.Permission is null || user.HasPermission(a.Permission))
+                    .Select(a => new TabActionDto(a.Id, a.Label, a.Endpoint, a.Confirm))
+                    .ToArray()))
             .ToArray();
 
         return new ModuleDto(
@@ -127,7 +135,11 @@ public static class PlatformEndpoints
 
     private sealed record TabDto(
         string Id, string Label, string Route, string? Icon, string? DataEndpoint, TabColumnDto[] Columns, string? Placeholder,
-        TabEditorDto? Editor, string? DetailEndpoint);
+        TabEditorDto? Editor, string? DetailEndpoint, TabChartDto? Chart, TabActionDto[] Actions);
+
+    private sealed record TabChartDto(string XField, string YField, string? SeriesField, string? YLabel);
+
+    private sealed record TabActionDto(string Id, string Label, string Endpoint, string? Confirm);
 
     private sealed record TabColumnDto(string Field, string Header);
 
