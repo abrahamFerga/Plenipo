@@ -136,6 +136,20 @@ public static class InfrastructureSetup
         // and per-user gating stays with the RBAC layer (tools.documents.* in the role editor).
         services.Configure<Cortex.Application.Documents.DocumentOptions>(
             builder.Configuration.GetSection(Cortex.Application.Documents.DocumentOptions.SectionName));
+
+        // Config-driven OCR: Ocr:Provider=AzureDocumentIntelligence (+ endpoint + key) registers
+        // the engine; everything consuming the IOcrEngine seam — the ocr_document tool, document
+        // reading, product statement extractors — lights up without further wiring.
+        services.Configure<Cortex.Application.Documents.OcrOptions>(
+            builder.Configuration.GetSection(Cortex.Application.Documents.OcrOptions.SectionName));
+        var ocrOptions = builder.Configuration
+            .GetSection(Cortex.Application.Documents.OcrOptions.SectionName)
+            .Get<Cortex.Application.Documents.OcrOptions>() ?? new Cortex.Application.Documents.OcrOptions();
+        if (ocrOptions.IsAzureDocumentIntelligence)
+        {
+            services.AddSingleton<Cortex.Application.Documents.IOcrEngine, AzureDocumentIntelligenceOcrEngine>();
+        }
+
         var documentOptions = builder.Configuration
             .GetSection(Cortex.Application.Documents.DocumentOptions.SectionName)
             .Get<Cortex.Application.Documents.DocumentOptions>() ?? new Cortex.Application.Documents.DocumentOptions();

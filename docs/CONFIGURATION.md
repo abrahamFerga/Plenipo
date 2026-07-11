@@ -97,6 +97,7 @@ and change without a deploy.
 | `Skills` | `Enabled`, `Path` | Deploy-time SKILL.md bundles shipped with the host — never tenant uploads |
 | `Mcp` | `Servers` — external MCP tool servers (name, transport, command/url, approval) | Deploy-time, like skills; each discovered tool is RBAC-gated as `tools.mcp.*` |
 | `Documents` | `Enabled` | Platform PDF/document tools |
+| `Ocr` | `Provider` (None/AzureDocumentIntelligence), `Endpoint`, `ApiKey` | Scanned-PDF/image OCR. Off by default; configuring it lights up the `ocr_document` tool and scanned-statement extraction everywhere the `IOcrEngine` seam is consumed. Key via user-secrets/env (`Ocr__ApiKey`) |
 | `Files` | `Provider` (Local/AzureBlob) + provider settings | |
 | `Channels:WhatsApp` | `Enabled` + Meta Cloud API secrets | Secrets via user-secrets/env |
 | `Channels:Email` | `Enabled`, `Host`/`Port`/`UseSsl`, `Username`, `Password`, `Folder`, `ModuleId`, `TenantSlug`, `PollSeconds`, `ReplyEnabled` | IMAP intake mailbox polled into agent turns (docs/INBOUND_CHANNELS.md); password via user-secrets/env; replies off by default |

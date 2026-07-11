@@ -15,6 +15,7 @@
     <!-- JavaScript hosting (AddViteApp/WithPnpm) — the 13.x successor to Aspire.Hosting.NodeJs. -->
     <PackageVersion Include="Aspire.Hosting.JavaScript" Version="13.4.6" />
     <PackageVersion Include="AWSSDK.S3" Version="4.0.100.3" />
+    <PackageVersion Include="Azure.AI.DocumentIntelligence" Version="1.0.0" />
     <PackageVersion Include="Azure.Security.KeyVault.Secrets" Version="4.11.0" />
     <PackageVersion Include="MailKit" Version="4.17.0" />
   </ItemGroup>
