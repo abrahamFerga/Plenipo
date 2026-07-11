@@ -317,6 +317,12 @@ enable/disable), an **OpenClaw-style `cortex init` install wizard**, and an opt-
 RAG pipeline** (per-matter/per-project collections, hybrid retrieval, ACL-trimmed) — are designed in
 [docs/PLATFORM_CONNECTORS_RAG_PLAN.md](docs/PLATFORM_CONNECTORS_RAG_PLAN.md).
 
+Also queued, driven by a consuming product's v2 plan — **richer chart kinds** (donut/bar,
+alongside the existing line chart), **stat-tile and progress-bar primitives**, **mobile
+card-mode** for the server-driven data table, **masked-value rendering** for `[Pii]` fields,
+a **risk-tiered, explainable approval queue**, and **two-factor/passkey authentication** — are
+designed in [docs/RICH_UI_KIT_PLAN.md](docs/RICH_UI_KIT_PLAN.md).
+
 See [CHANGELOG.md](CHANGELOG.md) for the full scope of the upcoming `0.1.0-alpha`.
 
 ## Contributing
