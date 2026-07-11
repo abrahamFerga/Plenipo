@@ -63,6 +63,7 @@ export { useModules } from "./hooks/useModules";
 export { useMe } from "./hooks/useMe";
 export { useInfo } from "./hooks/useInfo";
 export { usePermission } from "./hooks/usePermission";
+export { useMediaQuery, NARROW_QUERY } from "./hooks/useMediaQuery";
 
 // Types
 export type {

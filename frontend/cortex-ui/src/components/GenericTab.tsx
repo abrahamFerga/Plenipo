@@ -14,6 +14,7 @@ import {
 import { ConfirmDialog } from "./ConfirmDialog";
 import { FieldInput } from "./FieldInput";
 import { TabChartView } from "./TabChart";
+import { NARROW_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
 
 interface GenericTabProps {
   tab: ModuleTab;
@@ -182,10 +183,81 @@ function EditorForm({
   );
 }
 
+/** The per-row affordances (commands, View, Edit, Delete) — one markup, used by table cells and cards alike. */
+function RowButtons({
+  row,
+  commands,
+  detailEndpoint,
+  canEdit,
+  canDelete,
+  pending,
+  onCommand,
+  onView,
+  onEdit,
+  onDelete,
+}: {
+  row: Record<string, unknown>;
+  commands: TabRowAction[];
+  detailEndpoint?: string | null;
+  canEdit: boolean;
+  canDelete: boolean;
+  pending: boolean;
+  onCommand: (action: TabRowAction, row: Record<string, unknown>) => void;
+  onView: (url: string) => void;
+  onEdit: (row: Record<string, unknown>) => void;
+  onDelete: (row: Record<string, unknown>) => void;
+}) {
+  return (
+    <span className="inline-flex flex-wrap gap-2">
+      {commands.map((action) => (
+        <button
+          key={action.id}
+          type="button"
+          disabled={pending}
+          onClick={() => onCommand(action, row)}
+          className="focus-ring rounded bg-brand-600 px-2 py-0.5 text-xs font-medium text-white hover:bg-brand-500 disabled:opacity-40"
+        >
+          {action.label}
+        </button>
+      ))}
+      {detailEndpoint && (
+        <button
+          type="button"
+          onClick={() => onView(resolveRowUrl(detailEndpoint, row))}
+          className="focus-ring rounded border border-brand-300 px-2 py-0.5 text-xs font-medium text-brand-700 dark:border-brand-800 dark:text-brand-300"
+        >
+          View
+        </button>
+      )}
+      {canEdit && (
+        <button
+          type="button"
+          onClick={() => onEdit(row)}
+          className="focus-ring rounded border border-slate-300 px-2 py-0.5 text-xs font-medium text-slate-600 dark:border-slate-600 dark:text-slate-300"
+        >
+          Edit
+        </button>
+      )}
+      {canDelete && (
+        <button
+          type="button"
+          onClick={() => onDelete(row)}
+          className="focus-ring rounded border border-red-300 px-2 py-0.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20"
+        >
+          Delete
+        </button>
+      )}
+    </span>
+  );
+}
+
 /**
  * Renders a tab's `dataEndpoint` (a JSON array) as a generic table — no domain-specific UI needed.
  * When the tab declares an `editor` (and the server decided this caller may use it), the table
  * gains Add, per-row Edit (when a key field identifies records), and Delete with confirmation.
+ * Below the sidebar's drawer breakpoint the same rows render as cards instead — the first column
+ * as the card title, the next two visible, the rest behind a native details disclosure — so a
+ * wide table never forces a phone to scroll sideways.
  */
 function DataTable({
   endpoint,
@@ -215,6 +287,7 @@ function DataTable({
   const [confirmingRow, setConfirmingRow] = useState<{ action: TabRowAction; row: Record<string, unknown> } | null>(
     null,
   );
+  const narrow = useMediaQuery(NARROW_QUERY);
 
   const remove = useMutation({
     mutationFn: (row: Record<string, unknown>) => apiSend(resolveRowUrl(editor!.deleteEndpoint!, row), "DELETE"),
@@ -281,86 +354,125 @@ function DataTable({
         </p>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-            <tr>
-              {cols.map((c) => (
-                <th key={c.field} className="px-4 py-2 font-medium">
-                  {c.header}
-                </th>
-              ))}
-              {hasRowActions && <th className="px-4 py-2" />}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={cols.length + (hasRowActions ? 1 : 0)} className="px-4 py-6 text-center text-slate-400">
-                  {emptyText ?? "No data yet."}
-                </td>
-              </tr>
-            )}
-            {rows.map((row, i) => (
-              <tr key={i}>
-                {cols.map((c) => (
-                  <td key={c.field} className="px-4 py-2 text-slate-700 dark:text-slate-200">
-                    {row[c.field] == null ? "" : String(row[c.field])}
-                  </td>
-                ))}
-                {hasRowActions && (
-                  <td className="px-4 py-2 text-right">
-                    <span className="inline-flex gap-2">
-                      {commands.map((action) => (
-                        <button
-                          key={action.id}
-                          type="button"
-                          disabled={runRowAction.isPending}
-                          onClick={() =>
-                            action.confirm
-                              ? setConfirmingRow({ action, row })
-                              : runRowAction.mutate({ action, row })
-                          }
-                          className="focus-ring rounded bg-brand-600 px-2 py-0.5 text-xs font-medium text-white hover:bg-brand-500 disabled:opacity-40"
-                        >
-                          {action.label}
-                        </button>
-                      ))}
-                      {detailEndpoint && (
-                        <button
-                          type="button"
-                          onClick={() => setDetailUrl(resolveRowUrl(detailEndpoint, row))}
-                          className="focus-ring rounded border border-brand-300 px-2 py-0.5 text-xs font-medium text-brand-700 dark:border-brand-800 dark:text-brand-300"
-                        >
-                          View
-                        </button>
-                      )}
-                      {canEdit && (
-                        <button
-                          type="button"
-                          onClick={() => setEditing(row)}
-                          className="focus-ring rounded border border-slate-300 px-2 py-0.5 text-xs font-medium text-slate-600 dark:border-slate-600 dark:text-slate-300"
-                        >
-                          Edit
-                        </button>
-                      )}
-                      {canDelete && (
-                        <button
-                          type="button"
-                          onClick={() => setDeleting(row)}
-                          className="focus-ring rounded border border-red-300 px-2 py-0.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20"
-                        >
-                          Delete
-                        </button>
-                      )}
-                    </span>
-                  </td>
+      {narrow ? (
+        <ul className="space-y-2" data-testid="card-list">
+          {rows.length === 0 && (
+            <li className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-400 dark:border-slate-700">
+              {emptyText ?? "No data yet."}
+            </li>
+          )}
+          {rows.map((row, i) => {
+            const [title, ...rest] = cols;
+            const visible = rest.slice(0, 2);
+            const overflow = rest.slice(2);
+            return (
+              <li
+                key={i}
+                data-testid="row-card"
+                className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900"
+              >
+                {title && (
+                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                    {row[title.field] == null ? "" : String(row[title.field])}
+                  </p>
                 )}
+                {visible.map((c) => (
+                  <p key={c.field} className="flex justify-between gap-4 text-sm">
+                    <span className="text-slate-400 dark:text-slate-500">{c.header}</span>
+                    <span className="min-w-0 truncate text-right text-slate-700 dark:text-slate-200">
+                      {row[c.field] == null ? "" : String(row[c.field])}
+                    </span>
+                  </p>
+                ))}
+                {overflow.length > 0 && (
+                  <details className="text-sm">
+                    <summary className="focus-ring cursor-pointer rounded text-xs font-medium text-slate-500 dark:text-slate-400">
+                      More
+                    </summary>
+                    <div className="mt-1 space-y-1">
+                      {overflow.map((c) => (
+                        <p key={c.field} className="flex justify-between gap-4">
+                          <span className="text-slate-400 dark:text-slate-500">{c.header}</span>
+                          <span className="min-w-0 truncate text-right text-slate-700 dark:text-slate-200">
+                            {row[c.field] == null ? "" : String(row[c.field])}
+                          </span>
+                        </p>
+                      ))}
+                    </div>
+                  </details>
+                )}
+                {hasRowActions && (
+                  <RowButtons
+                    row={row}
+                    commands={commands}
+                    detailEndpoint={detailEndpoint}
+                    canEdit={canEdit}
+                    canDelete={canDelete}
+                    pending={runRowAction.isPending}
+                    onCommand={(action, r) =>
+                      action.confirm ? setConfirmingRow({ action, row: r }) : runRowAction.mutate({ action, row: r })
+                    }
+                    onView={setDetailUrl}
+                    onEdit={setEditing}
+                    onDelete={setDeleting}
+                  />
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+              <tr>
+                {cols.map((c) => (
+                  <th key={c.field} className="px-4 py-2 font-medium">
+                    {c.header}
+                  </th>
+                ))}
+                {hasRowActions && <th className="px-4 py-2" />}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={cols.length + (hasRowActions ? 1 : 0)} className="px-4 py-6 text-center text-slate-400">
+                    {emptyText ?? "No data yet."}
+                  </td>
+                </tr>
+              )}
+              {rows.map((row, i) => (
+                <tr key={i}>
+                  {cols.map((c) => (
+                    <td key={c.field} className="px-4 py-2 text-slate-700 dark:text-slate-200">
+                      {row[c.field] == null ? "" : String(row[c.field])}
+                    </td>
+                  ))}
+                  {hasRowActions && (
+                    <td className="px-4 py-2 text-right">
+                      <RowButtons
+                        row={row}
+                        commands={commands}
+                        detailEndpoint={detailEndpoint}
+                        canEdit={canEdit}
+                        canDelete={canDelete}
+                        pending={runRowAction.isPending}
+                        onCommand={(action, r) =>
+                          action.confirm ? setConfirmingRow({ action, row: r }) : runRowAction.mutate({ action, row: r })
+                        }
+                        onView={setDetailUrl}
+                        onEdit={setEditing}
+                        onDelete={setDeleting}
+                      />
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <ConfirmDialog
         open={confirmingRow !== null}
