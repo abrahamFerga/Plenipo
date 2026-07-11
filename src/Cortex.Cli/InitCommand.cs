@@ -84,7 +84,7 @@ public sealed class InitCommand : Command<InitCommand.Settings>
         public string? KeyVaultUri { get; init; }
     }
 
-    public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    protected override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
         var targetDirectory = System.IO.Path.GetFullPath(settings.Path);
         if (!Directory.Exists(targetDirectory))
