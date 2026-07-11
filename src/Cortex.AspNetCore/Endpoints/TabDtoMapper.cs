@@ -35,6 +35,10 @@ internal static class TabDtoMapper
                 t.Actions
                     .Where(a => a.Permission is null || user.HasPermission(a.Permission))
                     .Select(a => new TabActionDto(a.Id, a.Label, a.Endpoint, a.Confirm))
+                    .ToArray(),
+                t.RowActions
+                    .Where(a => a.Permission is null || user.HasPermission(a.Permission))
+                    .Select(a => new TabRowActionDto(a.Id, a.Label, a.EndpointTemplate, a.Confirm))
                     .ToArray()))
             .ToArray();
 
@@ -45,11 +49,13 @@ internal static class TabDtoMapper
 
 internal sealed record TabDto(
     string Id, string Label, string Route, string? Icon, string? DataEndpoint, TabColumnDto[] Columns, string? Placeholder,
-    TabEditorDto? Editor, string? DetailEndpoint, TabChartDto? Chart, TabActionDto[] Actions);
+    TabEditorDto? Editor, string? DetailEndpoint, TabChartDto? Chart, TabActionDto[] Actions, TabRowActionDto[] RowActions);
 
 internal sealed record TabChartDto(string XField, string YField, string? SeriesField, string? YLabel);
 
 internal sealed record TabActionDto(string Id, string Label, string Endpoint, string? Confirm);
+
+internal sealed record TabRowActionDto(string Id, string Label, string EndpointTemplate, string? Confirm);
 
 internal sealed record TabColumnDto(string Field, string Header);
 

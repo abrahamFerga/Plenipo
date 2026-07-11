@@ -21,12 +21,41 @@ internal sealed class TestModule : IModule
     /// <summary>The permission gating the module's admin-console extension page.</summary>
     public const string AdminPagePermission = "test.admin";
 
+    /// <summary>The permission gating the items tab's "retire" row action.</summary>
+    public const string RetirePermission = "test.items.retire";
+
     public ModuleManifest Manifest { get; } = new()
     {
         Id = "test",
         DisplayName = "Test Module",
         Version = "1.0.0",
         AgentInstructions = "You are a test assistant.",
+        Tabs =
+        [
+            new TabDescriptor
+            {
+                Id = "items", Label = "Items", Route = "/test/items",
+                DataEndpoint = "/api/test/items",
+                Columns = [new("name", "Name")],
+                RowActions =
+                [
+                    // Ungated: anyone who can see the tab may invoke it.
+                    new TabRowAction
+                    {
+                        Id = "approve", Label = "Approve",
+                        EndpointTemplate = "/api/test/items/{id}/approve",
+                        Confirm = "Approve this item?",
+                    },
+                    // Gated: ships only to callers holding the permission.
+                    new TabRowAction
+                    {
+                        Id = "retire", Label = "Retire",
+                        EndpointTemplate = "/api/test/items/{id}/retire",
+                        Permission = RetirePermission,
+                    },
+                ],
+            },
+        ],
         AdminTabs =
         [
             new TabDescriptor

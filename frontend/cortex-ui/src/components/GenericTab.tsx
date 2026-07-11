@@ -9,6 +9,7 @@ import {
   type TabColumn,
   type TabDetailDocument,
   type TabEditor,
+  type TabRowAction,
 } from "../lib/api";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { FieldInput } from "./FieldInput";
@@ -19,9 +20,9 @@ interface GenericTabProps {
   children?: React.ReactNode;
 }
 
-/** Substitute the `{field}` placeholder in an endpoint template from the row's values. */
+/** Substitute every `{field}` placeholder in an endpoint template from the row's values. */
 function resolveRowUrl(template: string, row: Record<string, unknown>): string {
-  return template.replace(/\{(\w+)\}/, (_, field: string) => encodeURIComponent(String(row[field] ?? "")));
+  return template.replace(/\{(\w+)\}/g, (_, field: string) => encodeURIComponent(String(row[field] ?? "")));
 }
 
 /** The generic drill-down: a detail document rendered as prose and sub-tables, with a way back. */
@@ -192,12 +193,14 @@ function DataTable({
   editor,
   detailEndpoint,
   emptyText,
+  rowActions,
 }: {
   endpoint: string;
   columns: TabColumn[];
   editor?: TabEditor | null;
   detailEndpoint?: string | null;
   emptyText?: string | null;
+  rowActions?: TabRowAction[];
 }) {
   const qc = useQueryClient();
   const { data, isLoading, isError, error } = useQuery({
@@ -208,10 +211,25 @@ function DataTable({
   const [editing, setEditing] = useState<Record<string, unknown> | null | "add">(null);
   const [deleting, setDeleting] = useState<Record<string, unknown> | null>(null);
   const [detailUrl, setDetailUrl] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [confirmingRow, setConfirmingRow] = useState<{ action: TabRowAction; row: Record<string, unknown> } | null>(
+    null,
+  );
 
   const remove = useMutation({
     mutationFn: (row: Record<string, unknown>) => apiSend(resolveRowUrl(editor!.deleteEndpoint!, row), "DELETE"),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["tab-data"] }),
+  });
+
+  // Per-row commands: POST to the {field}-resolved URL, surface the endpoint's message, refresh.
+  const runRowAction = useMutation({
+    mutationFn: ({ action, row }: { action: TabRowAction; row: Record<string, unknown> }) =>
+      apiAction(resolveRowUrl(action.endpointTemplate, row)),
+    onSuccess: (result) => {
+      setActionMessage(result ?? "Done.");
+      void qc.invalidateQueries({ queryKey: ["tab-data"] });
+    },
+    onError: (error) => setActionMessage((error as Error).message),
   });
 
   if (isLoading) {
@@ -236,7 +254,8 @@ function DataTable({
 
   const canEdit = editor?.keyField != null;
   const canDelete = editor?.deleteEndpoint != null;
-  const hasRowActions = detailEndpoint != null || (editor != null && (canEdit || canDelete));
+  const commands = rowActions ?? [];
+  const hasRowActions = detailEndpoint != null || commands.length > 0 || (editor != null && (canEdit || canDelete));
 
   return (
     <div className="space-y-3">
@@ -253,6 +272,14 @@ function DataTable({
         <EditorForm editor={editor} initial={editing === "add" ? null : editing} onDone={() => setEditing(null)} />
       )}
       {remove.isError && <p className="text-xs text-red-600">{(remove.error as Error).message}</p>}
+      {actionMessage && (
+        <p
+          className={`text-sm ${runRowAction.isError ? "text-red-600" : "text-slate-600 dark:text-slate-300"}`}
+          data-testid="row-action-message"
+        >
+          {actionMessage}
+        </p>
+      )}
 
       <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
         <table className="w-full text-left text-sm">
@@ -284,6 +311,21 @@ function DataTable({
                 {hasRowActions && (
                   <td className="px-4 py-2 text-right">
                     <span className="inline-flex gap-2">
+                      {commands.map((action) => (
+                        <button
+                          key={action.id}
+                          type="button"
+                          disabled={runRowAction.isPending}
+                          onClick={() =>
+                            action.confirm
+                              ? setConfirmingRow({ action, row })
+                              : runRowAction.mutate({ action, row })
+                          }
+                          className="focus-ring rounded bg-brand-600 px-2 py-0.5 text-xs font-medium text-white hover:bg-brand-500 disabled:opacity-40"
+                        >
+                          {action.label}
+                        </button>
+                      ))}
                       {detailEndpoint && (
                         <button
                           type="button"
@@ -319,6 +361,18 @@ function DataTable({
           </tbody>
         </table>
       </div>
+
+      <ConfirmDialog
+        open={confirmingRow !== null}
+        title={confirmingRow?.action.label ?? ""}
+        body={confirmingRow?.action.confirm ?? ""}
+        confirmLabel={confirmingRow?.action.label ?? "Confirm"}
+        onConfirm={() => {
+          if (confirmingRow) runRowAction.mutate(confirmingRow);
+          setConfirmingRow(null);
+        }}
+        onCancel={() => setConfirmingRow(null)}
+      />
 
       <ConfirmDialog
         open={deleting !== null}
@@ -414,6 +468,7 @@ export function GenericTab({ tab, children }: GenericTabProps) {
             editor={tab.editor}
             detailEndpoint={tab.detailEndpoint}
             emptyText={tab.placeholder}
+            rowActions={tab.rowActions}
           />
         ) : (
           <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">

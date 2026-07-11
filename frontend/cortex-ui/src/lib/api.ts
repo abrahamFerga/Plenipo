@@ -66,6 +66,15 @@ export interface TabAction {
   confirm?: string | null;
 }
 
+/** A per-row command button: POST to `endpointTemplate` with `{field}` resolved from the row. */
+export interface TabRowAction {
+  id: string;
+  label: string;
+  endpointTemplate: string;
+  /** Confirmation prompt shown before the POST, for consequential actions. */
+  confirm?: string | null;
+}
+
 /** A tab inside a module. */
 export interface ModuleTab {
   id: string;
@@ -85,6 +94,8 @@ export interface ModuleTab {
   chart?: TabChart | null;
   /** Command buttons; present only for callers allowed to invoke them. */
   actions?: TabAction[];
+  /** Per-row command buttons; present only for callers allowed to invoke them. */
+  rowActions?: TabRowAction[];
 }
 
 /** A module's admin-console page group (ModuleManifest.AdminTabs), from GET /api/admin/extensions. */

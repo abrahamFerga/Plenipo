@@ -100,6 +100,35 @@ public sealed record TabAction
 }
 
 /// <summary>
+/// A per-row command button on a server-driven tab's table: the shell POSTs (empty body) to
+/// <see cref="EndpointTemplate"/> with its <c>{field}</c> placeholder(s) substituted from the
+/// row's values, shows the returned message, and refreshes the tab's data. This is how a
+/// list-of-workpieces tab acts on ONE row (approve THIS import batch, retry THIS job) — a
+/// tab-level <see cref="TabAction"/> can only ever hit a single fixed URL. The UI shows the
+/// button only to callers holding <see cref="Permission"/>; the endpoint stays
+/// authorization-gated server-side regardless.
+/// </summary>
+public sealed record TabRowAction
+{
+    public required string Id { get; init; }
+
+    /// <summary>Button label (e.g. "Approve").</summary>
+    public required string Label { get; init; }
+
+    /// <summary>
+    /// POST target with <c>{field}</c> placeholder(s) substituted from the row
+    /// (e.g. <c>/api/finance/imports/{id}/approve</c>).
+    /// </summary>
+    public required string EndpointTemplate { get; init; }
+
+    /// <summary>Permission gating the button. Null = any user who can see the tab.</summary>
+    public string? Permission { get; init; }
+
+    /// <summary>Optional confirmation prompt shown before the POST (for consequential actions).</summary>
+    public string? Confirm { get; init; }
+}
+
+/// <summary>
 /// A navigation tab a module contributes to the dashboard. The React shell builds its sidebar and
 /// routes purely from the tabs returned by the API, filtered by the caller's permissions — the
 /// frontend hardcodes no domain routes.
@@ -145,6 +174,12 @@ public sealed record TabDescriptor
 
     /// <summary>Optional tab-level command buttons (POST + refresh), permission-gated per action.</summary>
     public IReadOnlyList<TabAction> Actions { get; init; } = [];
+
+    /// <summary>
+    /// Optional per-row command buttons (POST to a <c>{field}</c>-templated URL + refresh),
+    /// permission-gated per action.
+    /// </summary>
+    public IReadOnlyList<TabRowAction> RowActions { get; init; } = [];
 
     /// <summary>
     /// Optional drill-down: a GET endpoint with one <c>{field}</c> placeholder substituted from the

@@ -57,6 +57,8 @@ public static class ModuleManifestValidator
                 {
                     errors.Add($"Tab '{tab.Id}' in {where} has an empty route.");
                 }
+
+                ValidateRowActions(module, tab, errors);
             }
         }
 
@@ -87,6 +89,8 @@ public static class ModuleManifestValidator
                         $"Admin tab '{tab.Id}' in {where} declares no Permission — admin pages are " +
                         "never visible by default, so every admin tab must be permission-gated.");
                 }
+
+                ValidateRowActions(module, tab, errors);
             }
         }
 
@@ -117,6 +121,39 @@ public static class ModuleManifestValidator
         }
 
         return errors;
+    }
+
+    // Row actions: ids unique within their tab, labels present, and the endpoint template must
+    // actually carry a {field} placeholder — a fixed URL would hit the same target for every row,
+    // which is what a tab-level Action is for.
+    private static void ValidateRowActions(ModuleManifest module, TabDescriptor tab, List<string> errors)
+    {
+        var seenActionIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var action in tab.RowActions)
+        {
+            var where = $"tab '{tab.Id}' in module '{module.Id}'";
+            if (string.IsNullOrWhiteSpace(action.Id))
+            {
+                errors.Add($"A row action on {where} has an empty id.");
+            }
+            else if (!seenActionIds.Add(action.Id))
+            {
+                errors.Add($"Duplicate row action id '{action.Id}' on {where} — row action ids must be unique within a tab.");
+            }
+
+            if (string.IsNullOrWhiteSpace(action.Label))
+            {
+                errors.Add($"Row action '{action.Id}' on {where} has an empty label.");
+            }
+
+            if (string.IsNullOrWhiteSpace(action.EndpointTemplate) || !action.EndpointTemplate.Contains('{', StringComparison.Ordinal))
+            {
+                errors.Add(
+                    $"Row action '{action.Id}' on {where} needs an EndpointTemplate containing a " +
+                    "{field} placeholder (e.g. '/api/finance/imports/{id}/approve') — without one " +
+                    "every row would POST to the same URL; declare a tab-level Action for that.");
+            }
+        }
     }
 
     /// <summary>

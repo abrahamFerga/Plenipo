@@ -216,6 +216,98 @@ describe("GenericTab (server-driven table)", () => {
     expect(await screen.findByRole("button", { name: "View" })).toBeTruthy(); // the table is back
   });
 
+  it("row actions: the button POSTs the {field}-resolved URL (after confirm) and surfaces the message", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      void input;
+      const isPost = (init as RequestInit | undefined)?.method === "POST";
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve(
+            isPost
+              ? { message: "Batch b-1 approved: 3 line(s) posted." }
+              : [{ id: "b-1", fileName: "june.pdf", lines: 3 }],
+          ),
+      } as unknown as Response);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <GenericTab
+          tab={{
+            id: "review",
+            label: "Statement review",
+            route: "/finance/review",
+            dataEndpoint: "/api/finance/imports/batches",
+            columns: [{ field: "fileName", header: "File" }],
+            rowActions: [
+              {
+                id: "approve",
+                label: "Approve",
+                endpointTemplate: "/api/finance/imports/{id}/approve",
+                confirm: "Post this batch's lines as transactions?",
+              },
+            ],
+          }}
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Approve" }));
+    // Consequential: the confirm dialog gates the POST — its confirm button reuses the label.
+    expect(screen.getByText("Post this batch's lines as transactions?")).toBeTruthy();
+    const approves = screen.getAllByRole("button", { name: "Approve" });
+    fireEvent.click(approves[approves.length - 1]);
+
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find(
+        (c) =>
+          String(c[0]).endsWith("/api/finance/imports/b-1/approve") &&
+          (c[1] as RequestInit | undefined)?.method === "POST",
+      );
+      expect(post).toBeTruthy();
+    });
+    expect(await screen.findByText("Batch b-1 approved: 3 line(s) posted.")).toBeTruthy();
+  });
+
+  it("resolves every {field} placeholder in a template, not just the first", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      void input;
+      const isPost = (init as RequestInit | undefined)?.method === "POST";
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(isPost ? {} : [{ batchId: "b-2", index: 5, memo: "coffee" }]),
+      } as unknown as Response);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <GenericTab
+          tab={{
+            id: "lines",
+            label: "Lines",
+            route: "/finance/lines",
+            dataEndpoint: "/api/finance/lines",
+            columns: [{ field: "memo", header: "Memo" }],
+            rowActions: [
+              { id: "drop", label: "Drop", endpointTemplate: "/api/finance/imports/{batchId}/lines/{index}/drop" },
+            ],
+          }}
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Drop" })); // no confirm — fires directly
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some((c) => String(c[0]).endsWith("/api/finance/imports/b-2/lines/5/drop")),
+      ).toBe(true);
+    });
+  });
+
   it("with an editor: Edit prefills from the row and locks the key field; Delete DELETEs the resolved URL", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       void input;

@@ -121,6 +121,51 @@ public sealed class ModuleManifestValidatorTests
     }
 
     [Fact]
+    public void RowAction_WithoutAPlaceholder_IsReported()
+    {
+        // A fixed URL would POST the same target for every row — that's a tab-level Action's job.
+        var tab = Tab("review", "/finance/review") with
+        {
+            RowActions = [new TabRowAction { Id = "approve", Label = "Approve", EndpointTemplate = "/api/finance/imports/latest/approve" }],
+        };
+
+        var errors = ModuleManifestValidator.Validate([Module("finance", tab)]);
+
+        Assert.Contains(errors, e => e.Contains("Row action 'approve'") && e.Contains("{field} placeholder"));
+    }
+
+    [Fact]
+    public void RowActions_DuplicateIdsAndEmptyLabels_AreReported_OnDomainAndAdminTabs()
+    {
+        var bad = new TabRowAction { Id = "approve", Label = " ", EndpointTemplate = "/api/x/{id}/approve" };
+        var tab = Tab("review", "/finance/review") with { RowActions = [bad, bad] };
+
+        var domainErrors = ModuleManifestValidator.Validate([Module("finance", tab)]);
+        Assert.Contains(domainErrors, e => e.Contains("Duplicate row action id 'approve'"));
+        Assert.Contains(domainErrors, e => e.Contains("Row action 'approve'") && e.Contains("empty label"));
+
+        // Admin tabs run the same rules — they reuse the descriptor and the generic renderer.
+        var adminTab = tab with { Permission = "finance.admin" };
+        var adminErrors = ModuleManifestValidator.Validate([Module("finance") with { AdminTabs = [adminTab] }]);
+        Assert.Contains(adminErrors, e => e.Contains("Duplicate row action id 'approve'"));
+    }
+
+    [Fact]
+    public void ValidRowActions_ProduceNoErrors()
+    {
+        var tab = Tab("review", "/finance/review") with
+        {
+            RowActions =
+            [
+                new TabRowAction { Id = "approve", Label = "Approve", EndpointTemplate = "/api/finance/imports/{id}/approve" },
+                new TabRowAction { Id = "drop", Label = "Drop", EndpointTemplate = "/api/finance/imports/{batchId}/lines/{index}" },
+            ],
+        };
+
+        Assert.Empty(ModuleManifestValidator.Validate([Module("finance", tab)]));
+    }
+
+    [Fact]
     public void ThrowIfInvalid_ThrowsAggregatedMessage_WhenInvalid()
     {
         var ex = Assert.Throws<InvalidOperationException>(() =>

@@ -65,6 +65,7 @@ export type {
   TabColumn,
   TabEditor,
   TabEditorField,
+  TabRowAction,
   TabDetailDocument,
   TabDetailSection,
   Conversation,
