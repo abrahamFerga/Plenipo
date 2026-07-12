@@ -92,7 +92,11 @@ are also forwarded as query-string parameters.)
 
 - `src/hooks/useModules.ts` fetches `GET /api/platform/modules`. `AppShell`
   turns the active module's `tabs[]` into both the sidebar nav links and the
-  React Router `<Route>`s — a "Chat" tab is always injected first.
+  React Router `<Route>`s — a "Chat" tab is always injected first. Below
+  Tailwind's `md` the same tabs render as a fixed bottom bar (`BottomNav`):
+  the first four destinations plus a More button that opens the drawer with
+  the full list (all five and no More when everything fits). Host pages should
+  set `viewport-fit=cover` so the bar's safe-area padding works on iOS.
 - `src/lib/activeModule.ts` holds the active-module context shared by the top-bar
   switcher and the sidebar.
 - `ChatPanel` opens a SignalR connection to `/hubs/agent` and calls

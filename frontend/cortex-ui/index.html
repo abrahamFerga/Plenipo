@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: without it iOS reports env(safe-area-inset-bottom) as 0 and the
+         bottom navigation bar would sit under the home indicator. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <!-- %VITE_BRAND_NAME% resolves at build time (Vite HTML env replacement); the config
          defaults it to "Cortex" so unbranded builds are unchanged. -->
     <title>%VITE_BRAND_NAME%</title>

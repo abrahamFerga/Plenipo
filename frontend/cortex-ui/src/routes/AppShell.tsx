@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { matchPath, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { TopBar } from "../components/TopBar";
 import { Sidebar } from "../components/Sidebar";
+import { BottomNav } from "../components/BottomNav";
 import { ChatView } from "../components/ChatView";
 import { ConnectedAccounts } from "../components/ConnectedAccounts";
 import { ModuleTabView } from "../components/ModuleTabView";
@@ -21,11 +22,14 @@ import {
 import { ActiveModuleContext, resolveActiveModuleId } from "../lib/activeModule";
 import { BrandingContext, type CortexBranding } from "../lib/branding";
 
-/** The Chat tab, injected first when chat is enabled (the shell is chat-first). */
+/** The Chat tab, injected first when chat is enabled (the shell is chat-first). The icon is for
+ * icon-bearing surfaces (the mobile bottom bar) — declared here the same way modules declare
+ * theirs, so the shell's own tab never falls back to the generic glyph. */
 const CHAT_TAB: ModuleTab = {
   id: "chat",
   label: "Chat",
   route: "/chat",
+  icon: "message-circle",
 };
 
 /**
@@ -56,7 +60,8 @@ export function AppShell({ moduleUi, branding }: AppShellProps = {}) {
   const [selectedModuleId, setSelectedModuleId] = useState<string | undefined>(
     undefined,
   );
-  // Mobile-only navigation drawer (the sidebar is always visible at md+).
+  // Mobile-only navigation drawer (the sidebar is always visible at md+), opened by the bottom
+  // bar's More button as the overflow surface for tabs beyond the bar's first four.
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -146,10 +151,10 @@ export function AppShell({ moduleUi, branding }: AppShellProps = {}) {
         >
           Skip to content
         </a>
-        <TopBar
-          sidebarOpen={sidebarOpen}
-          onToggleSidebar={() => setSidebarOpen((open) => !open)}
-        />
+        {/* No onToggleSidebar: on narrow viewports the bottom bar's More button owns opening the
+            drawer, so the top-bar hamburger would be a second entrance to the same surface. At
+            md+ the hamburger was already CSS-hidden, so omitting it changes nothing on desktop. */}
+        <TopBar />
         <DemoModeBanner />
         <OnboardingOffer module={activeModule} />
         <div className="flex min-h-0 flex-1">
@@ -160,12 +165,14 @@ export function AppShell({ moduleUi, branding }: AppShellProps = {}) {
             onClose={() => setSidebarOpen(false)}
             onNavigate={() => setSidebarOpen(false)}
           />
+          {/* pb-24 clears the fixed bottom bar (bar height + iOS safe-area inset) so the page's
+              last row is never covered; md:pb-6 restores p-6's own bottom padding on desktop. */}
           <main
             id="main-content"
             ref={mainRef}
             tabIndex={-1}
             aria-label="Workspace"
-            className="min-h-0 flex-1 overflow-y-auto p-6 focus:outline-none"
+            className="min-h-0 flex-1 overflow-y-auto p-6 pb-24 focus:outline-none md:pb-6"
           >
             <Routes>
               {chatEnabled && (
@@ -238,6 +245,9 @@ export function AppShell({ moduleUi, branding }: AppShellProps = {}) {
             </Routes>
           </main>
         </div>
+        {/* Narrow viewports only (self-gated on the shared NARROW_QUERY): the first destinations
+            of the SAME tabs array the sidebar renders, plus More opening the drawer above. */}
+        <BottomNav tabs={tabs} moreOpen={sidebarOpen} onMore={() => setSidebarOpen(true)} />
       </div>
       </ActiveModuleContext.Provider>
     </BrandingContext.Provider>

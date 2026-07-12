@@ -119,6 +119,19 @@ consuming product's assumptions:
   single-factor sessions. Pure, unit-tested judgment (`MfaEnforcement`) + a SECURITY.md
   hardening note. Products wanting "2FA" turn it on at their IdP and set the flag.
 - [ ] **Phase 7 — New ideas backlog** (grow as they land):
+  - [x] **Mobile bottom-navigation shell mode** (the platform half of Networthy's
+    "mobile-responsive navigation" ask — its 13-tab finance module made the flat drawer list poor
+    mobile UX): below `md`, primary navigation becomes a fixed bottom bar; the drawer stays as the
+    overflow surface. Delivered: `BottomNav` (exported), self-gated on the shared `NARROW_QUERY`
+    (same seam as Phase 3's card-mode, so desktop DOM is untouched and jsdom pins the bar's
+    absence) with `md:hidden` as the CSS backstop; first four destinations of the same tabs array
+    the sidebar renders (Chat first) + a fixed More button reusing `AppShell`'s existing
+    `sidebarOpen` drawer — all five show and More drops out at ≤5 tabs; icon-above-label items
+    (≥44px targets, safe-area padded, `aria-current` + weight + indicator so active is never
+    color-only) resolved by a new single icon map (`TabIcon.tsx`, lucide-style manifest names with
+    a neutral fallback — nothing consumed `ModuleTab.icon` before, so this created the mechanism
+    rather than forking one); the top-bar hamburger is gone (More is the drawer's one entrance;
+    at `md+` it was always CSS-hidden, so desktop is pixel-identical).
   - [ ] **ADMT disclosure view over the audit log** (moved from Phase 5's tail): extend the
     existing audit-log query/export with an explicit automated-decision view — what was
     AI-suggested, what a human changed, what a human approved as-is — plus an "AI" badge on

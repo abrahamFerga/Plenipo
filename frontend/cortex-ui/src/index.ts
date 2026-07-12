@@ -41,6 +41,7 @@ export { ApiUnreachable } from "./components/ApiUnreachable";
 export { AccessDenied } from "./components/AccessDenied";
 export { TopBar } from "./components/TopBar";
 export { Sidebar } from "./components/Sidebar";
+export { BottomNav } from "./components/BottomNav";
 export { GenericTab } from "./components/GenericTab";
 export { ModuleSwitcher } from "./components/ModuleSwitcher";
 export { ConfirmDialog } from "./components/ConfirmDialog";

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AppShell } from "./AppShell";
@@ -169,5 +169,102 @@ describe("AppShell deep-linking", () => {
     const skip = screen.getByRole("link", { name: "Skip to content" });
     expect(skip.getAttribute("href")).toBe("#main-content");
     expect(screen.getByRole("main", { name: "Workspace" })).toBeTruthy();
+  });
+});
+
+// The platform half of a consuming product's mobile-navigation ask: below md, primary navigation
+// is a fixed bottom bar (first four destinations + More) and the drawer becomes the overflow
+// surface. Desktop keeps today's DOM — the last test pins that.
+describe("AppShell mobile bottom navigation", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  /** Same shape as GenericTabCards.test.tsx: jsdom has no matchMedia, so narrow tests stub one. */
+  function stubNarrowViewport() {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn().mockReturnValue({
+        matches: true,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      } as unknown as MediaQueryList),
+    );
+  }
+
+  // Five module tabs + the injected Chat tab = six destinations, forcing the More overflow.
+  const manyTabsManifest = [
+    {
+      id: "finance",
+      displayName: "Finance",
+      tabs: [
+        { id: "one", label: "One", route: "/fin/one" },
+        { id: "two", label: "Two", route: "/fin/two" },
+        { id: "three", label: "Three", route: "/fin/three" },
+        { id: "four", label: "Four", route: "/fin/four" },
+        { id: "five", label: "Five", route: "/fin/five" },
+      ],
+    },
+  ];
+
+  function stubApiManyTabs() {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/platform/modules")) return json(manyTabsManifest);
+        if (url.includes("/api/platform/me"))
+          return json({ userId: "u", displayName: "Dev", tenantId: "t", permissions: [] });
+        if (url.includes("/api/platform/info")) return json({ chatEnabled: true, demoMode: false });
+        return json(null);
+      }),
+    );
+  }
+
+  it("narrow viewport: renders the bar with the first four destinations plus More", async () => {
+    stubNarrowViewport();
+    stubApiManyTabs();
+    renderAt("/fin/one");
+
+    const bar = await screen.findByRole("navigation", { name: "Tab bar" });
+    // Chat first, then module tabs — the bar mirrors the sidebar's order exactly.
+    for (const label of ["Chat", "One", "Two", "Three"]) {
+      expect(within(bar).getByRole("link", { name: label })).toBeTruthy();
+    }
+    expect(within(bar).queryByRole("link", { name: "Four" })).toBeNull();
+    expect(within(bar).getByRole("button", { name: "More" })).toBeTruthy();
+  });
+
+  it("More opens the existing drawer where every tab is reachable, and navigating closes it", async () => {
+    stubNarrowViewport();
+    stubApiManyTabs();
+    renderAt("/fin/one");
+    await screen.findByRole("navigation", { name: "Tab bar" });
+
+    // Drawer closed: only the static sidebar nav is in the DOM (jsdom applies no md: CSS).
+    expect(screen.getAllByRole("navigation", { name: "Module tabs" })).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    const navs = screen.getAllByRole("navigation", { name: "Module tabs" });
+    expect(navs).toHaveLength(2); // the drawer joined the static sidebar
+    expect(screen.getByRole("button", { name: "More" }).getAttribute("aria-expanded")).toBe("true");
+
+    // A tab beyond the bar's first four is reachable in the drawer; navigating auto-closes it.
+    fireEvent.click(within(navs[1]).getByRole("link", { name: "Five" }));
+    await waitFor(() =>
+      expect(screen.getAllByRole("navigation", { name: "Module tabs" })).toHaveLength(1),
+    );
+  });
+
+  it("desktop (no matchMedia stub): no bottom bar, and no top-bar hamburger", async () => {
+    stubApi();
+    renderAt("/finance/transactions");
+    await screen.findByText("board:finance:transactions");
+
+    expect(screen.queryByRole("navigation", { name: "Tab bar" })).toBeNull();
+    // The hamburger is intentionally gone at every width: on narrow viewports the bottom bar's
+    // More button is the drawer's single entrance, and at md+ it was always CSS-hidden anyway.
+    expect(screen.queryByRole("button", { name: "Open navigation" })).toBeNull();
   });
 });
