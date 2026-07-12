@@ -132,12 +132,32 @@ consuming product's assumptions:
     a neutral fallback — nothing consumed `ModuleTab.icon` before, so this created the mechanism
     rather than forking one); the top-bar hamburger is gone (More is the drawer's one entrance;
     at `md+` it was always CSS-hidden, so desktop is pixel-identical).
-  - [ ] **ADMT disclosure view over the audit log** (moved from Phase 5's tail): extend the
+  - [x] **ADMT disclosure view over the audit log** (moved from Phase 5's tail): extend the
     existing audit-log query/export with an explicit automated-decision view — what was
     AI-suggested, what a human changed, what a human approved as-is — plus an "AI" badge on
     AI-originated records linking to their audit entry. The concrete ask behind Networthy's
     ADMT-readiness differentiator, generically useful to any product under an
-    automated-decision-disclosure regime.
+    automated-decision-disclosure regime. Delivered: `GET /api/platform/ai-decisions`
+    (`DisclosureEndpoints`) — a SELF-SERVE read (any authenticated tenant member, deliberately
+    not `platform.audit.view`: transparency only an administrator can see isn't transparency)
+    merging the two stores that together hold the whole story: resolved `PendingApproval` rows
+    (the gated decisions — approved or rejected, now with `ResolvedBy*` attribution captured at
+    resolve time; one migration) and non-blocked `ToolCallAuditEntry` rows (ungated "automatic"
+    executions — rows carrying the block marker are excluded so one action is never disclosed
+    twice). Entries are enriched from the declaring tool at read time (the same seam as the
+    approvals queue: human label + risk tier, fail-safe high), summarized in plain language from
+    the recorded arguments with the `reasoning` convention lifted out as the decision's basis,
+    and windowed recent-first (`take`/`before`). Shell side: `AiDecisionLog` (exported) at
+    `/account/ai-decisions`, linked from the Connected accounts page — day-grouped entries,
+    oversight badges (icon + text + color, never color alone), and a client-side Download that
+    exports exactly the fetched records as JSON (lossless and machine-verifiable, which a CSV
+    flattening of nullable oversight fields is not). Two deviations from the phase text as
+    written: "what a human changed" is not a state the platform has — approve re-executes the
+    recorded call verbatim, so the honest disclosable outcomes are approved-as-recorded /
+    rejected / automatic; and the "AI badge on AI-originated records" half stays product-side —
+    those records live in product tables the platform cannot annotate, so the platform's
+    contribution is the stable `id` + `source` every disclosure entry carries for a product to
+    link back to.
   - [ ] **Self-service personal access tokens**: a platform `ApiKey` entity (hashed at rest,
     scopes, `LastUsedAt`, revoke), a token-based `AuthenticationHandler` alongside the existing
     dev-auth/OIDC handlers, and — the part that actually matters — confirmation that a

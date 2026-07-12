@@ -12,5 +12,10 @@ public interface IApprovalStore
 
     public Task<PendingApproval?> GetAsync(Guid id, CancellationToken cancellationToken = default);
 
-    public Task ResolveAsync(Guid id, ApprovalStatus status, string? result, string? error, CancellationToken cancellationToken = default);
+    /// <summary>Records the human decision, including who made it (<paramref name="resolvedByUserId"/> /
+    /// <paramref name="resolvedByDisplay"/>) — the attribution the ADMT disclosure view reports.</summary>
+    public Task ResolveAsync(
+        Guid id, ApprovalStatus status, string? result, string? error,
+        Guid? resolvedByUserId = null, string? resolvedByDisplay = null,
+        CancellationToken cancellationToken = default);
 }

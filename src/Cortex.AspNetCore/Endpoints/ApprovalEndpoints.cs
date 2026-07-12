@@ -2,6 +2,7 @@ using Cortex.Application.Agents;
 using Cortex.Application.Approvals;
 using Cortex.Application.Authorization;
 using Cortex.Application.Connectors;
+using Cortex.Core.Identity;
 using Cortex.Core.Platform;
 using Cortex.Infrastructure.Approvals;
 using Cortex.Modules.Sdk;
@@ -53,7 +54,8 @@ public static class ApprovalEndpoints
             .WithName("Approvals_ListPending");
 
         group.MapPost("/{id:guid}/approve", async (
-                Guid id, IApprovalStore store, ApprovalExecutor executor, IServiceProvider services, CancellationToken ct) =>
+                Guid id, IApprovalStore store, ApprovalExecutor executor, ICurrentUser current,
+                IServiceProvider services, CancellationToken ct) =>
             {
                 var pending = await store.GetAsync(id, ct);
                 if (pending is null || pending.Status != ApprovalStatus.Pending)
@@ -62,11 +64,15 @@ public static class ApprovalEndpoints
                 }
 
                 var outcome = await executor.ExecuteAsync(pending, services, ct);
+                // The resolver's identity is part of the oversight record — "approved by whom" is
+                // exactly what the ADMT disclosure view (DisclosureEndpoints) has to answer.
                 await store.ResolveAsync(
                     id,
                     outcome.Success ? ApprovalStatus.Executed : ApprovalStatus.Failed,
                     outcome.Result,
                     outcome.Error,
+                    current.UserId,
+                    current.DisplayName,
                     ct);
 
                 return outcome.Success
@@ -76,7 +82,7 @@ public static class ApprovalEndpoints
             .RequireAuthorization(PermissionRequirement.PolicyName(Permissions.ManageApprovals))
             .WithName("Approvals_Approve");
 
-        group.MapPost("/{id:guid}/reject", async (Guid id, IApprovalStore store, CancellationToken ct) =>
+        group.MapPost("/{id:guid}/reject", async (Guid id, IApprovalStore store, ICurrentUser current, CancellationToken ct) =>
             {
                 var pending = await store.GetAsync(id, ct);
                 if (pending is null || pending.Status != ApprovalStatus.Pending)
@@ -84,7 +90,9 @@ public static class ApprovalEndpoints
                     return Results.NotFound();
                 }
 
-                await store.ResolveAsync(id, ApprovalStatus.Rejected, result: null, error: null, ct);
+                await store.ResolveAsync(
+                    id, ApprovalStatus.Rejected, result: null, error: null,
+                    current.UserId, current.DisplayName, ct);
                 return Results.Ok(new { id, status = nameof(ApprovalStatus.Rejected) });
             })
             .RequireAuthorization(PermissionRequirement.PolicyName(Permissions.ManageApprovals))

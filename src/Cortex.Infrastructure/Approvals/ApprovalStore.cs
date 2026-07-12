@@ -26,7 +26,10 @@ public sealed class ApprovalStore(PlatformDbContext db) : IApprovalStore
     public Task<PendingApproval?> GetAsync(Guid id, CancellationToken cancellationToken = default) =>
         db.PendingApprovals.FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
 
-    public async Task ResolveAsync(Guid id, ApprovalStatus status, string? result, string? error, CancellationToken cancellationToken = default)
+    public async Task ResolveAsync(
+        Guid id, ApprovalStatus status, string? result, string? error,
+        Guid? resolvedByUserId = null, string? resolvedByDisplay = null,
+        CancellationToken cancellationToken = default)
     {
         var pending = await db.PendingApprovals.FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
         if (pending is null)
@@ -38,6 +41,8 @@ public sealed class ApprovalStore(PlatformDbContext db) : IApprovalStore
         pending.Result = result;
         pending.Error = error;
         pending.ResolvedAt = DateTimeOffset.UtcNow;
+        pending.ResolvedByUserId = resolvedByUserId;
+        pending.ResolvedByDisplay = resolvedByDisplay;
         await db.SaveChangesAsync(cancellationToken);
     }
 }

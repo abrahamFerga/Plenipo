@@ -128,6 +128,7 @@ public static class CortexHostSetup
         app.MapFileEndpoints();
         app.MapJobEndpoints();
         app.MapApprovalEndpoints();
+        app.MapDisclosureEndpoints();
         app.MapNotificationEndpoints();
         app.MapAdminEndpoints();
         app.MapAdminExtensionEndpoints();
