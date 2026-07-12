@@ -165,9 +165,11 @@ public static class InfrastructureSetup
         services.AddSingleton<Cortex.Application.Documents.IPdfRenderer, PdfRenderer>();
 
         // Background jobs: modules enqueue long-running work (bulk review, batch imports); the
-        // processor executes handlers with the enqueuer's identity restored.
+        // processor executes handlers with the enqueuer's identity restored. The scheduler turns
+        // manifest-declared recurring jobs into queued work (idles when no module declares any).
         services.AddScoped<IJobQueue, DbJobQueue>();
         services.AddHostedService<JobProcessor>();
+        services.AddHostedService<RecurringJobScheduler>();
     }
 
     private static void AddRequestContext(IServiceCollection services)
@@ -333,6 +335,7 @@ public static class InfrastructureSetup
         services.AddScoped<Handoff.HandoffTools>();
         services.AddSingleton<IPlatformToolSource, Handoff.HandoffToolSource>();
         services.AddScoped<IApprovalStore, ApprovalStore>();
+        services.AddScoped<ApprovalNotifier>();
         services.AddScoped<ApprovalExecutor>();
         services.AddScoped<IAuthorizedAgentRunner, AuthorizedAgentRunner>();
 

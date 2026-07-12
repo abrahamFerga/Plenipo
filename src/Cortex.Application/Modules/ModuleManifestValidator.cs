@@ -94,6 +94,35 @@ public static class ModuleManifestValidator
             }
         }
 
+        // Recurring jobs: kind and description present, and kinds unique across ALL modules — the
+        // scheduler's per-tenant last-run stamp and the IJobHandler registry both key on kind
+        // alone, so two modules sharing a kind would silently steal each other's schedule.
+        var seenRecurringKinds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var module in list)
+        {
+            foreach (var job in module.RecurringJobs)
+            {
+                var where = $"module '{module.Id}'";
+                if (string.IsNullOrWhiteSpace(job.Kind))
+                {
+                    errors.Add($"A recurring job in {where} has an empty kind.");
+                }
+                else if (!seenRecurringKinds.Add(job.Kind))
+                {
+                    errors.Add(
+                        $"Duplicate recurring job kind '{job.Kind}' in {where} — recurring job kinds " +
+                        "must be unique across all modules (the schedule and the handler registry key on kind).");
+                }
+
+                if (string.IsNullOrWhiteSpace(job.Description))
+                {
+                    errors.Add(
+                        $"Recurring job '{job.Kind}' in {where} has an empty description — a schedule " +
+                        "that fires on its own must be explainable to operators.");
+                }
+            }
+        }
+
         // Tab routes must be unique across ALL modules: the shell resolves the active module from the
         // current route, so two tabs sharing a route would make navigation and deep-linking ambiguous.
         var routeOwners = new Dictionary<string, string>(StringComparer.Ordinal);

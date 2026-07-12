@@ -145,15 +145,26 @@ public sealed class JobProcessor(
             var context = services.GetRequiredService<RequestContext>();
             context.SetTenant(job.TenantId);
 
-            var user = await db.Users.IgnoreQueryFilters()
-                .FirstOrDefaultAsync(u => u.Id == job.UserId, cancellationToken)
-                ?? throw new InvalidOperationException($"Job {job.Id}: enqueuing user {job.UserId} no longer exists.");
-            if (!user.IsActive)
+            if (job.UserId == BackgroundJob.SystemUserId)
             {
-                throw new InvalidOperationException($"Job {job.Id}: enqueuing user is deactivated.");
+                // A platform-scheduled run (module-declared recurring work): tenant-scoped, no
+                // user row to restore. The subject/display below is what audit shows as the actor;
+                // the user id stays null in every audit row, which is the honest record — no human
+                // asked for this run, the schedule did.
+                context.SetIdentity("system:recurring", "Cortex scheduler");
             }
+            else
+            {
+                var user = await db.Users.IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(u => u.Id == job.UserId, cancellationToken)
+                    ?? throw new InvalidOperationException($"Job {job.Id}: enqueuing user {job.UserId} no longer exists.");
+                if (!user.IsActive)
+                {
+                    throw new InvalidOperationException($"Job {job.Id}: enqueuing user is deactivated.");
+                }
 
-            context.SetUser(user.Id, user.Subject, user.DisplayName);
+                context.SetUser(user.Id, user.Subject, user.DisplayName);
+            }
 
             // Restore the authority captured at enqueue time. Token-asserted roles have no DB rows
             // (deliberately — see RequestEnricher), so re-resolving here would under-authorize; the
@@ -236,8 +247,11 @@ public sealed class JobProcessor(
         }
 
         // Tell the enqueuer how their job ended — the first notification producer. Best-effort:
-        // a notification hiccup must never disturb the completed job's state.
-        if (job.Status is JobStatus.Succeeded or JobStatus.Failed)
+        // a notification hiccup must never disturb the completed job's state. System-scheduled
+        // runs have no enqueuer to tell; their handlers notify users themselves when that is the
+        // job's purpose (a digest IS a notification).
+        if (job.UserId != BackgroundJob.SystemUserId
+            && job.Status is JobStatus.Succeeded or JobStatus.Failed)
         {
             try
             {

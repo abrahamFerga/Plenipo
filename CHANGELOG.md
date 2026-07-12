@@ -52,6 +52,17 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   hold inside jobs. Claim **leases** recover jobs orphaned by a crashed host (requeue up to 3
   attempts, then fail); running jobs **cancel cooperatively** at progress reports, and only their
   enqueuer may cancel them. Pollable at `/api/jobs`.
+- **Recurring jobs** — a module declares scheduled work manifest-first
+  (`ModuleManifest.RecurringJobs`: kind + Hourly/Daily/Weekly cadence + description); the platform
+  enqueues it once per cadence window for every tenant with the module enabled, executed by the
+  module's registered `IJobHandler` under a tenant-scoped **system identity** (no user; the
+  module's tool wildcard as authority; audit attributes the run to the scheduler). A per-tenant
+  last-run cursor makes restarts **catch-up-one**: a missed window fires once on the next sweep,
+  never once per missed window, and never double-fires.
+- **Approval notifications** — when a side-effecting tool call lands in the approval queue, every
+  tenant user whose DB-sourced authority grants `chat.approvals.manage` gets one in-app
+  notification (category `"{moduleId}.approvals"`, mutable per user via the standard switchboard),
+  so approvers act from their inbox instead of camping in the requester's chat.
 - **Separate-systems model** — each vertical is its own product/host/repo on the platform packages
   (`samples/Cortex.Legal.Host` is the canonical single-vertical shape); systems connect via the
   **cortex-peer connector**, which lets one deployment's agent ask another's over the open AG-UI

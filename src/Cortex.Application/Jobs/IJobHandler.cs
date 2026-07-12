@@ -9,6 +9,11 @@ public sealed class JobExecutionContext
 {
     public required Guid JobId { get; init; }
     public required Guid TenantId { get; init; }
+
+    /// <summary>
+    /// The enqueuing user — or <c>BackgroundJob.SystemUserId</c> (<see cref="Guid.Empty"/>) for a
+    /// platform-scheduled recurring run, which is tenant-scoped but has no user behind it.
+    /// </summary>
     public required Guid UserId { get; init; }
     public required string ModuleId { get; init; }
     public required string ArgumentsJson { get; init; }

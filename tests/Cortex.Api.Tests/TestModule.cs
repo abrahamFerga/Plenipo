@@ -69,6 +69,9 @@ internal sealed class TestModule : IModule
         NotificationCategories =
         [
             new("test-alerts", "Test alerts", "Alerts emitted by the test module."),
+            // The platform's approval-pending pings use "{moduleId}.approvals"; declaring it here
+            // surfaces the mute switch (undeclared it would still deliver, just without a switch).
+            new("test.approvals", "Approvals", "An agent action is waiting for approval."),
         ],
         Tools =
         [

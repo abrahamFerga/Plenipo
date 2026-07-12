@@ -166,6 +166,54 @@ public sealed class ModuleManifestValidatorTests
     }
 
     [Fact]
+    public void RecurringJob_WithEmptyKindOrDescription_IsReported()
+    {
+        var errors = ModuleManifestValidator.Validate([
+            Module("finance") with
+            {
+                RecurringJobs =
+                [
+                    new RecurringJobDescriptor(" ", RecurringJobCadence.Daily, "Sends the daily digest."),
+                    new RecurringJobDescriptor("finance.digest", RecurringJobCadence.Daily, ""),
+                ],
+            },
+        ]);
+
+        Assert.Contains(errors, e => e.Contains("recurring job") && e.Contains("empty kind"));
+        Assert.Contains(errors, e => e.Contains("finance.digest") && e.Contains("empty description"));
+    }
+
+    [Fact]
+    public void RecurringJobKinds_MustBeUniqueAcrossModules()
+    {
+        // The scheduler's last-run stamp and the handler registry both key on kind alone, so a
+        // shared kind — even across different modules — would steal the other's schedule.
+        var errors = ModuleManifestValidator.Validate([
+            Module("finance") with { RecurringJobs = [new("shared.digest", RecurringJobCadence.Daily, "A.")] },
+            Module("legal") with { RecurringJobs = [new("shared.digest", RecurringJobCadence.Weekly, "B.")] },
+        ]);
+
+        Assert.Contains(errors, e => e.Contains("Duplicate recurring job kind 'shared.digest'"));
+    }
+
+    [Fact]
+    public void ValidRecurringJobs_ProduceNoErrors()
+    {
+        var errors = ModuleManifestValidator.Validate([
+            Module("finance") with
+            {
+                RecurringJobs =
+                [
+                    new("finance.bill-digest", RecurringJobCadence.Daily, "Sends the daily bill-reminder digest."),
+                    new("finance.retention", RecurringJobCadence.Weekly, "Prunes expired imports."),
+                ],
+            },
+        ]);
+
+        Assert.Empty(errors);
+    }
+
+    [Fact]
     public void ThrowIfInvalid_ThrowsAggregatedMessage_WhenInvalid()
     {
         var ex = Assert.Throws<InvalidOperationException>(() =>

@@ -46,6 +46,7 @@ public sealed class AuthorizedAgentRunner(
     ITokenUsageReader usageReader,
     Cortex.Infrastructure.Usage.BudgetAlerts budgetAlerts,
     IApprovalStore approvalStore,
+    Cortex.Infrastructure.Approvals.ApprovalNotifier approvalNotifier,
     ISkillCatalog skillCatalog,
     ICurrentUser currentUser,
     IOptions<AiOptions> aiOptions,
@@ -327,7 +328,7 @@ public sealed class AuthorizedAgentRunner(
         // Persist any blocked side-effecting tool calls as pending approvals, then surface them to the client.
         foreach (var blocked in middleware.BlockedForApproval)
         {
-            await approvalStore.RecordPendingAsync(new PendingApproval
+            var pending = new PendingApproval
             {
                 TenantId = currentUser.TenantId ?? Guid.Empty,
                 UserId = currentUser.UserId,
@@ -336,7 +337,12 @@ public sealed class AuthorizedAgentRunner(
                 ModuleId = request.ModuleId,
                 ToolName = blocked.ToolName,
                 ArgumentsJson = blocked.ArgumentsJson,
-            }, cancellationToken);
+            };
+            await approvalStore.RecordPendingAsync(pending, cancellationToken);
+
+            // Ping everyone who can act on it (never throws — see ApprovalNotifier): approvers
+            // should learn about blocked actions from their inbox, not by camping in this chat.
+            await approvalNotifier.NotifyPendingAsync(pending, cancellationToken);
 
             yield return AgentStreamEvent.NeedsApproval(blocked.ToolName);
         }
