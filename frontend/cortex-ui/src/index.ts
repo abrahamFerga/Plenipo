@@ -31,6 +31,7 @@ export { TabErrorBoundary } from "./components/TabErrorBoundary";
 export { AppErrorBoundary } from "./components/AppErrorBoundary";
 export { PermissionGate } from "./components/PermissionGate";
 export { ConnectedAccounts } from "./components/ConnectedAccounts";
+export { AiDecisionLog } from "./components/AiDecisionLog";
 export { ChatPanel } from "./components/ChatPanel";
 export { ChatView } from "./components/ChatView";
 export { ConversationList } from "./components/ConversationList";
@@ -81,6 +82,7 @@ export type {
   ConversationMessage,
   PlatformInfo,
   PendingApproval,
+  AiDecision,
   SecurityCatalog,
   PermissionInfo,
   ModuleSecurity,

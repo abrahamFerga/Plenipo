@@ -26,6 +26,14 @@ public sealed class ToolInvocationMiddleware(
     string moduleId,
     Guid conversationId)
 {
+    /// <summary>
+    /// The audit-entry error recorded when a side-effecting tool call is blocked pending approval. A
+    /// blocked call is NOT an execution — it lives on as a <c>PendingApproval</c> whose resolution is
+    /// the real record — so readers that must not double-count (the ADMT disclosure view) filter
+    /// audit rows carrying exactly this marker.
+    /// </summary>
+    public const string ApprovalBlockedError = "Blocked: tool requires human approval";
+
     private readonly List<BlockedToolCall> _blockedForApproval = [];
 
     /// <summary>Side-effecting tool calls the agent attempted this turn that were blocked pending approval.</summary>
@@ -45,7 +53,7 @@ public sealed class ToolInvocationMiddleware(
         {
             _blockedForApproval.Add(new BlockedToolCall(name, SafeSerializeArguments(context.Arguments)));
             await RecordAsync(name, moduleTool, context.Arguments, success: false,
-                error: "Blocked: tool requires human approval", durationMs: 0, cancellationToken);
+                error: ApprovalBlockedError, durationMs: 0, cancellationToken);
 
             return $"The action '{name}' requires human approval before it can run, so it was NOT executed. " +
                    "Tell the user this action is pending their approval and do not claim it was completed.";

@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { api, type UserConnector } from "../lib/api";
 
 /**
@@ -40,6 +41,20 @@ export function ConnectedAccounts() {
           ))}
         </ul>
       )}
+
+      {/* The account area's other page: the ADMT disclosure of what the AI did or proposed. The
+          user's name in the top bar opens THIS page, so this is where the sibling gets its door. */}
+      <p className="mt-6 border-t border-slate-200 pt-4 text-sm dark:border-slate-700">
+        <Link
+          to="/account/ai-decisions"
+          className="focus-ring rounded font-medium text-brand-600 hover:underline dark:text-brand-400"
+        >
+          AI decision history
+        </Link>
+        <span className="ml-2 text-slate-500 dark:text-slate-400">
+          — what the assistant did or proposed, and who approved it.
+        </span>
+      </p>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { Sidebar } from "../components/Sidebar";
 import { BottomNav } from "../components/BottomNav";
 import { ChatView } from "../components/ChatView";
 import { ConnectedAccounts } from "../components/ConnectedAccounts";
+import { AiDecisionLog } from "../components/AiDecisionLog";
 import { ModuleTabView } from "../components/ModuleTabView";
 import { DemoModeBanner } from "../components/DemoModeBanner";
 import { OnboardingOffer } from "../components/OnboardingOffer";
@@ -195,6 +196,8 @@ export function AppShell({ moduleUi, branding }: AppShellProps = {}) {
               )}
               {/* Module-agnostic, like /chat: the caller's own delegated-connector logins. */}
               <Route path="/account/connections" element={<ConnectedAccounts />} />
+              {/* Account-level, module-agnostic: the tenant's ADMT disclosure of AI decisions. */}
+              <Route path="/account/ai-decisions" element={<AiDecisionLog />} />
               {/* The active module's first-run setup wizard, when it declares one. */}
               {activeModule?.onboarding && (
                 <Route

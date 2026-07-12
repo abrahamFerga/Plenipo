@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
 import { ConnectedAccounts } from "./ConnectedAccounts";
 
 const msgraph = {
@@ -24,7 +25,10 @@ function renderAccounts(handler: (url: string, init?: RequestInit) => unknown) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <ConnectedAccounts />
+      {/* Router context for the page's link to its account-area sibling (/account/ai-decisions). */}
+      <MemoryRouter>
+        <ConnectedAccounts />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
   return fetchMock;
@@ -58,6 +62,13 @@ describe("ConnectedAccounts (per-user delegated connector logins)", () => {
       ).toBe(true);
       expect(open).toHaveBeenCalledWith("https://login.example/authorize?x=1", "_blank", "noopener");
     });
+  });
+
+  it("links to the account area's ADMT disclosure page (AI decision history)", async () => {
+    renderAccounts(() => [msgraph]);
+
+    const link = await screen.findByRole("link", { name: "AI decision history" });
+    expect(link.getAttribute("href")).toBe("/account/ai-decisions");
   });
 
   it("a connected account shows the badge and Disconnect DELETEs only my login", async () => {

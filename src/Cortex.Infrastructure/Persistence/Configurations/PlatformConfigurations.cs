@@ -202,7 +202,9 @@ internal sealed class UserNotificationPreferenceConfiguration : IEntityTypeConfi
     {
         b.ToTable("user_notification_preferences");
         b.HasKey(x => x.Id);
-        b.Property(x => x.Category).HasMaxLength(32).IsRequired();
+        // 128, not 32: platform-emitted categories are "{moduleId}.approvals" and a module id may
+        // be up to 64 chars, so the widest well-formed category must fit without truncation.
+        b.Property(x => x.Category).HasMaxLength(128).IsRequired();
         // One stance per (user, category) - the notifier's mute check and the upsert both key on this.
         b.HasIndex(x => new { x.TenantId, x.UserId, x.Category }).IsUnique();
     }
@@ -228,7 +230,8 @@ internal sealed class UserNotificationConfiguration : IEntityTypeConfiguration<U
     {
         b.ToTable("user_notifications");
         b.HasKey(x => x.Id);
-        b.Property(x => x.Category).HasMaxLength(32).IsRequired();
+        // Matches the preference column: wide enough for "{moduleId}.approvals" at max module id.
+        b.Property(x => x.Category).HasMaxLength(128).IsRequired();
         b.Property(x => x.Title).HasMaxLength(200).IsRequired();
         b.Property(x => x.Body).HasMaxLength(2000).IsRequired();
         b.Property(x => x.Link).HasMaxLength(500);
@@ -295,6 +298,19 @@ internal sealed class BackgroundJobConfiguration : IEntityTypeConfiguration<Back
         b.Property(x => x.Error).HasMaxLength(2000);
         b.HasIndex(x => x.Status); // the processor's claim scan
         b.HasIndex(x => new { x.TenantId, x.UserId });
+    }
+}
+
+internal sealed class RecurringJobCursorConfiguration : IEntityTypeConfiguration<RecurringJobCursor>
+{
+    public void Configure(EntityTypeBuilder<RecurringJobCursor> b)
+    {
+        b.ToTable("recurring_job_cursors");
+        b.HasKey(x => x.Id);
+        b.Property(x => x.Kind).HasMaxLength(128).IsRequired();
+        // One watermark per (tenant, kind) — the scheduler's due check and re-stamp key on this,
+        // and the DB (not just the sweep loop) guarantees a duplicate cursor can never exist.
+        b.HasIndex(x => new { x.TenantId, x.Kind }).IsUnique();
     }
 }
 

@@ -36,6 +36,7 @@ public sealed class PlatformDbContext(
     public DbSet<PendingApproval> PendingApprovals => Set<PendingApproval>();
     public DbSet<StoredFile> StoredFiles => Set<StoredFile>();
     public DbSet<BackgroundJob> BackgroundJobs => Set<BackgroundJob>();
+    public DbSet<RecurringJobCursor> RecurringJobCursors => Set<RecurringJobCursor>();
     public DbSet<RagCollection> RagCollections => Set<RagCollection>();
     public DbSet<RagChunk> RagChunks => Set<RagChunk>();
     public DbSet<TenantConnector> TenantConnectors => Set<TenantConnector>();

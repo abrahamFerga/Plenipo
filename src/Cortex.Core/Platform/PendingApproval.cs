@@ -44,6 +44,14 @@ public sealed class PendingApproval : TenantEntityBase
 
     public DateTimeOffset? ResolvedAt { get; set; }
 
+    /// <summary>The user who approved or rejected the action — the "approved by whom" half of the
+    /// oversight record that an automated-decision (ADMT) disclosure has to be able to answer.</summary>
+    public Guid? ResolvedByUserId { get; set; }
+
+    /// <summary>Display name of the resolver, captured at resolve time for audit attribution (the
+    /// same best-effort convention as <see cref="UserDisplay"/>).</summary>
+    public string? ResolvedByDisplay { get; set; }
+
     /// <summary>The tool's (free-text) result when approved + executed.</summary>
     public string? Result { get; set; }
 

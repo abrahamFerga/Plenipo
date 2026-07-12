@@ -20,9 +20,22 @@ public enum JobStatus
 /// </summary>
 public sealed class BackgroundJob : EntityBase, ITenantOwned
 {
+    /// <summary>
+    /// The well-known <see cref="UserId"/> of the platform's system principal, used for jobs the
+    /// platform itself enqueues (module-declared recurring work) where no human enqueuer exists.
+    /// The processor recognizes it and runs the job tenant-scoped with NO user: audit rows carry
+    /// the tenant and the scheduler's display identity but a null user id, and the completion
+    /// notification is skipped (there is no enqueuer to notify). Safe as a sentinel because every
+    /// real user id is a generated GUID v7 — never <see cref="Guid.Empty"/>.
+    /// </summary>
+    public static readonly Guid SystemUserId = Guid.Empty;
+
     public Guid TenantId { get; set; }
 
-    /// <summary>The user whose authority the job runs under.</summary>
+    /// <summary>
+    /// The user whose authority the job runs under — or <see cref="SystemUserId"/> for a
+    /// platform-scheduled run with no enqueuing user.
+    /// </summary>
     public Guid UserId { get; set; }
 
     /// <summary>The module that owns the handler (e.g. "legal").</summary>

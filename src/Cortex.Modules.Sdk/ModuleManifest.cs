@@ -46,9 +46,21 @@ public sealed record ModuleManifest
 
     /// <summary>
     /// Notification categories this module emits, so users get a per-category mute switch
-    /// (no row = on; a mute suppresses in-app and channel delivery alike). Optional.
+    /// (no row = on; a mute suppresses in-app and channel delivery alike). Optional — an
+    /// undeclared category still delivers with the default-on preference, it just offers no
+    /// switch. Declare <c>"{Id}.approvals"</c> here to let users mute the platform's
+    /// approval-pending notifications for this module.
     /// </summary>
     public IReadOnlyList<NotificationCategoryDescriptor> NotificationCategories { get; init; } = [];
+
+    /// <summary>
+    /// Recurring background work this module ships (daily digests, reminder sweeps). The platform
+    /// enqueues each declared job once per cadence window for every tenant with the module
+    /// enabled, executed by the <c>IJobHandler</c> registered for the descriptor's kind under a
+    /// tenant-scoped system identity — see <see cref="RecurringJobDescriptor"/> for the identity
+    /// and missed-window contract. Optional.
+    /// </summary>
+    public IReadOnlyList<RecurringJobDescriptor> RecurringJobs { get; init; } = [];
 
     /// <summary>
     /// System instructions injected into the agent when chatting within this module's context.

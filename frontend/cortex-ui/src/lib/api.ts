@@ -237,6 +237,38 @@ export interface PendingApproval {
   description?: string | null;
 }
 
+/**
+ * One AI-originated action in the caller's tenant's automated-decision (ADMT) disclosure history,
+ * from GET /api/platform/ai-decisions — what the assistant did or proposed, in plain language, and
+ * what human oversight applied. `id` is stable and `source` names the append-only store it lives in
+ * ("approval" = the human-in-the-loop record, "audit" = the tool-call audit trail), so an exported
+ * entry stays verifiable against the underlying trail.
+ */
+export interface AiDecision {
+  id: string;
+  source: "approval" | "audit";
+  occurredAt: string;
+  moduleId: string;
+  moduleName?: string | null;
+  toolName: string;
+  /** The declaring tool's human description, when resolvable — friendlier than the tool name. */
+  toolDescription?: string | null;
+  /** Plain-language account of the action: tool label plus the recorded arguments. */
+  summary: string;
+  /** The agent's stated reasoning, when the recorded arguments carried the `reasoning` convention. */
+  basis?: string | null;
+  /** The human-oversight outcome: a human said yes / a human said no / ran ungated. */
+  oversight: "approved" | "rejected" | "automatic";
+  /** Review tier for gated records ("low" | "high"); null for automatic ones. */
+  risk?: "low" | "high" | null;
+  requestedBy?: string | null;
+  /** Who made the human decision — the "approved by whom" an ADMT disclosure must answer. */
+  decidedBy?: string | null;
+  decidedAt?: string | null;
+  conversationId?: string | null;
+  error?: string | null;
+}
+
 // ── Admin / security dashboard shapes ────────────────────────────────────────
 
 /** A single permission with metadata, from GET /api/admin/security/catalog. */
@@ -707,6 +739,16 @@ export const api = {
     list: () => apiGet<PendingApproval[]>("/api/chat/approvals"),
     approve: (id: string) => apiSend(`/api/chat/approvals/${id}/approve`, "POST"),
     reject: (id: string) => apiSend(`/api/chat/approvals/${id}/reject`, "POST"),
+  },
+
+  // ADMT transparency: the tenant's AI-decision history in disclosure form, recent-first.
+  // Self-serve (any authenticated member) — deliberately NOT an admin read. Windowed via
+  // `take` plus an optional `before` timestamp for paging back through history.
+  aiDecisions: {
+    list: (take = 200, before?: string) =>
+      apiGet<AiDecision[]>(
+        `/api/platform/ai-decisions?take=${take}${before ? `&before=${encodeURIComponent(before)}` : ""}`,
+      ),
   },
 
   connectors: {
