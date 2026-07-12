@@ -11,8 +11,8 @@ the configuration model, because three different people configure three differen
 | Who | What they decide | Where it lives |
 |-----|------------------|----------------|
 | **Host developer** (builds the product) | Which modules are installed, AI/embedding provider, skills bundle, storage, auth mode, MCP servers | Code (`AddCortexModule<T>()`) + configuration files (below) |
-| **Operator / IT** (deploys it) | Endpoints, API keys, database, identity provider, budgets | Environment variables / user-secrets / Key Vault — never files in the repo |
-| **Tenant admin** (runs a firm on it) | Which modules & connectors are on, roles, agent profiles, system prompt, token budgets, connector credentials | The **admin console** (`/admin`) — stored in the database, secrets vault-protected |
+| **Operator / IT** (deploys it) | Endpoints, database, identity provider, budgets, non-chat service credentials | Environment variables / user-secrets / Key Vault — never files in the repo |
+| **Tenant admin** (runs a firm on it) | AI provider/model/key, modules, connectors, roles, agent profiles, system prompt, token budgets | The **admin console** (`/admin`) — stored in the database, secrets vault-protected |
 | **End user** | Their own connected accounts (e.g. Microsoft 365) | The UI's connect-account flow (OAuth; tokens vault-protected) |
 
 Rule of thumb: **deploy-time shape in configuration, runtime behaviour in the admin console,
@@ -28,36 +28,24 @@ later layers override earlier ones:
    committed, merged on top of appsettings. This is the OpenClaw-style "one file describes the
    installation" artifact.
 3. **Environment variables** — the container/production layer. ASP.NET's `__` convention maps
-   sections: `Ai:ApiKey` → `Ai__ApiKey`.
-4. **User-secrets** (Development only) — `dotnet user-secrets set "Ai:ApiKey" "sk-..."`.
+   ordinary deployment settings such as `Ai:Provider` → `Ai__Provider`.
+4. **User-secrets** (Development only) — for deployment services such as RAG, OCR, or channels.
 5. **Azure Key Vault** (Production, optional) — Terraform wires secret references into the
    container app's environment, so the app still just reads configuration.
 
-## Are API keys environment variables? — Yes.
+## Are chat-provider API keys environment variables? — No.
 
-The explicit answer for containers: **the AI API key enters the process as an environment
-variable**, and it is never written to any file in the image or the repo.
-
-- **Docker Compose** ([deploy/compose/](../deploy/compose/)): you put `AI_API_KEY=sk-...` in the
-  (gitignored) `.env`; the compose file maps it to `Ai__ApiKey` inside the container. Same pattern
-  for `AI_PROVIDER`, `AI_MODEL`, `EMBEDDING_PROVIDER`, and `POSTGRES_PASSWORD` (the only mandatory
-  one).
-- **Local development**: `dotnet user-secrets --project <host> set "Ai:ApiKey" "sk-..."` — outside
-  the repo entirely. With the default `Mock` provider no key is needed at all.
-- **Azure (Terraform, [infra/](../infra/))**: the key lives in **Key Vault**; the Container App gets
-  a secret *reference* which Azure resolves into the `Ai__ApiKey` env var at start. Rotation happens
-  in Key Vault, not in a redeploy.
-
-There is a second, separate category: **secrets entered at runtime by non-technical users**
-(connector credentials, OAuth tokens, webhook signing secrets). Those never pass through
-environment variables — they are entered in the admin UI, stored **write-only** through the
+OpenAI, Anthropic, and optional Azure OpenAI keys are entered per tenant under **Admin → AI
+Settings**. They never pass through deployment configuration. They are stored **write-only** through the
 `ISecretVault` seam (DataProtection-encrypted at rest by default; `Secrets:Provider=AzureKeyVault`
 switches storage to Key Vault with no migration), and the API only ever reports *that* a value
-exists, never the value.
+exists, never the value. Model ids are fetched live from provider catalogs rather than committed as
+a static list; Azure OpenAI remains manual because Cortex needs the resource's deployment name.
 
 | Secret | How it enters | Where it rests |
 |--------|---------------|----------------|
-| AI / embedding API key | Env var (`Ai__ApiKey`) / user-secrets / KV reference | Process env only |
+| Tenant chat-provider API key | Admin UI → AI Settings | `ISecretVault` (DataProtection or Key Vault) |
+| Embedding API key | `Rag__ApiKey` / user-secrets / KV reference | Process env only |
 | Database password | Env var in connection string | Process env only |
 | Connector settings (e.g. storage account key) | Admin UI → Integrations | `ISecretVault` (DataProtection or Key Vault) |
 | Per-user OAuth tokens (e.g. Microsoft 365) | User's connect-account flow | `ISecretVault` |
@@ -92,7 +80,7 @@ and change without a deploy.
 
 | Section | Purpose | Notes |
 |---------|---------|-------|
-| `Ai` | The DEPLOYMENT-DEFAULT chat provider: `Provider` (Mock/OpenAI/AzureOpenAI/Anthropic/Ollama/None), `Model`, `Endpoint`, `ApiKey`, `Temperature`, `MaxOutputTokens`, `MaxConversationTokens`, `MaxMonthlyTokens` | `Mock` is keyless and exercises the full pipeline. Tenants can override the whole connection at runtime (Admin → AI Settings): switch provider/model, bring their own key (vaulted, write-only) — and agent profiles can pin a per-agent model. See [SAAS_OPERATIONS.md](SAAS_OPERATIONS.md). |
+| `Ai` | The keyless DEPLOYMENT-DEFAULT chat provider: `Provider` (Mock/AzureOpenAI with managed identity/Ollama/None), `Model`, `Endpoint`, `Temperature`, `MaxOutputTokens`, `MaxConversationTokens`, `MaxMonthlyTokens` | `Mock` exercises the full pipeline. Commercial provider/model/key connections are configured per tenant in Admin → AI Settings; model catalogs are provider-discovered and keys are vaulted write-only. Agent profiles can pin a model. See [SAAS_OPERATIONS.md](SAAS_OPERATIONS.md). |
 | `Rag` | `Enabled`, `EmbeddingProvider`, `EmbeddingModel` | Mock embedder is deterministic and keyless |
 | `Skills` | `Enabled`, `Path` | Deploy-time SKILL.md bundles shipped with the host — never tenant uploads |
 | `Mcp` | `Servers` — external MCP tool servers (name, transport, command/url, approval) | Deploy-time, like skills; each discovered tool is RBAC-gated as `tools.mcp.*` |

@@ -19,11 +19,6 @@ locals {
     "audit-connection-string"    = "ConnectionStrings__cortex-audit"
     "redis-connection-string"    = "ConnectionStrings__cortex-redis"
 
-    # The active LLM provider's key feeds Ai:ApiKey; which seeded secret that is
-    # is selected by var.ai_api_key_secret_name (the others stay in the vault,
-    # unmapped, ready for a provider switch).
-    (var.ai_api_key_secret_name) = "Ai__ApiKey"
-
     # WhatsApp channel (Channels:WhatsApp) — enabled/module/etc. are plain env
     # via extra_env; only the credentials are secret-backed.
     "whatsapp-app-secret"   = "Channels__WhatsApp__AppSecret"

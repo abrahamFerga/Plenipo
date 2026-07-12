@@ -116,12 +116,6 @@ variable "api_client_id" {
 }
 
 # --- App config --------------------------------------------------------------
-variable "ai_api_key_secret_name" {
-  description = "Which seeded Key Vault secret feeds Ai:ApiKey (matches the configured Ai:Provider): openai-api-key, anthropic-api-key, or azure-openai-api-key."
-  type        = string
-  default     = "openai-api-key"
-}
-
 variable "aspnetcore_environment" {
   description = "ASPNETCORE_ENVIRONMENT value (Development/Staging/Production)."
   type        = string

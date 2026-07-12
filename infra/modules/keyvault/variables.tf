@@ -35,7 +35,7 @@ variable "app_identity_principal_id" {
 }
 
 variable "grant_app_secrets_officer" {
-  description = "Grant the app identity write/delete on vault secrets. Required when the platform's secret vault runs in Key Vault mode (Secrets:Provider=AzureKeyVault): admin-entered connector secrets and per-user OAuth tokens are then CREATED and DELETED by the app at runtime, not just read."
+  description = "Grant the app identity write/delete on vault secrets. Required when the platform's secret vault runs in Key Vault mode (Secrets:Provider=AzureKeyVault): tenant AI keys, connector secrets, and per-user OAuth tokens are then CREATED and DELETED by the app at runtime, not just read."
   type        = bool
   default     = false
 }
@@ -64,14 +64,8 @@ variable "redis_connection_string" {
   sensitive   = true
 }
 
-variable "llm_secret_names" {
-  description = "Names of LLM provider API-key secrets to seed as placeholders."
-  type        = list(string)
-  default     = ["openai-api-key", "anthropic-api-key", "azure-openai-api-key"]
-}
-
 variable "channel_secret_names" {
-  description = "Names of chat-channel secrets to seed as placeholders (values injected out-of-band, like the LLM keys)."
+  description = "Names of chat-channel secrets to seed as placeholders (values injected out-of-band)."
   type        = list(string)
   default     = ["whatsapp-app-secret", "whatsapp-access-token", "whatsapp-verify-token"]
 }

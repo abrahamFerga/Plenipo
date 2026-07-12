@@ -15,15 +15,15 @@ namespace Cortex.Infrastructure.Ai;
 /// </summary>
 public static class ChatClientFactory
 {
-    public static IChatClient Create(AiOptions options)
+    public static IChatClient Create(AiOptions options, string? apiKey = null)
     {
         ArgumentNullException.ThrowIfNull(options);
 
         return options.Provider switch
         {
-            "OpenAI" => CreateOpenAI(options),
-            "AzureOpenAI" => CreateAzureOpenAI(options),
-            "Anthropic" => CreateAnthropic(options),
+            "OpenAI" => CreateOpenAI(options, apiKey),
+            "AzureOpenAI" => CreateAzureOpenAI(options, apiKey),
+            "Anthropic" => CreateAnthropic(options, apiKey),
             "Ollama" => CreateOllama(options),
             "Mock" => new MockChatClient(),
             _ => throw new InvalidOperationException(
@@ -31,9 +31,9 @@ public static class ChatClientFactory
         };
     }
 
-    private static IChatClient CreateAnthropic(AiOptions options)
+    private static IChatClient CreateAnthropic(AiOptions options, string? apiKey)
     {
-        var apiKey = Require(options.ApiKey, "Ai:ApiKey is required for the Anthropic provider.");
+        apiKey = Require(apiKey, "A tenant-vaulted API key is required for the Anthropic provider.");
         // The Anthropic client selects the model per request (ChatOptions.ModelId), so pin the
         // configured model on the client — matching the per-connection caching upstream.
         return new ChatClientBuilder((IChatClient)new Anthropic.SDK.AnthropicClient(new Anthropic.SDK.APIAuthentication(apiKey)).Messages)
@@ -41,22 +41,22 @@ public static class ChatClientFactory
             .Build();
     }
 
-    private static IChatClient CreateOpenAI(AiOptions options)
+    private static IChatClient CreateOpenAI(AiOptions options, string? apiKey)
     {
-        var apiKey = Require(options.ApiKey, "Ai:ApiKey is required for the OpenAI provider.");
+        apiKey = Require(apiKey, "A tenant-vaulted API key is required for the OpenAI provider.");
         return new OpenAIClient(new ApiKeyCredential(apiKey))
             .GetChatClient(options.Model)
             .AsIChatClient();
     }
 
-    private static IChatClient CreateAzureOpenAI(AiOptions options)
+    private static IChatClient CreateAzureOpenAI(AiOptions options, string? apiKey)
     {
         var endpoint = new Uri(Require(options.Endpoint, "Ai:Endpoint is required for the AzureOpenAI provider."));
 
         // Prefer a key when supplied; otherwise use managed identity / developer credentials.
-        var client = string.IsNullOrWhiteSpace(options.ApiKey)
+        var client = string.IsNullOrWhiteSpace(apiKey)
             ? new AzureOpenAIClient(endpoint, new DefaultAzureCredential())
-            : new AzureOpenAIClient(endpoint, new ApiKeyCredential(options.ApiKey));
+            : new AzureOpenAIClient(endpoint, new ApiKeyCredential(apiKey));
 
         return client.GetChatClient(options.Model).AsIChatClient();
     }

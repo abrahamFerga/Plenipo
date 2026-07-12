@@ -25,10 +25,9 @@ public sealed class AiOptionsValidatorTests
     }
 
     [Fact]
-    public void OpenAI_RequiresAnApiKey()
+    public void OpenAI_IsTenantConfigured_NotADeploymentDefault()
     {
-        Assert.Contains(AiOptionsValidator.Validate(Options("OpenAI")), e => e.Contains("Ai:ApiKey is required"));
-        Assert.Empty(AiOptionsValidator.Validate(Options("OpenAI", o => o.ApiKey = "sk-test")));
+        Assert.Contains(AiOptionsValidator.Validate(Options("OpenAI")), e => e.Contains("configured per tenant"));
     }
 
     [Fact]
@@ -76,7 +75,7 @@ public sealed class AiOptionsValidatorTests
     public void ThrowIfInvalid_AggregatesMessages_WhenInvalid()
     {
         var ex = Assert.Throws<InvalidOperationException>(() => AiOptionsValidator.ThrowIfInvalid(Options("OpenAI")));
-        Assert.Contains("Ai:ApiKey is required", ex.Message);
+        Assert.Contains("configured per tenant", ex.Message);
     }
 
     [Fact]

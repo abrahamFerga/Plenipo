@@ -9,7 +9,7 @@ using Aspire.Hosting.ApplicationModel;
 // The chat assistant runs on the dependency-free "Mock" provider, so everything works with
 // zero configuration. Supply a real provider + key without editing this file:
 //   dotnet user-secrets --project samples/Cortex.Sample.AppHost set "Parameters:ai-provider" "OpenAI"
-//   dotnet user-secrets --project samples/Cortex.Sample.AppHost set "Parameters:ai-api-key"  "sk-..."
+//   Then configure each tenant's provider, model, and vaulted key under Admin → AI Settings.
 //
 // Prerequisites: a container runtime (Docker/Podman) for the DB + Redis, and the front-end deps
 // installed once — `corepack enable && pnpm --dir frontend install`.
@@ -44,11 +44,11 @@ var redis = builder.AddRedis("cortex-redis");
 
 // ── Parameters — everything Cortex needs to run, overridable per environment ──
 // Defaults keep the stack zero-config (Mock chat provider); override any of these via
-// `Parameters:<name>` in user-secrets/env. The API key is a secret (never published/committed).
+// `Parameters:<name>` in user-secrets/env. Commercial API keys are tenant-vaulted in Admin → AI Settings.
 var aiProvider = builder.AddParameter("ai-provider", "Mock", publishValueAsDefault: true);
 var aiModel = builder.AddParameter("ai-model", "gpt-4o-mini", publishValueAsDefault: true);
 var aiEndpoint = builder.AddParameter("ai-endpoint", "", publishValueAsDefault: true);
-var aiApiKey = builder.AddParameter("ai-api-key", "", secret: true);
+var ragApiKey = builder.AddParameter("rag-api-key", "", secret: true);
 
 // ── API ──────────────────────────────────────────────────────────────────────
 var api = builder.AddProject<Projects.Cortex_Sample_Host>("cortex-sample")
@@ -60,7 +60,7 @@ var api = builder.AddProject<Projects.Cortex_Sample_Host>("cortex-sample")
     .WithEnvironment("Ai__Provider", aiProvider)
     .WithEnvironment("Ai__Model", aiModel)
     .WithEnvironment("Ai__Endpoint", aiEndpoint)
-    .WithEnvironment("Ai__ApiKey", aiApiKey)
+    .WithEnvironment("Rag__ApiKey", ragApiKey)
     .WithExternalHttpEndpoints();
 
 // ── Front-ends (Vite dev servers, launched via pnpm) ─────────────────────────

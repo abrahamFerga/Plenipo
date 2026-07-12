@@ -33,14 +33,8 @@ The chat assistant defaults to the **`Mock`** provider
 (`samples/Cortex.Sample.Host/appsettings.Development.json` → `Ai:Provider=Mock`).
 The mock streams a deterministic, contextual reply and reports token usage, so
 the full pipeline (streaming, persistence, usage tracking, AG-UI, SignalR) works
-with **no API key**. To use a real model, set the provider + key out of band:
-
-```powershell
-dotnet user-secrets --project samples/Cortex.Sample.Host set "Ai:Provider" "OpenAI"
-dotnet user-secrets --project samples/Cortex.Sample.Host set "Ai:Model" "gpt-4o-mini"
-dotnet user-secrets --project samples/Cortex.Sample.Host set "Ai:ApiKey" "sk-..."
-# AzureOpenAI: also set Ai:Endpoint. Ollama: Ai:Provider=Ollama, Ai:Endpoint=http://localhost:11434/v1
-```
+with **no API key**. Configure a commercial connection per tenant under Admin → AI Settings;
+the key is vaulted write-only and the model list is fetched live from the provider.
 
 ## Mode A — full stack under Aspire (dashboard + MCP)
 
@@ -58,14 +52,8 @@ structured logs, traces, and metrics — and each UI's external URL. Aspire inje
 `VITE_API_BASE` into the UIs and adds their origins to the API's CORS policy, so
 the UIs reach the API with no manual pointing.
 
-The AI provider is a set of AppHost **parameters** (default `Mock`); override with
-user-secrets on the *AppHost* project to use a real model:
-
-```powershell
-dotnet user-secrets --project samples/Cortex.Sample.AppHost set "Parameters:ai-provider" "OpenAI"
-dotnet user-secrets --project samples/Cortex.Sample.AppHost set "Parameters:ai-model"    "gpt-4o-mini"
-dotnet user-secrets --project samples/Cortex.Sample.AppHost set "Parameters:ai-api-key"  "sk-..."
-```
+The AppHost default is the keyless Mock provider. Commercial connections are configured per tenant
+after startup under Admin → AI Settings.
 
 **Reading logs/telemetry via the Aspire MCP.** If an Aspire MCP server is
 connected (tools surface via ToolSearch — search `aspire`; `.mcp.json` registers

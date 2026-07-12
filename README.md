@@ -136,14 +136,9 @@ In **Development** with no identity provider configured, the API uses a dev-auth
 authenticated from optional `X-Dev-*` headers (defaulting to a `system_admin` dev user in the seeded
 `dev` tenant), so the whole platform is exercisable without standing up Entra External ID.
 
-To use a real model instead of the mock, set the `Ai` section via user-secrets (never commit a key):
-
-```bash
-dotnet user-secrets --project samples/Cortex.Sample.Host set "Ai:Provider" "OpenAI"
-dotnet user-secrets --project samples/Cortex.Sample.Host set "Ai:Model"    "gpt-4o-mini"
-dotnet user-secrets --project samples/Cortex.Sample.Host set "Ai:ApiKey"   "sk-..."
-# AzureOpenAI: also set Ai:Endpoint.  Ollama: Ai:Provider=Ollama, Ai:Endpoint=http://localhost:11434/v1
-```
+To use a commercial model, start the host and configure the tenant's provider, live-discovered
+model, and write-only API key under **Admin → AI Settings**. Deployment configuration carries no
+chat-provider API key. Azure managed identity and local Ollama remain keyless deployment options.
 
 ```bash
 # Frontend — two apps, each a Vite dev server pointed at the API (VITE_API_BASE, default http://localhost:8080).

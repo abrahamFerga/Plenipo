@@ -56,7 +56,7 @@ The deployment artifacts are already customer-agnostic:
 
 - **Azure**: [infra/](../infra/) Terraform — Container Apps, Flexible Postgres (pgvector), Redis,
   Key Vault, Entra External ID, OIDC for CI. One customer = one `terraform.tfvars` (name prefix,
-  region, SKUs, `ai_api_key_secret_name`, `enable_keyvault_secret_vault`) + one Terraform
+  region, SKUs, `enable_keyvault_secret_vault`) + one Terraform
   **workspace/state** per customer.
 - **Single-box**: [deploy/compose/](../deploy/compose/) — one compose file, pinned tags, all state
   in two named volumes + `.env`; upgrade = `docker compose pull && up -d`. Right-sized for small

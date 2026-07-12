@@ -75,4 +75,31 @@ public sealed class AdminValidationTests : IClassFixture<CortexApiFactory>
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
+
+    [Fact]
+    public async Task AiModels_requires_a_key_before_contacting_OpenAI()
+    {
+        var client = Operator("val-models-key");
+
+        var response = await client.PostAsJsonAsync(
+            "/api/admin/ai-models",
+            new { provider = "OpenAI", endpoint = (string?)null, apiKey = (string?)null });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("API key", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task AiModels_explains_Azure_deployment_names_without_a_hardcoded_catalog()
+    {
+        var client = Operator("val-models-azure");
+
+        var response = await client.PostAsJsonAsync(
+            "/api/admin/ai-models",
+            new { provider = "AzureOpenAI", endpoint = "https://example.openai.azure.com", apiKey = (string?)null });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("deployment name", body, StringComparison.OrdinalIgnoreCase);
+    }
 }

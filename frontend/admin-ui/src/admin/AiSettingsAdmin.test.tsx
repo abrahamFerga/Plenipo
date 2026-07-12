@@ -26,6 +26,12 @@ function stubApi() {
     if (url.includes("/api/admin/ai-settings") && method === "GET") {
       return Promise.resolve({ ok: true, json: () => Promise.resolve(SETTINGS) } as unknown as Response);
     }
+    if (url.includes("/api/admin/ai-models") && method === "POST") {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ models: ["provider-model-a", "provider-model-b"], supportsDiscovery: true }),
+      } as unknown as Response);
+    }
     return Promise.resolve({ ok: true, json: () => Promise.resolve(null) } as unknown as Response);
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -89,5 +95,26 @@ describe("AiSettingsAdmin", () => {
 
     expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
     expect(fetchMock.mock.calls.some((c) => (c[1] as RequestInit | undefined)?.method === "PUT")).toBe(false);
+  });
+
+  it("loads the selected provider's live models without hardcoding options", async () => {
+    const fetchMock = stubApi();
+    renderSettings();
+
+    await screen.findByLabelText("System prompt");
+    fireEvent.change(screen.getByLabelText("Provider"), { target: { value: "OpenAI" } });
+    fireEvent.change(screen.getByLabelText("API key"), { target: { value: "sk-test" } });
+    fireEvent.click(screen.getByRole("button", { name: "Load models from provider" }));
+
+    await screen.findByText(/2 models loaded/);
+    const post = fetchMock.mock.calls.find(
+      (c) => String(c[0]).includes("/api/admin/ai-models") && (c[1] as RequestInit | undefined)?.method === "POST",
+    );
+    expect(JSON.parse((post![1] as RequestInit).body as string)).toEqual({
+      provider: "OpenAI",
+      endpoint: null,
+      apiKey: "sk-test",
+    });
+    expect(document.querySelector('option[value="provider-model-a"]')).not.toBeNull();
   });
 });

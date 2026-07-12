@@ -112,27 +112,13 @@ UI), `cortex-admin-ui` (admin console) — and shows logs, traces (including **a
 and metrics. Aspire wires each UI's `VITE_API_BASE` to the API endpoint and adds the UI origins to the
 API's CORS policy automatically, so nothing needs pointing by hand — just open `cortex-ui` from the dashboard.
 
-To use a real model instead of the Mock provider, set the AppHost **parameters** (they map to `Ai:*` on
-the API; never commit a key):
-
-```bash
-dotnet user-secrets --project samples/Cortex.Sample.AppHost set "Parameters:ai-provider" "OpenAI"
-dotnet user-secrets --project samples/Cortex.Sample.AppHost set "Parameters:ai-model"    "gpt-4o-mini"
-dotnet user-secrets --project samples/Cortex.Sample.AppHost set "Parameters:ai-api-key"  "sk-..."
-# AzureOpenAI also needs Parameters:ai-endpoint; Ollama: ai-provider=Ollama, ai-endpoint=http://localhost:11434/v1
-```
+To use a commercial model, open **Admin → AI Settings** after startup and configure the tenant's
+provider, model, and write-only key. The model selector loads the current catalog from the provider.
 
 ## Try a real model
 
-The chat uses the **Mock** provider by default. To use a real LLM, set the provider via user-secrets
-(never commit a key):
-
-```bash
-dotnet user-secrets --project samples/Cortex.Sample.Host set "Ai:Provider" "OpenAI"
-dotnet user-secrets --project samples/Cortex.Sample.Host set "Ai:Model"    "gpt-4o-mini"
-dotnet user-secrets --project samples/Cortex.Sample.Host set "Ai:ApiKey"   "sk-..."
-# AzureOpenAI also needs Ai:Endpoint; Ollama: Provider=Ollama, Endpoint=http://localhost:11434/v1
-```
+The chat uses the **Mock** provider by default. Configure a real LLM per tenant under
+**Admin → AI Settings**; commercial credentials are stored only through the secret vault.
 
 With a real model the assistant *reasons* over the tools and decides when to call them (the Mock calls
 them on request). The security pipeline is identical either way — permission-filtering before the model
@@ -146,7 +132,7 @@ call, audit on every invocation, and the human-in-the-loop approval gate for sid
 | **Port already in use** | The dev ports are **5432** (Postgres), **6379** (Redis), **8080** (API), **5173** (domain UI), **5174** (admin console). If you already run Postgres locally on 5432, stop it — or edit `docker-compose.yml` and the connection strings. |
 | **`dotnet test samples/…` won't start** | The integration tests spin up a throwaway Postgres via Testcontainers, so **Docker must be running**. The `Cortex.slnx` unit tests don't need it. |
 | **The UI can't reach the API** | The API isn't running, or isn't at `http://localhost:8080`. Start it (`dotnet run --project samples/Cortex.Sample.Host`), or point the UI elsewhere with `VITE_API_BASE` (see `.env.example`). |
-| **Chat errors about the AI provider** | You set `Ai:Provider` to a real provider without a working key/endpoint. The default **Mock** provider needs no setup — unset it, or supply the key (see [Try a real model](#try-a-real-model)). |
+| **Chat errors about the AI provider** | Check the tenant connection under Admin → AI Settings. OpenAI/Anthropic require a vaulted tenant key; Azure requires a deployment name/endpoint; the default **Mock** provider needs no setup. |
 | **Aspire AppHost exits: `pnpm was not found on PATH`** | The front-end resources are launched via pnpm. Run `corepack enable` (elevated on Windows) or `npm install -g pnpm`, then `pnpm --dir frontend install`, and start the AppHost again. |
 | **Aspire stack hangs: containers run but the API never starts (console shows nothing)** | Almost always a **Postgres password/volume mismatch**: Postgres bakes the password into the data volume at first init and never re-reads it, so if the password changed since, every health check fails (dashboard → `cortex-pg` shows `28P01 password authentication failed`) and `WaitFor` blocks the API — and everything downstream — forever. The sample now pins a **stable dev password** (`cortex-dev-only`, overridable via the `Parameters:cortex-pg-password` user-secret), so this only recurs if you change it. To keep your dev data, reset the role inside the running container: temporarily allow local trust in `pg_hba.conf`, `ALTER USER postgres PASSWORD '<the configured password>'`, then restore it. Or just throw the dev data away: `docker volume ls \| findstr cortex`, then `docker volume rm <name>` and rerun. |
 

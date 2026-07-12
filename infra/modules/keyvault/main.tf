@@ -43,7 +43,7 @@ resource "azurerm_role_assignment" "app_secrets_user" {
   principal_id         = var.app_identity_principal_id
 }
 
-# When the platform stores admin-entered connector secrets / OAuth tokens in Key Vault
+# When the platform stores tenant AI keys / connector secrets / OAuth tokens in Key Vault
 # (Secrets:Provider=AzureKeyVault), the app writes and deletes secrets at runtime and
 # needs Officer, not just User.
 resource "azurerm_role_assignment" "app_secrets_officer" {
@@ -105,25 +105,7 @@ resource "azurerm_key_vault_secret" "redis_connection_string" {
   depends_on = [azurerm_role_assignment.deployer_secrets_officer]
 }
 
-# LLM provider API key placeholders. Real values are injected out-of-band; we
-# only seed the secret so the reference exists and ignore later value drift.
-resource "azurerm_key_vault_secret" "llm_keys" {
-  for_each = toset(var.llm_secret_names)
-
-  name         = each.value
-  value        = "REPLACE_ME"
-  key_vault_id = azurerm_key_vault.this.id
-  tags         = var.tags
-
-  lifecycle {
-    ignore_changes = [value]
-  }
-
-  depends_on = [azurerm_role_assignment.deployer_secrets_officer]
-}
-
-# Chat-channel secret placeholders (WhatsApp app secret / access token / verify
-# token) — same out-of-band injection contract as the LLM keys.
+# Chat-channel secret placeholders (WhatsApp app secret / access token / verify token).
 resource "azurerm_key_vault_secret" "channel_keys" {
   for_each = toset(var.channel_secret_names)
 

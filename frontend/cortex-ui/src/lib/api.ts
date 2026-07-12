@@ -395,6 +395,13 @@ export interface AiSettings {
   defaultModel: string;
 }
 
+/** A live model catalog fetched from the selected provider. */
+export interface AiModelCatalog {
+  models: string[];
+  supportsDiscovery: boolean;
+  message?: string | null;
+}
+
 /** A named, per-module chatbot configuration, from GET /api/admin/agent-profiles. */
 export interface AgentProfile {
   id: string;
@@ -811,6 +818,8 @@ export const api = {
     setTenantActive: (tenantId: string, isActive: boolean) =>
       apiSend(`/api/admin/tenants/${tenantId}/active`, "PUT", { isActive }),
     aiSettings: () => apiGet<AiSettings>("/api/admin/ai-settings"),
+    aiModels: (connection: { provider: string; endpoint?: string | null; apiKey?: string | null }) =>
+      apiPost<AiModelCatalog>("/api/admin/ai-models", connection),
     setAiSettings: (settings: {
       systemPrompt: string | null;
       maxConversationTokens: number | null;

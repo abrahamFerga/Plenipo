@@ -312,6 +312,9 @@ public static class InfrastructureSetup
         // cached per distinct connection. The singleton above remains the deployment default for
         // any host code that wants a bare client.
         services.AddSingleton<ITenantChatClientResolver, TenantChatClientResolver>();
+        services.AddHttpClient(ProviderAiModelCatalog.HttpClientName, client =>
+            client.Timeout = TimeSpan.FromSeconds(15));
+        services.AddSingleton<IAiModelCatalog, ProviderAiModelCatalog>();
 
         services.AddSingleton<IModuleCatalog, ModuleCatalog>();
         services.AddSingleton<IToolRegistry, ToolRegistry>();

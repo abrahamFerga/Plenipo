@@ -138,9 +138,8 @@ to header-based dev auth (`X-Dev-Subject`, `X-Dev-Tenant`, `X-Dev-Roles`).
 
 - No secrets are hardcoded. The DB admin password is generated
   (`random_password`) and stored in Key Vault.
-- LLM provider API keys are seeded as **placeholders** (`REPLACE_ME`) and must
-  be set out-of-band (portal / `az keyvault secret set` / a secrets-sync job).
-  Terraform ignores later value drift on those secrets.
+- Tenant chat-provider keys are entered in Admin → AI Settings and stored through the configured
+  secret vault; Terraform does not seed or inject chat-provider credentials.
 - WhatsApp channel credentials (`whatsapp-app-secret`, `whatsapp-access-token`,
   `whatsapp-verify-token`) follow the same placeholder + out-of-band contract;
   the non-secret channel settings (`Channels__WhatsApp__Enabled`, `PhoneNumberId`,
@@ -153,7 +152,7 @@ to header-based dev auth (`X-Dev-Subject`, `X-Dev-Tenant`, `X-Dev-Roles`).
   Secrets User), never via stored connection strings in config.
 - **Admin-entered secrets in Key Vault** (optional): set
   `enable_keyvault_secret_vault = true` to run the platform's secret vault in
-  Key Vault mode — connector keys and per-user OAuth tokens that admins enter
+  Key Vault mode — tenant AI keys, connector keys, and per-user OAuth tokens that admins enter
   in the UI are then stored as Key Vault secrets (the DB keeps `kv:` pointers).
   This grants the app identity **Secrets Officer** (it creates/deletes secrets
   at runtime) and sets `Secrets__Provider` / `Secrets__KeyVaultUri`. Flipping it
@@ -180,4 +179,4 @@ federated-credential subject claims.
 - **Backend storage**: bootstrap once (above) before first `init`.
 - **Private networking**: Postgres/Redis are public + firewalled in this
   scaffold. For production hardening, add VNet integration + private endpoints.
-- **LLM keys**: populate the Key Vault placeholders.
+- **Tenant AI connections**: configure provider/model/key in Admin → AI Settings after deployment.

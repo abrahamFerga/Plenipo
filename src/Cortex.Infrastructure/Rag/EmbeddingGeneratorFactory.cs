@@ -11,7 +11,8 @@ namespace Cortex.Infrastructure.Rag;
 /// <summary>
 /// Builds the <see cref="IEmbeddingGenerator{TInput,TEmbedding}"/> from <see cref="RagOptions"/>,
 /// mirroring <see cref="Ai.ChatClientFactory"/>: provider swap is configuration, never code. The
-/// API key falls back to the chat provider's (<c>Ai:ApiKey</c>) so one key serves both.
+/// Embedding credentials are configured independently under <c>Rag</c>; chat credentials are
+/// tenant-vault-only and are never borrowed by the deployment RAG pipeline.
 /// </summary>
 public static class EmbeddingGeneratorFactory
 {
@@ -33,7 +34,7 @@ public static class EmbeddingGeneratorFactory
 
     private static IEmbeddingGenerator<string, Embedding<float>> CreateOpenAI(RagOptions options, AiOptions ai)
     {
-        var apiKey = Require(options.ApiKey ?? ai.ApiKey, "Rag:ApiKey (or Ai:ApiKey) is required for the OpenAI embedding provider.");
+        var apiKey = Require(options.ApiKey, "Rag:ApiKey is required for the OpenAI embedding provider.");
         return new OpenAIClient(new ApiKeyCredential(apiKey))
             .GetEmbeddingClient(options.EmbeddingModel)
             .AsIEmbeddingGenerator();
@@ -42,7 +43,7 @@ public static class EmbeddingGeneratorFactory
     private static IEmbeddingGenerator<string, Embedding<float>> CreateAzureOpenAI(RagOptions options, AiOptions ai)
     {
         var endpoint = new Uri(Require(options.Endpoint ?? ai.Endpoint, "Rag:Endpoint (or Ai:Endpoint) is required for the AzureOpenAI embedding provider."));
-        var apiKey = options.ApiKey ?? ai.ApiKey;
+        var apiKey = options.ApiKey;
 
         var client = string.IsNullOrWhiteSpace(apiKey)
             ? new AzureOpenAIClient(endpoint, new DefaultAzureCredential())
