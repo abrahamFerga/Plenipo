@@ -115,9 +115,24 @@ jobs:
           (cd frontend/cortex-ui/dist-app && zip -r "$GITHUB_WORKSPACE/artifacts/cortex-ui-app.zip" .)
           (cd frontend/admin-ui/dist && zip -r "$GITHUB_WORKSPACE/artifacts/cortex-admin-ui.zip" .)
 
+      # The @cortex/ui LIBRARY as an npm tarball — for product hosts that build their own app
+      # entry on the moduleUi seam (e.g. Networthy's ADR-0008) and vendor the library the same
+      # way they vendor the nupkgs, instead of file:-linking a sibling checkout. Built with
+      # VITE_API_BASE="" (frozen into the dist at library-build time) so consumers get
+      # same-origin API calls; a checked-out source alias covers dev servers that need a live env.
+      - name: Pack the @cortex/ui library tarball
+        if: github.event_name == 'release'
+        env:
+          VITE_API_BASE: ""
+        run: |
+          pnpm -C frontend/cortex-ui build
+          (cd frontend/cortex-ui && npm pkg set version="${{ steps.ver.outputs.version }}")
+          pnpm -C frontend/cortex-ui pack --pack-destination "$GITHUB_WORKSPACE/artifacts"
+          ls -l "$GITHUB_WORKSPACE"/artifacts/cortex-ui-*.tgz
+
       - name: Attach artifacts to the release
         if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "$GITHUB_REF_NAME" ./artifacts/*.nupkg ./artifacts/*.zip --clobber
+          gh release upload "$GITHUB_REF_NAME" ./artifacts/*.nupkg ./artifacts/*.zip ./artifacts/*.tgz --clobber
