@@ -3,7 +3,7 @@ namespace Cortex.Application.Ai;
 /// <summary>
 /// Provider-swappable LLM configuration, bound from the "Ai" configuration section. Lets a deployment
 /// move between OpenAI, Azure OpenAI, and a local Ollama (via its OpenAI-compatible endpoint) without
-/// code changes. Secrets come from Key Vault / user-secrets, never source.
+/// code changes. Commercial chat credentials are tenant-vaulted and are not deployment options.
 /// </summary>
 public sealed class AiOptions
 {
@@ -17,8 +17,6 @@ public sealed class AiOptions
 
     /// <summary>Model id (OpenAI) or deployment name (Azure OpenAI).</summary>
     public string Model { get; set; } = "gpt-4o-mini";
-
-    public string? ApiKey { get; set; }
 
     /// <summary>Azure OpenAI endpoint, or the Ollama OpenAI-compatible base URL (e.g. http://localhost:11434/v1).</summary>
     public string? Endpoint { get; set; }

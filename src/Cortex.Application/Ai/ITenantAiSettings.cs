@@ -13,7 +13,7 @@ public sealed record EffectiveAiSettings(string SystemPrompt, int MaxConversatio
 
     public string? Endpoint { get; init; }
 
-    /// <summary>Vault reference to the tenant's own API key; null = the deployment's key applies.</summary>
+    /// <summary>Vault reference to the tenant's own API key; null = a keyless/managed-identity connection.</summary>
     public string? ApiKeySecretRef { get; init; }
 
     /// <summary>True when this tenant overrode the provider connection (its own provider/endpoint/key).</summary>

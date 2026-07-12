@@ -21,7 +21,7 @@ public sealed class RagOptions
     /// <summary>Embedding model id (e.g. "text-embedding-3-small"); ignored by Mock.</summary>
     public string EmbeddingModel { get; set; } = "mock-bow-384";
 
-    /// <summary>Falls back to Ai:ApiKey when empty, so one key serves chat + embeddings.</summary>
+    /// <summary>Deployment credential for embeddings only; chat credentials are tenant-vaulted.</summary>
     public string? ApiKey { get; set; }
 
     /// <summary>Endpoint for AzureOpenAI, or the Ollama OpenAI-compatible base URL.</summary>

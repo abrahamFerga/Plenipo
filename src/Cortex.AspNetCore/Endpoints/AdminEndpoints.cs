@@ -12,6 +12,7 @@ using Cortex.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 
 namespace Cortex.AspNetCore.Endpoints;
 
@@ -335,6 +336,58 @@ public static class AdminEndpoints
         })
         .RequireAuthorization(PermissionRequirement.PolicyName(Permissions.ManageAiSettings))
         .WithName("Admin_AiSettings");
+
+        // Provider-owned catalogs are queried on demand: model ids change too frequently to ship a
+        // hardcoded list. A newly entered key may be used for this one request; otherwise the current
+        // tenant's vaulted key is revealed internally and never returned to the browser.
+        group.MapPost("/ai-models", async (
+            [FromBody] AiModelCatalogRequest body,
+            PlatformDbContext db,
+            ISecretVault vault,
+            IAiModelCatalog catalog,
+            CancellationToken ct) =>
+        {
+            var provider = body.Provider?.Trim();
+            if (string.IsNullOrWhiteSpace(provider) ||
+                !TenantAiSettingsValidator.AllowedProviders.Contains(provider, StringComparer.Ordinal))
+            {
+                return Results.BadRequest(
+                    $"provider must be one of: {string.Join(", ", TenantAiSettingsValidator.AllowedProviders)}.");
+            }
+
+            var endpoint = string.IsNullOrWhiteSpace(body.Endpoint) ? null : body.Endpoint.Trim();
+            if (endpoint is not null &&
+                (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https")))
+            {
+                return Results.BadRequest("endpoint must be an absolute http(s) URL.");
+            }
+
+            var apiKey = string.IsNullOrWhiteSpace(body.ApiKey) ? null : body.ApiKey.Trim();
+            if (apiKey is null)
+            {
+                var row = await db.TenantAiSettings.FirstOrDefaultAsync(ct);
+                if (string.Equals(row?.Provider, provider, StringComparison.Ordinal) && row?.ApiKeySecretRef is { } secretRef)
+                {
+                    apiKey = await vault.RevealAsync(TenantChatClientResolver.ApiKeyScope, secretRef, ct);
+                }
+            }
+
+            if (provider is "OpenAI" or "Anthropic" && apiKey is null)
+            {
+                return Results.BadRequest($"An API key is required to load {provider} models.");
+            }
+
+            try
+            {
+                return Results.Ok(await catalog.DiscoverAsync(provider, endpoint, apiKey, ct));
+            }
+            catch (Exception ex) when (ex is HttpRequestException or JsonException or ArgumentException)
+            {
+                return Results.BadRequest($"Could not load models from {provider}: {ex.Message}");
+            }
+        })
+        .RequireAuthorization(PermissionRequirement.PolicyName(Permissions.ManageAiSettings))
+        .WithName("Admin_AiModels");
 
         // Set the tenant's AI overrides — including switching the provider connection at runtime.
         // Null/blank fields clear the override (fall back to the default). ApiKey contract: null =
@@ -1219,6 +1272,8 @@ public static class AdminEndpoints
     private sealed record AiSettingsRequest(
         string? SystemPrompt, int? MaxConversationTokens, long? MaxMonthlyTokens,
         string? Provider, string? Model, string? Endpoint, string? ApiKey);
+
+    private sealed record AiModelCatalogRequest(string? Provider, string? Endpoint, string? ApiKey);
 
     private sealed record AgentProfileDto(
         Guid Id, string ModuleId, string Name, string Instructions, string Mode, bool IsDefault,

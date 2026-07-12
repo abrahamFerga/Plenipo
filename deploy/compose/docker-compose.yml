@@ -24,9 +24,9 @@ services:
       ConnectionStrings__cortex-redis: redis:6379
       Ai__Provider: ${AI_PROVIDER:-Mock}
       Ai__Model: ${AI_MODEL:-gpt-4o-mini}
-      Ai__ApiKey: ${AI_API_KEY:-}
       Rag__Enabled: "true"
       Rag__EmbeddingProvider: ${EMBEDDING_PROVIDER:-Mock}
+      Rag__ApiKey: ${RAG_API_KEY:-}
       Skills__Enabled: "true"
       Skills__Path: skills
     ports:

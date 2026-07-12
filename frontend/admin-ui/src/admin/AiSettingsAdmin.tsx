@@ -69,6 +69,16 @@ export function AiSettingsAdmin() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin", "ai-settings"] }),
   });
 
+  const models = useMutation({
+    mutationFn: (connection: Pick<FormState, "provider" | "endpoint" | "apiKey">) =>
+      api.admin.aiModels({
+        provider: connection.provider,
+        endpoint: connection.endpoint.trim() || null,
+        // A blank value asks the API to use the existing vaulted tenant key, if one matches.
+        apiKey: connection.apiKey.trim() || null,
+      }),
+  });
+
   if (settings.isLoading) {
     return <p className="text-sm text-slate-500">Loading AI settings…</p>;
   }
@@ -89,6 +99,7 @@ export function AiSettingsAdmin() {
   const needsKey = provider === "OpenAI" || provider === "Anthropic";
   const willHaveKey = apiKey.trim() !== "" || (data.hasApiKey && !clearKey);
   const keyMissing = needsKey && !willHaveKey;
+  const canDiscover = provider === "OpenAI" || provider === "Anthropic" || provider === "Ollama";
 
   return (
     <div className="max-w-2xl space-y-5">
@@ -119,7 +130,10 @@ export function AiSettingsAdmin() {
               <select
                 id="ai-provider"
                 value={provider}
-                onChange={(e) => set({ provider: e.target.value })}
+                onChange={(e) => {
+                  models.reset();
+                  set({ provider: e.target.value, model: "" });
+                }}
                 className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
               >
                 <option value="">Deployment default ({data.defaultProvider})</option>
@@ -137,11 +151,17 @@ export function AiSettingsAdmin() {
               </label>
               <input
                 id="ai-model"
+                list={models.data?.models.length ? "ai-model-options" : undefined}
                 value={model}
                 onChange={(e) => set({ model: e.target.value })}
                 placeholder={`Default: ${data.defaultModel}`}
                 className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
               />
+              {models.data?.models.length ? (
+                <datalist id="ai-model-options">
+                  {models.data.models.map((id) => <option key={id} value={id} />)}
+                </datalist>
+              ) : null}
             </div>
           </div>
           {needsEndpoint && (
@@ -187,6 +207,31 @@ export function AiSettingsAdmin() {
               )}
               {keyMissing && <p className="text-xs text-red-600">The {provider} provider requires an API key.</p>}
             </div>
+          )}
+          {canDiscover && (
+            <div className="space-y-1">
+              <button
+                type="button"
+                disabled={models.isPending || keyMissing || (provider === "Ollama" && endpoint.trim() === "")}
+                onClick={() => models.mutate({ provider, endpoint, apiKey })}
+                className="focus-ring rounded border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 disabled:opacity-40 dark:border-slate-600 dark:text-slate-300"
+              >
+                {models.isPending ? "Loading models…" : "Load models from provider"}
+              </button>
+              {models.data && (
+                <p className="text-xs text-slate-400">
+                  {models.data.models.length
+                    ? `${models.data.models.length} models loaded. Choose one from the Model field or enter an id manually.`
+                    : models.data.message ?? "The provider returned no models."}
+                </p>
+              )}
+              {models.isError && <p className="text-xs text-red-600">{(models.error as Error).message}</p>}
+            </div>
+          )}
+          {provider === "AzureOpenAI" && (
+            <p className="text-xs text-slate-400">
+              Azure OpenAI uses your resource's deployment name; enter it manually in Model.
+            </p>
           )}
           <p className="text-xs text-slate-400">
             Switching applies on the next chat turn — token usage is attributed to this tenant's provider and

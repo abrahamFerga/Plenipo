@@ -61,7 +61,7 @@ Postgres, Key Vault — is `deploy/terraform/`.)
 
 | Concern | What to change |
 |---|---|
-| AI provider | `.env`: `AI_PROVIDER=OpenAI` + `AI_API_KEY=...` (or AzureOpenAI/Anthropic/Ollama). Tenants can also switch provider/model/key at runtime from the admin console (vaulted, write-only) |
+| AI provider | Configure each tenant's provider/model/key in Admin → AI Settings. Keys are vaulted and write-only; model choices are loaded live from providers. |
 | Authentication | `CORTEX_ENVIRONMENT=Production` + configure the external IdP (see docs — the `X-Dev-*` scheme exists only in Development) |
 | Connector secrets | Set in the admin UI (write-only). To store them in Azure Key Vault instead of the DB: `Secrets__Provider=AzureKeyVault` + `Secrets__KeyVaultUri=...` on the api service |
 | TLS / domain | Put a reverse proxy (Caddy, Traefik, nginx) in front of port 8080 |

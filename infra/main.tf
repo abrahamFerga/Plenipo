@@ -179,7 +179,7 @@ module "container_app" {
   api_client_id       = module.entra_external_id.api_client_id
 
   # Plain extra env. Key Vault secret-vault mode rides on top: the app then stores
-  # admin-entered connector secrets / OAuth tokens as KV secrets via its identity.
+  # tenant AI keys / connector secrets / OAuth tokens as KV secrets via its identity.
   extra_env = merge(
     var.api_extra_env,
     var.enable_keyvault_secret_vault ? {
@@ -187,9 +187,6 @@ module "container_app" {
       "Secrets__KeyVaultUri" = module.keyvault.vault_uri
     } : {}
   )
-
-  # Which vault secret feeds Ai:ApiKey (matches the configured provider).
-  ai_api_key_secret_name = var.ai_api_key_secret_name
 
   # Ensure ACR pull role exists before the app tries to pull.
   depends_on = [azurerm_role_assignment.app_acr_pull]

@@ -38,8 +38,6 @@ github_repo         = "Cortex"
 github_environments = ["development"]
 
 # --- App runtime config (plain env; secrets live in Key Vault) ----------------
-# Which vault secret feeds Ai:ApiKey (matches Ai__Provider below):
-# ai_api_key_secret_name = "openai-api-key"
 # api_extra_env = {
 #   "Ai__Provider" = "OpenAI"
 #   "Ai__Model"    = "gpt-4o-mini"

@@ -16,7 +16,6 @@ public sealed class TenantProviderMergeTests
         Provider = "OpenAI",
         Model = "gpt-4o-mini",
         Endpoint = "https://deployment.example",
-        ApiKey = "deployment-key",
         SystemPrompt = "base",
     };
 

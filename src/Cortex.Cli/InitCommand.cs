@@ -24,7 +24,7 @@ public sealed class InitCommand : Command<InitCommand.Settings>
         public bool NonInteractive { get; init; }
 
         [CommandOption("--ai-provider <PROVIDER>")]
-        [Description("Mock | OpenAI | AzureOpenAI | Anthropic | Ollama | None")]
+        [Description("Deployment default: Mock | AzureOpenAI (managed identity) | Ollama | None. OpenAI/Anthropic are tenant-admin settings.")]
         public string? AiProvider { get; init; }
 
         [CommandOption("--ai-model <MODEL>")]
@@ -94,6 +94,13 @@ public sealed class InitCommand : Command<InitCommand.Settings>
         }
 
         var plan = settings.NonInteractive ? PlanFromFlags(settings) : RunWizard(settings);
+        if (plan.AiProvider is "OpenAI" or "Anthropic")
+        {
+            AnsiConsole.MarkupLine(
+                "[red]OpenAI and Anthropic are configured per tenant under Admin → AI Settings; " +
+                "deployment API keys are not supported.[/]");
+            return 1;
+        }
 
         var file = System.IO.Path.Combine(targetDirectory, CortexSettingsFile.FileName);
         var existing = File.Exists(file) ? File.ReadAllText(file) : null;
@@ -132,16 +139,16 @@ public sealed class InitCommand : Command<InitCommand.Settings>
             Steps: [bold]1[/] AI provider · [bold]2[/] Knowledge (RAG) · [bold]3[/] Document tools ·
                    [bold]4[/] Channels · [bold]5[/] File storage · [bold]6[/] Authentication ·
                    [bold]7[/] Skills · [bold]8[/] Secret storage
-            Every step can keep the current value; secrets are configured via user-secrets afterwards.
+            Every step can keep the current value; commercial chat connections are configured per tenant in Admin → AI Settings.
             Connectors and modules are enabled per tenant at runtime (admin console → Integrations / Modules).
             """);
 
         var aiProvider = s.AiProvider ?? AnsiConsole.Prompt(
             new SelectionPrompt<string>()
                 .Title("[bold]1/8[/] AI provider (Mock needs no key and exercises the full pipeline)")
-                .AddChoices("Mock", "OpenAI", "AzureOpenAI", "Anthropic", "Ollama", "(keep current)"));
+                .AddChoices("Mock", "AzureOpenAI", "Ollama", "(keep current)"));
         string? aiModel = null, aiEndpoint = null;
-        if (aiProvider is "OpenAI" or "AzureOpenAI" or "Anthropic" or "Ollama")
+        if (aiProvider is "AzureOpenAI" or "Ollama")
         {
             aiModel = s.AiModel ?? AnsiConsole.Ask<string>("   Model / deployment name:");
             if (aiProvider is "AzureOpenAI" or "Ollama")
@@ -218,11 +225,6 @@ public sealed class InitCommand : Command<InitCommand.Settings>
     private static void PrintNextSteps(SettingsPlan plan, string targetDirectory)
     {
         var steps = new List<string>();
-        if (plan.AiProvider is "OpenAI" or "AzureOpenAI" or "Anthropic")
-        {
-            steps.Add($"dotnet user-secrets --project \"{targetDirectory}\" set \"Ai:ApiKey\" \"<key>\"");
-        }
-
         if (plan.WhatsAppEnabled == true)
         {
             steps.Add($"dotnet user-secrets --project \"{targetDirectory}\" set \"Channels:WhatsApp:AppSecret\" \"<meta app secret>\"");
@@ -243,14 +245,6 @@ public sealed class InitCommand : Command<InitCommand.Settings>
             }
         }
 
-        if (plan.AiProvider is "OpenAI" or "AzureOpenAI" or "Anthropic")
-        {
-            AnsiConsole.MarkupLine(
-                "\n[bold]In containers[/] the same key is the [bold]Ai__ApiKey[/] environment variable " +
-                "(compose maps AI_API_KEY from .env; Terraform injects a Key Vault reference). " +
-                "See docs/CONFIGURATION.md.");
-        }
-
         AnsiConsole.MarkupLine(
             """
 
@@ -258,7 +252,7 @@ public sealed class InitCommand : Command<InitCommand.Settings>
               · [bold]Modules[/] — enable this system's modules per tenant
               · [bold]Integrations[/] — enable data-source connectors (Azure Blob, local folder, Cortex peer)
               · [bold]Roles[/] — tune what each role may do
-              · [bold]AI Settings / Agent Profiles[/] — per-tenant provider switching and per-agent composition
+              · [bold]AI Settings / Agent Profiles[/] — per-tenant provider/model/key and per-agent composition
 
             [bold]Not wizard-covered:[/] MCP tool servers are declared by hand in the "Mcp" section of
             cortex.settings.json (see docs/CONFIGURATION.md → "Wiring MCP tool servers").

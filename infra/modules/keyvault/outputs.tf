@@ -24,7 +24,6 @@ output "secret_ids" {
       "audit-connection-string"    = azurerm_key_vault_secret.audit_connection_string.versionless_id
       "redis-connection-string"    = azurerm_key_vault_secret.redis_connection_string.versionless_id
     },
-    { for k, s in azurerm_key_vault_secret.llm_keys : k => s.versionless_id },
     { for k, s in azurerm_key_vault_secret.channel_keys : k => s.versionless_id }
   )
 }

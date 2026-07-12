@@ -3,8 +3,8 @@ namespace Cortex.Application.Ai;
 /// <summary>
 /// Validates <see cref="AiOptions"/> so a misconfigured provider fails fast at startup with an actionable
 /// message — instead of throwing on the first chat turn (the <c>IChatClient</c> is built lazily). Encodes
-/// what each provider actually needs: OpenAI a key; Azure OpenAI and Ollama an absolute endpoint; Mock and
-/// None nothing. Pure and side-effect free.
+/// what each deployment-default provider actually needs. OpenAI and Anthropic credentials are deliberately
+/// tenant-vault-only and therefore cannot be deployment defaults. Pure and side-effect free.
 /// </summary>
 public static class AiOptionsValidator
 {
@@ -31,10 +31,7 @@ public static class AiOptionsValidator
         {
             case "OpenAI":
                 RequireModel(options, errors);
-                if (string.IsNullOrWhiteSpace(options.ApiKey))
-                {
-                    errors.Add("Ai:ApiKey is required for the OpenAI provider.");
-                }
+                errors.Add("OpenAI must be configured per tenant in Admin → AI Settings; deployment API keys are not supported.");
                 break;
             case "AzureOpenAI":
                 RequireModel(options, errors);
@@ -42,10 +39,7 @@ public static class AiOptionsValidator
                 break;
             case "Anthropic":
                 RequireModel(options, errors);
-                if (string.IsNullOrWhiteSpace(options.ApiKey))
-                {
-                    errors.Add("Ai:ApiKey is required for the Anthropic provider.");
-                }
+                errors.Add("Anthropic must be configured per tenant in Admin → AI Settings; deployment API keys are not supported.");
                 break;
             case "Ollama":
                 RequireModel(options, errors);
