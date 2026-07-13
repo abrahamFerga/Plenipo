@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- Minimal runnable host: wires Plenipo.AspNetCore into an executable API.
+       Domain modules are NOT included here — they live in separate projects that
+       consume the Plenipo.* NuGet packages and add their own modules. -->
+  <PropertyGroup>
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.AspNetCore.OpenApi.Generated</InterceptorsNamespaces>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Plenipo.AspNetCore\Plenipo.AspNetCore.csproj" />
+    <ProjectReference Include="..\Plenipo.Connectors\Plenipo.Connectors.csproj" />
+  </ItemGroup>
+
+</Project>

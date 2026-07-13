@@ -1,0 +1,462 @@
+# =============================================================================
+# Plenipo API request catalog
+# -----------------------------------------------------------------------------
+# Exercise the running platform from your IDE (VS Code "REST Client", JetBrains
+# HTTP Client, etc.). Start the sample host first:
+#   dotnet run --project samples/Plenipo.Sample.AppHost      (Aspire: API on :8080)
+#   # or: dotnet run --project samples/Plenipo.Sample.Host
+#
+# Auth: in Development the API accepts dev-auth headers (X-Dev-*) that stand in
+# for a real OIDC token. Change {{subject}}/{{roles}}/{{tenant}} below to act as
+# a different user, role, or tenant. In production these come from Entra External
+# ID and the headers are ignored.
+#
+# Placeholders like {{conversationId}} / {{userId}} are set to a sample GUID —
+# replace them with real ids returned by the list endpoints above them.
+# =============================================================================
+
+@baseUrl = http://localhost:8080
+@subject = dev-user
+@name = Dev User
+@tenant = dev
+@roles = system_admin
+
+# GUID placeholders — copy real ids from the list responses.
+@conversationId = 00000000-0000-0000-0000-000000000000
+@userId = 00000000-0000-0000-0000-000000000000
+@tenantId = 00000000-0000-0000-0000-000000000000
+
+# ── Health (anonymous) ───────────────────────────────────────────────────────
+
+### Liveness (never calls the LLM)
+GET {{baseUrl}}/alive
+
+### Readiness / health checks
+GET {{baseUrl}}/health
+
+# ── Platform: identity + navigation ──────────────────────────────────────────
+
+### Who am I — user, tenant, effective permissions
+GET {{baseUrl}}/api/platform/me
+X-Dev-Subject: {{subject}}
+X-Dev-Name: {{name}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Modules + tabs the caller can see (drives the dashboard navigation)
+GET {{baseUrl}}/api/platform/modules
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Deployment facts (chat enabled? demo/mock mode?)
+GET {{baseUrl}}/api/platform/info
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+# ── Chat: a streamed agent turn ──────────────────────────────────────────────
+
+### AG-UI turn (SSE). The Mock provider drives a real, audited tool call.
+POST {{baseUrl}}/api/agui/finance
+Content-Type: application/json
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+{
+  "messages": [{ "role": "user", "content": "Summarize my spending using a tool." }]
+}
+
+### REST stream turn (HTTP SSE alternative to the SignalR hub)
+POST {{baseUrl}}/api/chat/stream
+Content-Type: application/json
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+{
+  "moduleId": "finance",
+  "message": "Am I over budget on anything?"
+}
+
+# ── Chat: conversation history (own conversations) ───────────────────────────
+
+### List my conversations for a module (newest first)
+GET {{baseUrl}}/api/chat/conversations?moduleId=finance
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### A conversation's message history (owner-scoped)
+GET {{baseUrl}}/api/chat/conversations/{{conversationId}}/messages
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Rename a conversation
+PUT {{baseUrl}}/api/chat/conversations/{{conversationId}}/title
+Content-Type: application/json
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+{ "title": "Quarterly review" }
+
+### Delete a conversation (messages cascade)
+DELETE {{baseUrl}}/api/chat/conversations/{{conversationId}}
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+# ── Chat: human-in-the-loop approvals ────────────────────────────────────────
+
+### Pending approvals (side-effecting tool calls blocked awaiting a human)
+GET {{baseUrl}}/api/chat/approvals
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Approve a blocked call (re-executes the exact recorded call). {{approvalId}} from the list above.
+# @approvalId = 00000000-0000-0000-0000-000000000000
+POST {{baseUrl}}/api/chat/approvals/00000000-0000-0000-0000-000000000000/approve
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+# ── Admin: security map + roles (platform.roles.manage) ──────────────────────
+
+### The complete permission map: platform perms + every module tool
+GET {{baseUrl}}/api/admin/security/catalog
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Roles and the permissions each grants (built-in + custom, with editable/builtIn flags)
+GET {{baseUrl}}/api/admin/roles
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Create a custom role
+POST {{baseUrl}}/api/admin/roles
+Content-Type: application/json
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+{ "role": "auditor", "permissions": ["platform.audit.view"] }
+
+### Reconfigure what a role grants (replace semantics; system_admin is rejected)
+PUT {{baseUrl}}/api/admin/roles/user/permissions
+Content-Type: application/json
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+{ "permissions": ["chat.use", "chat.conversations.view", "chat.approvals.manage"] }
+
+### Delete a custom role (built-ins are rejected)
+DELETE {{baseUrl}}/api/admin/roles/auditor
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+# ── Admin: users (platform.users.manage / roles) ─────────────────────────────
+
+### Users in the tenant, with roles, grants, active state, external subject
+GET {{baseUrl}}/api/admin/users
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Assign a role to a user
+POST {{baseUrl}}/api/admin/users/{{userId}}/roles
+Content-Type: application/json
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+{ "role": "auditor" }
+
+### Grant a fine-grained permission to a user
+POST {{baseUrl}}/api/admin/users/{{userId}}/permissions
+Content-Type: application/json
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+{ "permission": "tools.finance.summarize_spending" }
+
+### Activate / deactivate a user (deactivated ⇒ denied every request; can't deactivate yourself)
+PUT {{baseUrl}}/api/admin/users/{{userId}}/active
+Content-Type: application/json
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+{ "isActive": false }
+
+# ── Admin: per-tenant module management (platform.modules.manage) ────────────
+
+### Installed modules + enabled state for this tenant
+GET {{baseUrl}}/api/admin/modules
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Enable / disable a module for this tenant (disabled ⇒ hidden + uninvocable)
+PUT {{baseUrl}}/api/admin/modules/nutrition
+Content-Type: application/json
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+{ "enabled": false }
+
+# ── Admin: tenants (platform.tenants.manage; cross-tenant, operator-only) ────
+
+### All tenants in the deployment
+GET {{baseUrl}}/api/admin/tenants
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Activate / deactivate a tenant (tenant-wide kill switch; can't deactivate your own)
+PUT {{baseUrl}}/api/admin/tenants/{{tenantId}}/active
+Content-Type: application/json
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+{ "isActive": false }
+
+# ── Admin: per-tenant AI settings (platform.ai.manage) ───────────────────────
+
+### This tenant's AI overrides + the deployment defaults
+GET {{baseUrl}}/api/admin/ai-settings
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Override the tenant's system prompt / conversation token budget (null fields = use default)
+PUT {{baseUrl}}/api/admin/ai-settings
+Content-Type: application/json
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+{ "systemPrompt": "You are a terse assistant.", "maxConversationTokens": 50000 }
+
+# ── Admin: audit + usage (platform.audit.view) ──────────────────────────────
+
+### Recent agent tool-call audit entries
+GET {{baseUrl}}/api/admin/audit/tool-calls?take=50
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Recent identity / authorization events (sign-ins, grants, role & tenant changes)
+GET {{baseUrl}}/api/admin/audit/auth-events?take=50
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Token usage report (totals, by module, by day)
+GET {{baseUrl}}/api/admin/usage?days=30
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+# ── Sample module endpoints ──────────────────────────────────────────────────
+
+### Finance — the tenant's ledger
+GET {{baseUrl}}/api/finance/transactions
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Nutrition — food catalog
+GET {{baseUrl}}/api/nutrition/foods?query=chicken
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Nutrition — log a meal to the diary (macros computed server-side)
+POST {{baseUrl}}/api/nutrition/diary
+Content-Type: application/json
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+{ "foodName": "Chicken breast", "grams": 200 }
+
+### Legal — clause library
+GET {{baseUrl}}/api/legal/clauses
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+# ── Channels: WhatsApp (off by default — Channels:WhatsApp:Enabled=true) ────
+# The webhook is what Meta calls; it is anonymous but HMAC-authenticated.
+# POST bodies must carry X-Hub-Signature-256 = "sha256=" + HMACSHA256(rawBody,
+# AppSecret) — compute one in PowerShell:
+#   $b='<body>'; $k='<AppSecret>'
+#   'sha256=' + (([System.Security.Cryptography.HMACSHA256]::new([Text.Encoding]::UTF8.GetBytes($k))).ComputeHash([Text.Encoding]::UTF8.GetBytes($b)) | ForEach-Object ToString x2) -join ''
+# The E2E suite covers this end to end without Meta: WhatsAppChannelTests.
+
+### Meta webhook verification handshake (echoes hub.challenge when the token matches)
+GET {{baseUrl}}/api/channels/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=<VerifyToken>&hub.challenge=12345
+
+### Inbound message delivery (replace the signature — see comment above)
+POST {{baseUrl}}/api/channels/whatsapp/webhook
+Content-Type: application/json
+X-Hub-Signature-256: sha256=<hmac-of-raw-body>
+
+{"object":"whatsapp_business_account","entry":[{"id":"waba-1","changes":[{"field":"messages","value":{"messaging_product":"whatsapp","contacts":[{"wa_id":"5215550100","profile":{"name":"Dev"}}],"messages":[{"id":"wamid.local-1","from":"5215550100","type":"text","text":{"body":"How much did I spend on groceries?"}}]}}]}]}
+
+# ── Admin: agent profiles, AI settings, tenants, notifications, ops ─────────
+# (Added in the coherence pass — these landed after the original catalog.)
+
+### Agent profiles — list (optionally ?moduleId=legal)
+GET {{baseUrl}}/api/admin/agent-profiles
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Agent profiles — upsert (per-agent instructions + tool selection + model)
+PUT {{baseUrl}}/api/admin/agent-profiles
+Content-Type: application/json
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+{ "moduleId": "legal", "name": "Litigation voice", "instructions": "Answer tersely, litigation posture.", "mode": "Append", "isDefault": true, "toolNames": null, "model": null }
+
+### Agent profiles — delete
+DELETE {{baseUrl}}/api/admin/agent-profiles/00000000-0000-0000-0000-000000000000
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### AI settings — read (provider connection + prompts + budgets; the key is write-only)
+GET {{baseUrl}}/api/admin/ai-settings
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### AI settings — switch the tenant's provider at runtime (apiKey: null=keep, ""=clear, value=replace)
+PUT {{baseUrl}}/api/admin/ai-settings
+Content-Type: application/json
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+{ "systemPrompt": null, "maxConversationTokens": null, "maxMonthlyTokens": null, "provider": "Mock", "model": "demo-model", "endpoint": null, "apiKey": null }
+
+### Create a tenant (operator-only: platform.tenants.manage)
+POST {{baseUrl}}/api/admin/tenants
+Content-Type: application/json
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+{ "name": "Acme Legal LLP", "slug": "acme-legal" }
+
+### Instruction provenance — resolve an assistant message's InstructionsHash to the exact prompt
+GET {{baseUrl}}/api/admin/instruction-snapshots/0000000000000000000000000000000000000000000000000000000000000000
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Notification settings — webhook delivery (secret is write-only)
+GET {{baseUrl}}/api/admin/notification-settings
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Ops snapshot — jobs, connectors, RAG, notifications, AI budget at a glance
+GET {{baseUrl}}/api/admin/ops
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Connectors — installed catalog + this tenant's enablement/settings state (schema included)
+GET {{baseUrl}}/api/admin/connectors
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Connectors — enable for this tenant (connectors are default-off)
+POST {{baseUrl}}/api/admin/connectors/msgraph/enable
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Connectors — disable (turns tools off immediately AND revokes every user's OAuth session)
+POST {{baseUrl}}/api/admin/connectors/msgraph/disable
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Connectors — write settings (omit/null keeps stored value; "" clears; secrets write-only)
+PUT {{baseUrl}}/api/admin/connectors/msgraph/settings
+Content-Type: application/json
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+{ "values": { "Authority": "https://login.microsoftonline.com/common", "ClientId": "your-app-registration-id", "ClientSecret": "replace-me" } }
+
+### My notifications (self-scoped inbox)
+GET {{baseUrl}}/api/notifications
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+# ── Legal — the daily-practice surface (docketing, tasks, time, drill-down) ─
+
+### Chat against the LEGAL module over AG-UI
+POST {{baseUrl}}/api/agui/legal
+Content-Type: application/json
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+{ "messages": [ { "id": "m1", "role": "user", "content": "List my matters" } ] }
+
+### Matters (drives the Matters tab; each row drills into /detail)
+GET {{baseUrl}}/api/legal/matters
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### One matter's working file (the drill-down detail document)
+GET {{baseUrl}}/api/legal/matters/00000000-0000-0000-0000-000000000000/detail
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Open deadlines across matters (soonest first, overdue flagged)
+GET {{baseUrl}}/api/legal/deadlines
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Open tasks across matters
+GET {{baseUrl}}/api/legal/tasks
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Recent time entries (narratives + billable flag)
+GET {{baseUrl}}/api/legal/time
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Playbook rules (the review standard; POST/DELETE are library-manage-gated)
+GET {{baseUrl}}/api/legal/playbook
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}

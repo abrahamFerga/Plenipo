@@ -1,13 +1,13 @@
 packages:
-  # Base platform library (the end-user / domain shell) — publishable as @abrahamferga/cortex-ui
-  - "cortex-ui"
+  # Base platform library (the end-user / domain shell) — publishable as @plenipo/ui
+  - "plenipo-ui"
 
   # Admin console app (security / RBAC / users / token usage / audit) — served at /admin
   - "admin-ui"
 
   # Domain-specific UI packages (future — each vertical ships its own)
-  # - "packages/finance-ui"   # @cortex/finance-ui
-  # - "packages/nutrition-ui" # @cortex/nutrition-ui
+  # - "packages/finance-ui"   # @plenipo/finance-ui
+  # - "packages/nutrition-ui" # @plenipo/nutrition-ui
 
   # Sample / demo applications
   # - "apps/demo"

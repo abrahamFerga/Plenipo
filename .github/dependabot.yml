@@ -1,11 +1,11 @@
-# Automated dependency updates. Cortex is a security-first platform, so keeping its
+# Automated dependency updates. Plenipo is a security-first platform, so keeping its
 # dependencies (and base images, and CI actions) patched is part of the product story,
 # not an afterthought. Minor/patch bumps are grouped to keep PR noise down; majors come
 # as individual PRs so they get a proper review.
 version: 2
 updates:
   # .NET packages — Central Package Management, so versions live in Directory.Packages.props
-  # (covers both Cortex.slnx and samples/Cortex.Samples.slnx, which share it).
+  # (covers both Plenipo.slnx and samples/Plenipo.Samples.slnx, which share it).
   - package-ecosystem: "nuget"
     directory: "/"
     schedule:
@@ -16,7 +16,7 @@ updates:
         patterns: ["*"]
         update-types: ["minor", "patch"]
 
-  # Frontend pnpm WORKSPACE (@abrahamferga/cortex-ui + @cortex/admin-ui). The directory must be the
+  # Frontend pnpm WORKSPACE (@plenipo/ui + @plenipo/admin-ui). The directory must be the
   # workspace ROOT — pnpm-lock.yaml lives there; pointing at a member package makes
   # dependabot bump package.json without the lockfile, and every PR dies on
   # ERR_PNPM_OUTDATED_LOCKFILE under --frozen-lockfile CI.
@@ -41,6 +41,6 @@ updates:
 
   # Base images in the API Dockerfile (dotnet sdk / aspnet).
   - package-ecosystem: "docker"
-    directory: "/src/Cortex.Api"
+    directory: "/src/Plenipo.Api"
     schedule:
       interval: "weekly"

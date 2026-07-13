@@ -1,7 +1,7 @@
-# Build a product on Cortex
+# Build a product on Plenipo
 
 A **product** is its own system — its own repo, host, deployment, and brand — built from the
-Cortex packages. [the-lawyer](https://github.com/abrahamFerga/the-lawyer) is the reference:
+Plenipo packages. [the-lawyer](https://github.com/abrahamFerga/the-lawyer) is the reference:
 the legal domain lives there; the security spine (tenancy, RBAC, approvals, audit, budgets,
 channels, billing) comes from the platform. This guide is the catalog of every seam a product
 customizes — **no forks**. For writing the domain module itself, start with
@@ -11,12 +11,12 @@ customizes — **no forks**. For writing the domain module itself, start with
 
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
-builder.AddCortex();                                   // the platform
+builder.AddPlenipo();                                   // the platform
 
-builder.AddCortexModule<LegalModule>();                // 1. your domain
-builder.AddCortexConnector<GoogleDriveConnector>();    // 2. data sources you offer
+builder.AddPlenipoModule<LegalModule>();                // 1. your domain
+builder.AddPlenipoConnector<GoogleDriveConnector>();    // 2. data sources you offer
 
-builder.Services.AddCortexProduct(new ProductOffering  // 3. what you sell
+builder.Services.AddPlenipoProduct(new ProductOffering  // 3. what you sell
 {
     ProductId = "the-lawyer",
     Plans =
@@ -26,12 +26,12 @@ builder.Services.AddCortexProduct(new ProductOffering  // 3. what you sell
         new ProductPlan { Id = "dedicated", Dedicated = true },
     ],
 });
-builder.Services.AddCortexTenantProvisionedHook<WelcomeEmailHook>();   // 4. act on provisioning
-builder.Services.AddCortexNotificationChannel<SmsChannel>();           // 5. your delivery channels
-builder.Services.AddCortexPlatformTools<OrgContextToolSource>();       // 6. product-wide tools
+builder.Services.AddPlenipoTenantProvisionedHook<WelcomeEmailHook>();   // 4. act on provisioning
+builder.Services.AddPlenipoNotificationChannel<SmsChannel>();           // 5. your delivery channels
+builder.Services.AddPlenipoPlatformTools<OrgContextToolSource>();       // 6. product-wide tools
 
 var app = builder.Build();
-app.UseCortex();
+app.UsePlenipo();
 app.Run();
 ```
 
@@ -39,15 +39,15 @@ app.Run();
 
 | # | You want to… | The seam | Worked example |
 |---|---|---|---|
-| 1 | Ship domain behavior: tools, tabs (with editors and drill-downs), agents, workflows, skills | `IModule` + `ModuleManifest` (incl. `Agents`, `Workflows`, `SkillsPath`) | [BUILDING_A_MODULE.md](BUILDING_A_MODULE.md); `samples/Cortex.Modules.Legal` |
-| 2 | Offer data sources (service or per-user OAuth) — **built-in or your own** | `IConnector` + `AddCortexConnector<T>()`; delegated OAuth URL shape comes from the manifest's `OAuthAuthorizeUrlTemplate`/`OAuthTokenUrlTemplate` (Entra default, Google-style fixed URLs supported). Define a **domain-specific connector in your own repo** (reference `Cortex.Connectors.Sdk` + `Cortex.Modules.Sdk`, implement `IConnector` in your assembly) and register it the same way — the catalog, per-tenant enable/settings, permission gating, and agent-tool exposure are all DI-driven and never keyed to a connector's assembly | built-in: `src/Cortex.Connectors/GoogleDrive`; host-defined: `samples/Cortex.Sample.Host/HostDefinedCrmConnector.cs` |
-| 3 | Sell plans that provision themselves | `AddCortexProduct(new ProductOffering { … })` — the PLAN is authoritative for modules/seats/budget/dedicated, never checkout metadata | `samples/Cortex.Sample.Host/Program.cs` |
-| 4 | Act right after a tenant is provisioned (welcome email, domain seeding, external registration) | `ITenantProvisionedHook` + `AddCortexTenantProvisionedHook<T>()` — post-commit, best-effort, fired for operator AND billing-webhook provisioning | `samples/Cortex.Sample.Host/WelcomeEmailHook.cs` |
-| 5 | Deliver notifications your way (SMS, chat-ops, …) | `INotificationChannel` + `AddCortexNotificationChannel<T>()` — fan-out is best-effort per channel; in-app inbox is always the baseline. Email is built in: configure the `Email:` section | `src/Cortex.Infrastructure/Notifications/EmailNotificationChannel.cs` |
-| 6 | Add product-wide agent tools (offered in every module's chat) | `IPlatformToolSource` + `AddCortexPlatformTools<T>()` — same RBAC gate, approval flags, and audit as everything else | `src/Cortex.Infrastructure/Documents/DocumentToolSource.cs` |
-| 7 | Brand the workspace UI | `<CortexApp branding={{ name, logo }} moduleUi={[…]} />` — name/logo in the shell, custom React per tab via the module UI registry; everything else stays server-driven | `frontend/cortex-ui/README.md` |
-| 8 | Shape identity and roles | `Auth:` config — `PermissionSource` (`Database`/`Token`), `DefaultRole` (what a JIT user gets when their token asserts nothing; empty = permission-less). Declare PRODUCT roles / reshape built-in baselines with `AddCortexRole("paralegal", [...])` — seeded into every tenant, runtime-editable afterwards in Admin → Roles. `system_admin` is never customizable | `samples/Cortex.Sample.Host/Program.cs` |
-| 9 | Swap infrastructure pieces | `ISecretVault` (DataProtection/Key Vault), `IOcrEngine`, `IEmbeddingGenerator`, `ISmtpTransport` — one DI registration each | `src/Cortex.Infrastructure` |
+| 1 | Ship domain behavior: tools, tabs (with editors and drill-downs), agents, workflows, skills | `IModule` + `ModuleManifest` (incl. `Agents`, `Workflows`, `SkillsPath`) | [BUILDING_A_MODULE.md](BUILDING_A_MODULE.md); `samples/Plenipo.Modules.Legal` |
+| 2 | Offer data sources (service or per-user OAuth) — **built-in or your own** | `IConnector` + `AddPlenipoConnector<T>()`; delegated OAuth URL shape comes from the manifest's `OAuthAuthorizeUrlTemplate`/`OAuthTokenUrlTemplate` (Entra default, Google-style fixed URLs supported). Define a **domain-specific connector in your own repo** (reference `Plenipo.Connectors.Sdk` + `Plenipo.Modules.Sdk`, implement `IConnector` in your assembly) and register it the same way — the catalog, per-tenant enable/settings, permission gating, and agent-tool exposure are all DI-driven and never keyed to a connector's assembly | built-in: `src/Plenipo.Connectors/GoogleDrive`; host-defined: `samples/Plenipo.Sample.Host/HostDefinedCrmConnector.cs` |
+| 3 | Sell plans that provision themselves | `AddPlenipoProduct(new ProductOffering { … })` — the PLAN is authoritative for modules/seats/budget/dedicated, never checkout metadata | `samples/Plenipo.Sample.Host/Program.cs` |
+| 4 | Act right after a tenant is provisioned (welcome email, domain seeding, external registration) | `ITenantProvisionedHook` + `AddPlenipoTenantProvisionedHook<T>()` — post-commit, best-effort, fired for operator AND billing-webhook provisioning | `samples/Plenipo.Sample.Host/WelcomeEmailHook.cs` |
+| 5 | Deliver notifications your way (SMS, chat-ops, …) | `INotificationChannel` + `AddPlenipoNotificationChannel<T>()` — fan-out is best-effort per channel; in-app inbox is always the baseline. Email is built in: configure the `Email:` section | `src/Plenipo.Infrastructure/Notifications/EmailNotificationChannel.cs` |
+| 6 | Add product-wide agent tools (offered in every module's chat) | `IPlatformToolSource` + `AddPlenipoPlatformTools<T>()` — same RBAC gate, approval flags, and audit as everything else | `src/Plenipo.Infrastructure/Documents/DocumentToolSource.cs` |
+| 7 | Brand the workspace UI | `<PlenipoApp branding={{ name, logo }} moduleUi={[…]} />` — name/logo in the shell, custom React per tab via the module UI registry; everything else stays server-driven | `frontend/plenipo-ui/README.md` |
+| 8 | Shape identity and roles | `Auth:` config — `PermissionSource` (`Database`/`Token`), `DefaultRole` (what a JIT user gets when their token asserts nothing; empty = permission-less). Declare PRODUCT roles / reshape built-in baselines with `AddPlenipoRole("paralegal", [...])` — seeded into every tenant, runtime-editable afterwards in Admin → Roles. `system_admin` is never customizable | `samples/Plenipo.Sample.Host/Program.cs` |
+| 9 | Swap infrastructure pieces | `ISecretVault` (DataProtection/Key Vault), `IOcrEngine`, `IEmbeddingGenerator`, `ISmtpTransport` — one DI registration each | `src/Plenipo.Infrastructure` |
 
 ## Rules the platform holds for you (don't fight them)
 
@@ -62,16 +62,16 @@ app.Run();
   global query filter; background code sets tenant ids explicitly.
 - **Keyless by default**: everything above is testable with the Mock provider, the fake IdP,
   and recording seams — a product's CI needs no external accounts. Copy the patterns in
-  `samples/Cortex.Sample.Host.IntegrationTests`.
+  `samples/Plenipo.Sample.Host.IntegrationTests`.
 
 ## Shipping the web UI (no npm registry needed)
 
-The `@cortex/*` frontend packages don't need a registry to reach production. The API serves
+The `@plenipo/*` frontend packages don't need a registry to reach production. The API serves
 the SPA itself, same origin, no CORS, no asset host — and the shell asks the host who it is at
 runtime, so the bundles are **brand-agnostic**:
 
-**Preferred — download from a Cortex release (no checkout, no pnpm):** every GitHub Release
-attaches `cortex-ui-app.zip` and `cortex-admin-ui.zip` (built with a same-origin API base),
+**Preferred — download from a Plenipo release (no checkout, no pnpm):** every GitHub Release
+attaches `plenipo-ui-app.zip` and `plenipo-admin-ui.zip` (built with a same-origin API base),
 plus all the nupkgs. Unzip into your host's `wwwroot/app` and `wwwroot/admin`, set your name in
 configuration, done:
 
@@ -82,7 +82,7 @@ configuration, done:
 
 **Alternative — build from a checkout** (when you're changing the frontend itself):
 
-1. `VITE_API_BASE= pnpm -C frontend/cortex-ui build:app` → copy `dist-app/` to `wwwroot/app`
+1. `VITE_API_BASE= pnpm -C frontend/plenipo-ui build:app` → copy `dist-app/` to `wwwroot/app`
    (served at `/`, with an `index.html` fallback for client-side deep links; `/api`, `/admin`,
    `/hubs`, health, and OpenAPI are never shadowed). `VITE_BRAND_NAME` still works as a
    build-time bake, but runtime `Branding:ProductName` supersedes it.

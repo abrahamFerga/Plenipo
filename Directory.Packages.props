@@ -1,6 +1,6 @@
 <Project>
   <!--
-    Central Package Management for Cortex.
+    Central Package Management for Plenipo.
     Every PackageReference across the solution gets its version from here.
     Individual .csproj files reference packages WITHOUT a Version attribute.
   -->
@@ -71,7 +71,7 @@
     <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.16.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.16.0" />
   </ItemGroup>
-  <ItemGroup Label="CLI (cortex init wizard)">
+  <ItemGroup Label="CLI (plenipo init wizard)">
     <!-- Spectre.Console + .Cli: MIT-licensed terminal UI and command parsing. -->
     <PackageVersion Include="Spectre.Console" Version="0.57.2" />
     <PackageVersion Include="Spectre.Console.Cli" Version="0.55.0" />

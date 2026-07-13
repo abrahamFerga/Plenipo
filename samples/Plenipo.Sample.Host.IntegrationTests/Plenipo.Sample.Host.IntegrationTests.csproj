@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Plenipo.Sample.Host\Plenipo.Sample.Host.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Label="Golden-conversation eval cases (data, not code)">
+    <Content Include="Evals\cases\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

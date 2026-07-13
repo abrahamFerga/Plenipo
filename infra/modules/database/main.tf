@@ -2,8 +2,8 @@
 # module: database
 # -----------------------------------------------------------------------------
 # Two independently credentialed PostgreSQL Flexible Servers (v17):
-#   - cortex_platform : operational data
-#   - cortex_audit    : append-only audit log
+#   - plenipo_platform : operational data
+#   - plenipo_audit    : append-only audit log
 # Both admin passwords are generated (random_password) and surfaced as sensitive
 # outputs so the keyvault module can store the connection strings. Optional AAD admin + firewall.
 # =============================================================================
@@ -110,7 +110,7 @@ resource "azurerm_postgresql_flexible_server_configuration" "extensions" {
 # Databases
 # ---------------------------------------------------------------------------
 resource "azurerm_postgresql_flexible_server_database" "platform" {
-  name      = "cortex_platform"
+  name      = "plenipo_platform"
   server_id = azurerm_postgresql_flexible_server.this.id
   charset   = "UTF8"
   collation = "en_US.utf8"
@@ -121,7 +121,7 @@ resource "azurerm_postgresql_flexible_server_database" "platform" {
 }
 
 resource "azurerm_postgresql_flexible_server_database" "audit" {
-  name      = "cortex_audit"
+  name      = "plenipo_audit"
   server_id = azurerm_postgresql_flexible_server.audit.id
   charset   = "UTF8"
   collation = "en_US.utf8"

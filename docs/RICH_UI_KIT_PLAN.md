@@ -4,20 +4,20 @@ Directive (2026-07-11): Networthy's `PLAN.md` v2 (epics 8–14, see
 [abrahamFerga/networthy](https://github.com/abrahamFerga/networthy)) planned a home dashboard,
 richer visualization, mobile-responsive tables, risk-tiered AI approvals, and two-factor auth,
 then flagged an open question: does any of that need platform work, or is it all product-side?
-This doc is the answer, verified against the actual `frontend/cortex-ui` source rather than
+This doc is the answer, verified against the actual `frontend/plenipo-ui` source rather than
 assumed — and the plan for the pieces that turned out to be genuine platform gaps. Every
-generic primitive here is written once and inherited by every product on Cortex (Networthy
+generic primitive here is written once and inherited by every product on Plenipo (Networthy
 today; Casewell and whoever's next tomorrow), same as every prior wave.
 
 Loop protocol: one phase per pass — implement, build, test, commit, mark the checkbox, yield.
 
 ## Research notes
 
-Checked against the real component inventory in `frontend/cortex-ui/src/components`, not the
+Checked against the real component inventory in `frontend/plenipo-ui/src/components`, not the
 consuming product's assumptions:
 
 - **The "bespoke dashboard" question is already answered — no new seam needed.**
-  `BUILDING_A_PRODUCT.md` seam #7 (`<CortexApp moduleUi={[…]} />`) and `ModuleTabView`'s
+  `BUILDING_A_PRODUCT.md` seam #7 (`<PlenipoApp moduleUi={[…]} />`) and `ModuleTabView`'s
   `component` prop already let a product register custom React per tab, falling back to the
   generic `GenericTab` otherwise. A product-specific Home/Overview screen composing whatever
   cards that product wants is a **product-side** decision (does it adopt the checkout-based
@@ -42,7 +42,7 @@ consuming product's assumptions:
   has a masked/reveal-toggle mode, despite `[Pii]` already being a first-class attribute the
   guardrails require every product to tag.
 - **No 2FA/passkey/WebAuthn/TOTP exists anywhere in `src`.** Confirmed by a full-repo grep.
-  Squarely a platform auth concern per `AddCortexAuthentication`'s existing shape — every product
+  Squarely a platform auth concern per `AddPlenipoAuthentication`'s existing shape — every product
   inherits it for free once it lands here, the same reasoning that put OIDC and RBAC in the
   platform instead of each product re-deriving them.
 - **No personal-access-token / API-key issuance exists.** `AuthorizationSourceOptions`'s
@@ -108,7 +108,7 @@ consuming product's assumptions:
   `before`/`after` object pair (rendered as a field-by-field diff). Conventions cost a module
   nothing to adopt: declare the parameter, the agent fills it, the card explains itself.
 - [x] **Phase 6 — MFA enforcement (the honest version of "2FA/passkey")**: the original phase
-  text assumed a platform credential store; verifying `AddCortexAuthentication` showed there is
+  text assumed a platform credential store; verifying `AddPlenipoAuthentication` showed there is
   none — production auth is JWT bearer from an external IdP (Entra External ID; Keycloak et al.
   for self-hosters), dev is header-based, anything else fails fast at startup. TOTP/passkey
   *enrollment* therefore belongs to the IdP, which supports it natively, and building a parallel

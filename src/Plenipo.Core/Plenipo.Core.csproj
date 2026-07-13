@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Pure domain layer: entities, value objects, abstractions. No external dependencies. -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>Plenipo.Core</PackageId>
+    <Description>Core domain primitives for the Plenipo AI platform — entities, multi-tenancy interfaces, result types.</Description>
+  </PropertyGroup>
+
+</Project>

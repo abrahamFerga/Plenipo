@@ -51,7 +51,7 @@ Sources: [Microsoft.Extensions.AI docs](https://learn.microsoft.com/en-us/dotnet
 
 ---
 
-## Recommendations for Cortex (.NET + Postgres, existing tenant filters / dotted permissions / ACL seam / job runner)
+## Recommendations for Plenipo (.NET + Postgres, existing tenant filters / dotted permissions / ACL seam / job runner)
 
 1. **Chunk table shape**: `chunks(id, tenant_id, collection_id, document_id, ordinal, text, tsv tsvector, embedding vector(n), embedding_model, page_from, page_to, span_start, span_end, content_hash, acl_snapshot…)`. Reuse your tenant global query filter on it; add **RLS as a backstop** with `tenant_id`-leading composite indexes — matches how you'd defend the raw SQL that hybrid search inevitably needs.
 2. **Adopt the Azure-style trimming model on Postgres**: denormalize *coarse* access metadata onto chunks (collection/project id + your resource-ACL principal list), filter at query time inside the SQL, and re-check the per-resource ACL seam (owner/editor/viewer) on the final top-k before generation — a cheap "fail-closed" post-check exactly like Harvey's. Treat denormalized ACLs as a cache with a staleness contract; your background-job runner (captured-permission execution is a perfect fit) re-syncs ACL changes to chunk rows.

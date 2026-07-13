@@ -1,5 +1,5 @@
 variable "name_prefix" {
-  description = "Naming prefix, e.g. cortex-dev."
+  description = "Naming prefix, e.g. plenipo-dev."
   type        = string
 }
 
@@ -21,7 +21,7 @@ variable "tags" {
 
 # --- Image / sizing ----------------------------------------------------------
 variable "image" {
-  description = "Container image for Cortex.Api (ACR repo:tag or placeholder)."
+  description = "Container image for Plenipo.Api (ACR repo:tag or placeholder)."
   type        = string
 }
 

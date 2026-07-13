@@ -1,14 +1,14 @@
-# Cortex architecture
+# Plenipo architecture
 
-This is the map of how Cortex fits together — read it after [GETTING_STARTED.md](GETTING_STARTED.md) if you
+This is the map of how Plenipo fits together — read it after [GETTING_STARTED.md](GETTING_STARTED.md) if you
 want to understand the codebase or build a vertical on it.
 
-## What Cortex is
+## What Plenipo is
 
-Cortex is a **base platform for AI-first, chat-first products**. The thesis: every "AI app for industry X"
+Plenipo is a **base platform for AI-first, chat-first products**. The thesis: every "AI app for industry X"
 needs the same backbone — a chat assistant with tools, tenant isolation, role-based access, an audit trail,
 cost tracking, and a dashboard — and differs only in its *domain* (the tools, data, and instructions). So
-Cortex makes the backbone a reusable platform and the domain a **module**.
+Plenipo makes the backbone a reusable platform and the domain a **module**.
 
 - The platform ships as **NuGet packages** (backend) and an **npm library** (frontend).
 - A product is a thin **host** that installs one or more modules; it is not a fork of the platform.
@@ -23,12 +23,12 @@ user isn't allowed to invoke. Side-effecting tools are gated further by **human-
 ```mermaid
 flowchart TD
   subgraph platform["Base platform — publishable packages"]
-    Core["Cortex.Core<br/>entities, multi-tenancy, results"]
-    Sdk["Cortex.Modules.Sdk<br/>IModule, ModuleManifest, ToolDescriptor"]
-    App["Cortex.Application<br/>RBAC, agent + audit contracts, AI options"]
-    Infra["Cortex.Infrastructure<br/>EF Core, agent runner, AI providers, audit"]
-    Web["Cortex.AspNetCore<br/>auth, endpoints, SignalR, AG-UI, module host"]
-    SD["Cortex.ServiceDefaults<br/>Aspire: OTel, health, resilience"]
+    Core["Plenipo.Core<br/>entities, multi-tenancy, results"]
+    Sdk["Plenipo.Modules.Sdk<br/>IModule, ModuleManifest, ToolDescriptor"]
+    App["Plenipo.Application<br/>RBAC, agent + audit contracts, AI options"]
+    Infra["Plenipo.Infrastructure<br/>EF Core, agent runner, AI providers, audit"]
+    Web["Plenipo.AspNetCore<br/>auth, endpoints, SignalR, AG-UI, module host"]
+    SD["Plenipo.ServiceDefaults<br/>Aspire: OTel, health, resilience"]
   end
 
   Core --> Sdk --> App --> Infra --> Web
@@ -36,11 +36,11 @@ flowchart TD
 
   Module["A domain module<br/>(Finance / Nutrition / Legal / yours)"]
   Module -. implements .-> Sdk
-  Host["Your API host<br/>(samples/Cortex.Sample.Host)"]
+  Host["Your API host<br/>(samples/Plenipo.Sample.Host)"]
   Host --> Web
-  Host -. "AddCortexModule" .-> Module
-  UI["@abrahamferga/cortex-ui (React)<br/>domain shell"] -- "/api/platform/modules" --> Host
-  Admin["@cortex/admin-ui<br/>admin console @ /admin"] -- "/api/admin/*" --> Host
+  Host -. "AddPlenipoModule" .-> Module
+  UI["@plenipo/ui (React)<br/>domain shell"] -- "/api/platform/modules" --> Host
+  Admin["@plenipo/admin-ui<br/>admin console @ /admin"] -- "/api/admin/*" --> Host
 ```
 
 ## A chat turn, end to end
@@ -104,7 +104,7 @@ public interface IModule
 
 The three sample verticals show the spectrum: **Finance** (stateful — learns categories, budgets, HITL
 transaction recording), **Nutrition** and **Legal** (stateless reference data + drafting). The host installs
-them with `builder.AddCortexModule<FinanceModule>()`.
+them with `builder.AddPlenipoModule<FinanceModule>()`.
 
 ## Data & multi-tenancy
 
@@ -163,8 +163,8 @@ drives from the admin console.
 
 ## Observability
 
-`Cortex.ServiceDefaults` wires OpenTelemetry (ASP.NET Core + HttpClient + runtime). The agent pipeline is
-additionally instrumented under the **`Cortex.Agents`** source, so agent runs and LLM calls (with token
+`Plenipo.ServiceDefaults` wires OpenTelemetry (ASP.NET Core + HttpClient + runtime). The agent pipeline is
+additionally instrumented under the **`Plenipo.Agents`** source, so agent runs and LLM calls (with token
 usage) surface in the **Aspire dashboard** alongside HTTP and database activity.
 
 ## Frontend
@@ -172,18 +172,18 @@ usage) surface in the **Aspire dashboard** alongside HTTP and database activity.
 The frontend is **two surfaces**, deliberately separated so the product UI can be adapted/branded per host
 while operator administration stays generic and consistent across every deployment:
 
-- **`@abrahamferga/cortex-ui`** — the **end-user / domain** shell (a React + Vite library). It is **server-driven**: it
+- **`@plenipo/ui`** — the **end-user / domain** shell (a React + Vite library). It is **server-driven**: it
   builds the module switcher, tabs, and routes entirely from `GET /api/platform/modules`, so installing a
   backend module automatically adds its UI. It talks to the agent over SignalR (and ships an AG-UI client)
   and shows per-turn token usage. Domain-specific UI ships as separate packages that depend on it; the base
   library carries no vertical-specific and no admin code. It also re-exports the API/auth client layer
   (`api`, `useMe`, `hasPermission`, admin types) that the admin console consumes.
-- **`@cortex/admin-ui`** — the **admin console** (a standalone app, not a library): the security map, a
+- **`@plenipo/admin-ui`** — the **admin console** (a standalone app, not a library): the security map, a
   **schema-driven role editor** (every permission toggle derived from the live catalog, so a new module's
   tools appear with no UI change — plus a free-text escape hatch for wildcards), users & grants,
-  token-usage, and audit views. It reuses `@abrahamferga/cortex-ui`'s client layer and is served at
+  token-usage, and audit views. It reuses `@plenipo/ui`'s client layer and is served at
   `/admin` — by its own Vite dev server in development, or by the API host in an integrated deployment via
-  `app.UseCortexAdminConsole()` (Cortex's analogue of OpenClaw's "control UI built into the gateway"). The
+  `app.UsePlenipoAdminConsole()` (Plenipo's analogue of OpenClaw's "control UI built into the gateway"). The
   console is just static assets; the `/api/admin/*` endpoints it reads stay RBAC-gated server-side, so the
   API — not the asset host — remains the security boundary.
 
@@ -191,14 +191,14 @@ while operator administration stays generic and consistent across every deployme
 
 | Concern | Start here |
 |---------|-----------|
-| Chat security spine | `src/Cortex.Infrastructure/Agents/AuthorizedAgentRunner.cs` |
-| Tool audit + approval gate | `src/Cortex.Infrastructure/Agents/ToolInvocationMiddleware.cs` |
-| Module contract | `src/Cortex.Modules.Sdk/IModule.cs`, `ModuleManifest.cs` |
-| RBAC | `src/Cortex.Application/Authorization/` |
-| Multi-tenancy | `src/Cortex.Infrastructure/Persistence/PlatformDbContext.cs` |
-| Endpoints (platform/chat/admin/approvals/AG-UI) | `src/Cortex.AspNetCore/Endpoints/` |
-| Serving the admin console at `/admin` | `src/Cortex.AspNetCore/Hosting/AdminConsoleExtensions.cs` |
-| Domain (end-user) UI | `frontend/cortex-ui/` (`@abrahamferga/cortex-ui`) |
-| Admin console app | `frontend/admin-ui/` (`@cortex/admin-ui`) |
-| A worked example module | `samples/Cortex.Modules.Finance/` |
+| Chat security spine | `src/Plenipo.Infrastructure/Agents/AuthorizedAgentRunner.cs` |
+| Tool audit + approval gate | `src/Plenipo.Infrastructure/Agents/ToolInvocationMiddleware.cs` |
+| Module contract | `src/Plenipo.Modules.Sdk/IModule.cs`, `ModuleManifest.cs` |
+| RBAC | `src/Plenipo.Application/Authorization/` |
+| Multi-tenancy | `src/Plenipo.Infrastructure/Persistence/PlatformDbContext.cs` |
+| Endpoints (platform/chat/admin/approvals/AG-UI) | `src/Plenipo.AspNetCore/Endpoints/` |
+| Serving the admin console at `/admin` | `src/Plenipo.AspNetCore/Hosting/AdminConsoleExtensions.cs` |
+| Domain (end-user) UI | `frontend/plenipo-ui/` (`@plenipo/ui`) |
+| Admin console app | `frontend/admin-ui/` (`@plenipo/admin-ui`) |
+| A worked example module | `samples/Plenipo.Modules.Finance/` |
 | Infra (Azure) | `infra/` (Terraform) + `.github/workflows/` |

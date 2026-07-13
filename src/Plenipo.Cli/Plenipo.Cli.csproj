@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The `plenipo` CLI (OpenClaw-style installer): `plenipo init` walks channels/AI/RAG/auth choices
+       (or takes them as flags for scripting) and writes one declarative plenipo.settings.json the
+       platform host layers into its configuration. Secrets are never written — the wizard prints
+       the matching `dotnet user-secrets` commands instead. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>true</IsPackable>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>plenipo</ToolCommandName>
+    <PackageId>Plenipo.Cli</PackageId>
+    <Description>Plenipo installer CLI — `plenipo init` configures a Plenipo host (AI provider, RAG, channels, auth) interactively or via flags.</Description>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Spectre.Console" />
+    <PackageReference Include="Spectre.Console.Cli" />
+  </ItemGroup>
+
+</Project>

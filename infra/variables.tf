@@ -11,7 +11,7 @@
 variable "project" {
   description = "Project name; used as the lowercase naming prefix for all resources."
   type        = string
-  default     = "cortex"
+  default     = "plenipo"
 
   validation {
     condition     = can(regex("^[a-z][a-z0-9]{1,10}$", var.project))
@@ -23,7 +23,7 @@ variable "environment" {
   description = <<-EOT
     Deployment environment — part of every resource name. dev/staging/prod for the shared
     SaaS rings, or a CUSTOMER SLUG (lowercase kebab) for a dedicated per-customer environment
-    (the deploy-customer workflow passes the slug here, giving cortex-<slug>-* resources and
+    (the deploy-customer workflow passes the slug here, giving plenipo-<slug>-* resources and
     a tenants/<slug>.tfstate state of their own).
   EOT
   type        = string
@@ -41,7 +41,7 @@ variable "location" {
 }
 
 variable "extra_tags" {
-  description = "Additional tags merged on top of the standard cortex tag set."
+  description = "Additional tags merged on top of the standard plenipo tag set."
   type        = map(string)
   default     = {}
 }
@@ -64,7 +64,7 @@ variable "postgres_storage_mb" {
 variable "postgres_admin_username" {
   description = "Administrator login for the PostgreSQL server."
   type        = string
-  default     = "cortexadmin"
+  default     = "plenipoadmin"
 }
 
 variable "postgres_aad_admin_object_id" {
@@ -107,10 +107,10 @@ variable "redis_capacity" {
 }
 
 # ----------------------------------------------------------------------------
-# Container App (Cortex.Api)
+# Container App (Plenipo.Api)
 # ----------------------------------------------------------------------------
 variable "api_image" {
-  description = "Fully-qualified container image for Cortex.Api. The deploy pipeline overrides this with the freshly-pushed ACR image:tag."
+  description = "Fully-qualified container image for Plenipo.Api. The deploy pipeline overrides this with the freshly-pushed ACR image:tag."
   type        = string
   default     = "mcr.microsoft.com/dotnet/aspnet:10.0"
 }
@@ -192,7 +192,7 @@ variable "github_owner" {
 variable "github_repo" {
   description = "GitHub repository name (for OIDC federated credential subjects)."
   type        = string
-  default     = "Cortex"
+  default     = "Plenipo"
 }
 
 variable "github_environments" {

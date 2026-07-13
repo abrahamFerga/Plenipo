@@ -4,18 +4,18 @@
 
 Accepted — Option A, plus the config-gate half of Option B (2026-07-11): `Modules:Exclude` /
 `Connectors:Exclude` let a deployment suppress compiled-in components by configuration alone, and
-`AddCortexConnectorsFrom(assembly)` registers a whole connector package in one call (the built-in
-bundle exposes it as `AddCortexConnectors()`). The assembly-directory loading half of Option B —
+`AddPlenipoConnectorsFrom(assembly)` registers a whole connector package in one call (the built-in
+bundle exposes it as `AddPlenipoConnectors()`). The assembly-directory loading half of Option B —
 loading modules a host never referenced at compile time — remains not adopted: no host has needed
 it, and its `AssemblyLoadContext` complexity stands.
 
 ## Context
 
-Cortex's module system (`IModule`, see [ARCHITECTURE.md](../../ARCHITECTURE.md#the-module-system)) already
+Plenipo's module system (`IModule`, see [ARCHITECTURE.md](../../ARCHITECTURE.md#the-module-system)) already
 lets a vertical register its own HTTP routes via `MapEndpoints(IEndpointRouteBuilder)` and its own services
 via `RegisterServices(IServiceCollection, IConfiguration)`. Today every installed module runs **in the same
-process** as the host (`samples/Cortex.Sample.Host`), registered with `builder.AddCortexModule<TModule>()`.
-Neither `src/Cortex.AppHost/AppHost.cs` nor `samples/Cortex.Sample.AppHost/AppHost.cs` orchestrates module
+process** as the host (`samples/Plenipo.Sample.Host`), registered with `builder.AddPlenipoModule<TModule>()`.
+Neither `src/Plenipo.AppHost/AppHost.cs` nor `samples/Plenipo.Sample.AppHost/AppHost.cs` orchestrates module
 code as a separate container — there is exactly one API resource per AppHost.
 
 The question raised: should individual API endpoints (or modules) become independently injectable units —
@@ -25,7 +25,7 @@ independently?
 
 This matters because the platform's core security guarantee — **tool security before the model call** — is
 enforced by `AuthorizedAgentRunner` filtering the *in-process* `IModuleToolSource` registrations against the
-caller's permissions before the LLM ever sees a tool schema (see `src/Cortex.Infrastructure/Agents/
+caller's permissions before the LLM ever sees a tool schema (see `src/Plenipo.Infrastructure/Agents/
 AuthorizedAgentRunner.cs`). Any change to how modules are composed has to preserve that pre-model-call
 filtering, the dual-database audit trail, and the global tenant query filters — all of which currently rely
 on shared `IServiceProvider`/`DbContext` state within one process.
@@ -44,7 +44,7 @@ on shared `IServiceProvider`/`DbContext` state within one process.
 
 ### A — Status quo: in-process DI modules (current)
 
-Modules are plain assemblies installed via `AddCortexModule<T>()`. Pluggability is at the **compile/install**
+Modules are plain assemblies installed via `AddPlenipoModule<T>()`. Pluggability is at the **compile/install**
 boundary (which modules a host references), not at runtime.
 
 - ✅ Tool filtering, audit, and tenant isolation work unmodified — they already assume one `IServiceProvider`.
@@ -56,7 +56,7 @@ boundary (which modules a host references), not at runtime.
 ### B — Formalize a runtime DI plugin seam (assembly-load or config-gated modules)
 
 Extend `IModule` discovery so modules can be loaded by convention (e.g., a `modules/` directory of assemblies
-scanned at startup, gated by config/feature flag) instead of a hard-coded `AddCortexModule<T>()` call per
+scanned at startup, gated by config/feature flag) instead of a hard-coded `AddPlenipoModule<T>()` call per
 module, while still running in-process.
 
 - ✅ Keeps everything from Option A's security/audit guarantees (still one process, one `IServiceProvider`).
@@ -91,7 +91,7 @@ need that outweighs re-deriving the security spine across process boundaries —
 reconsidered as its own ADR scoped to *that* module, not a platform-wide default.
 
 Endpoints remain registered via `IModule.MapEndpoints` into a single host process per AppHost. "Pluggability"
-in Cortex means *which modules a host installs*, not *which container an endpoint runs in*.
+in Plenipo means *which modules a host installs*, not *which container an endpoint runs in*.
 
 ## Consequences
 

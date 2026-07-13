@@ -1,0 +1,14 @@
+{
+  // Emits the public TypeScript declarations for the @plenipo/ui package into dist/ (the dev/app
+  // tsconfig uses noEmit). Run after `vite build` so consumers get types alongside the JS bundles.
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  // Unit tests live next to the code but must not ship in the package's public declarations.
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
+}

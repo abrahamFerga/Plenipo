@@ -1,12 +1,12 @@
 # Legal AI vertical — market research & v1 plan
 
-*Prepared July 2026 for the Cortex legal vertical. Current state: `samples/Cortex.Modules.Legal` is a thin, stateless clause-library + drafting demo (8 hardcoded clauses, `search_clauses` / `draft_clause` tools, a placeholder Matters tab). This report maps the market (Harvey and its competitors), fixes the ownership boundary vs. practice-management systems, and derives a v1 scope where each feature composes an existing Cortex primitive.*
+*Prepared July 2026 for the Plenipo legal vertical. Current state: `samples/Plenipo.Modules.Legal` is a thin, stateless clause-library + drafting demo (8 hardcoded clauses, `search_clauses` / `draft_clause` tools, a placeholder Matters tab). This report maps the market (Harvey and its competitors), fixes the ownership boundary vs. practice-management systems, and derives a v1 scope where each feature composes an existing Plenipo primitive.*
 
 ## Executive summary
 
 - The legal-AI market has converged on a standard shape: **cited document Q&A + matter workspaces + bulk docs×questions review + playbook redlining + template drafting + agentic workflows**, wrapped in an enterprise security posture. These are table stakes, not differentiators.
 - The **ownership boundary** is settled and every successful vendor respects it: AI products own analysis, drafting, workflows, and a matter-scoped permission model; they **integrate with** (never rebuild) practice management (matters-of-record, billing, trust accounting, intake), DMS (iManage/NetDocuments), docketing (LawToolBox-class), and wall/conflict policy (Intapp).
-- **Cortex is unusually well positioned** for this vertical: the platform's document tools (`read_document`/`generate_pdf`/OCR seam), tenant file store, chat-attachment convention, HITL approvals, pre-model-call tool authorization, append-only audit, and WhatsApp channel map almost one-to-one onto the table-stakes list. The lawyer scenario ("store this as part of the case of Julia Assange") is literally the worked example in `docs/DOCUMENT_TOOLS.md`.
+- **Plenipo is unusually well positioned** for this vertical: the platform's document tools (`read_document`/`generate_pdf`/OCR seam), tenant file store, chat-attachment convention, HITL approvals, pre-model-call tool authorization, append-only audit, and WhatsApp channel map almost one-to-one onto the table-stakes list. The lawyer scenario ("store this as part of the case of Julia Assange") is literally the worked example in `docs/DOCUMENT_TOOLS.md`.
 - v1 = a **Matter-centric legal module**: matter entity + attach-document + cited Q&A + tenant playbook + PDF drafting + playbook review, then bulk review and guided workflows. The only genuinely new platform primitive needed is a background-job seam for long-running bulk review.
 - Ship it **in this repo first**, extract to its own repo when the GitHub remote + package publishing go live.
 
@@ -48,7 +48,7 @@ Harvey (100,000+ legal professionals, 1,000+ customers, 60+ countries, more than
 | **Luminance** | ✓ 80+ langs | ✓ CLM repo | ✓ diligence | ✓ | ✓ | ✓ | — | ✓ Panel of Judges | ✓ | ✓ Autopilot | ◐ | ✓ CLM |
 | **Robin AI** | ✓ | ✓ repository | ✓ Reports | ✓ Reviews | ✓ Draft | ✓ | — | ◐ | ✓ Agent | ◐ NDA-only | — | ✓ CMS |
 | **Paxton** | ✓ | ◐ | ◐ | ◐ | ✓ | — | ✓ Citator | ✓ Confidence | ◐ | — | — | — |
-| **Cortex Legal v1 (target)** | ✓ file-id cites | ✓ Matters | ◐ matter-scale | ◐ red-flags | ✓ PDF | — post-v1 | — post-v1 | ◐ cites+HITL+audit | ✓ tools+approvals | — | — (WhatsApp intake) | — post-v1 |
+| **Plenipo Legal v1 (target)** | ✓ file-id cites | ✓ Matters | ◐ matter-scale | ◐ red-flags | ✓ PDF | — post-v1 | — post-v1 | ◐ cites+HITL+audit | ✓ tools+approvals | — | — (WhatsApp intake) | — post-v1 |
 
 Legend: ✓ shipped/core · ◐ partial/adjacent · — absent.
 
@@ -73,13 +73,13 @@ Synthesis across Clio/MyCase/Smokeball/Actionstep vs. Harvey/CoCounsel/Vincent:
 
 **GRAY ZONE (AI may generate, PM owns the ledger):** suggested time entries/billing narratives from activity, matter summarization, intake-form triage.
 
-**ANTI-PATTERN:** minting your own canonical matter IDs, storing canonical documents, or running a billing ledger. Note for us: Cortex matters are workspaces; when a firm has a PM/DMS, our Matter entity should carry an external client-matter reference rather than pretend to be the system of record.
+**ANTI-PATTERN:** minting your own canonical matter IDs, storing canonical documents, or running a billing ledger. Note for us: Plenipo matters are workspaces; when a firm has a PM/DMS, our Matter entity should carry an external client-matter reference rather than pretend to be the system of record.
 
 **The boundary is moving from the PM side too:** Clio bought vLex ($1B) to fuse Vincent AI in; Smokeball embeds CoCounsel; MyCase IQ does matter Q&A natively. PM systems will pull commodity AI in — which is why the AI layer must be *better at analysis/workflows*, not try to out-PM them.
 
-## 5. Platform fit: what Cortex already gives us
+## 5. Platform fit: what Plenipo already gives us
 
-| Legal need (table stake) | Cortex primitive, today |
+| Legal need (table stake) | Plenipo primitive, today |
 |---|---|
 | Matter workspaces | Module-owned DbContext + `TenantId` global query filters + server-driven tabs (`TabDescriptor` with `DataEndpoint`/`Columns`) |
 | Document ingest | Tenant file store (`IFileStore`, `stored_files`, local/Azure Blob), chat attachments, `POST /api/files` |
@@ -98,7 +98,7 @@ Synthesis across Clio/MyCase/Smokeball/Actionstep vs. Harvey/CoCounsel/Vincent:
 
 Bias: features the platform makes cheap first; the one new platform primitive (background jobs) deferred to the single feature that needs it.
 
-| # | Feature | Composes (existing Cortex primitive) | Effort |
+| # | Feature | Composes (existing Plenipo primitive) | Effort |
 |---|---|---|---|
 | 1 | **Matter entity + live Matters tab** (create/list; retire placeholder) | Module DbContext + migrations (Finance/Nutrition pattern); tenant query filters; `TabDescriptor` DataEndpoint/Columns; `create_matter` (RequiresApproval) / `list_matters` tools | Medium |
 | 2 | **`attach_document_to_matter`** + per-matter doc list | `StoredFile`/`IFileStore` + chat-attachment file-id convention + the exact sketch in DOCUMENT_TOOLS.md + HITL gate | Small |
@@ -115,7 +115,7 @@ Bias: features the platform makes cheap first; the one new platform primitive (b
 
 ## 7. Product naming
 
-"Cortex for Lawyer" is uncommercial. Candidates (collision-checked July 2026 where noted):
+"Plenipo for Lawyer" is uncommercial. Candidates (collision-checked July 2026 where noted):
 
 | Name | Rationale | Collision status |
 |---|---|---|
@@ -135,8 +135,8 @@ Eliminated by checks: **Chancery** (chancery.ai, UK legal AI), **Paralex** (para
 
 **Incubate here now; extract at first tagged release.** The README's end state (products are thin hosts in their own repos consuming the NuGet/npm packages) is correct, but the publishing path isn't live: no GitHub remote, publish.yml never run, 0.1.0-alpha untagged, no GitHub Packages feed. A separate repo today could only consume the local pack feed, adding repack friction during exactly the phase when v1 items 3/7/10 will expose platform gaps (citation conventions, background jobs, ACL completion) that are cheapest to fix in the same commit.
 
-1. **Now:** grow `samples/Cortex.Modules.Legal` in place (v1 items 1–6), package-shaped: reference only packable libraries (`Cortex.Modules.Sdk`, `Cortex.Application`, `Cortex.Core`), own schema/migrations, no non-packable internals — `eng/verify-packaging.sh` keeps the boundary honest in CI.
-2. **Extraction trigger:** push the remote, tag `0.1.0-alpha` (publish.yml populates the GitHub Packages feed), then create the product repo (e.g. `enbanc-app`): module library + thin branded host (`AddCortexModule` + `CortexApp` branding) + own Terraform/CI.
+1. **Now:** grow `samples/Plenipo.Modules.Legal` in place (v1 items 1–6), package-shaped: reference only packable libraries (`Plenipo.Modules.Sdk`, `Plenipo.Application`, `Plenipo.Core`), own schema/migrations, no non-packable internals — `eng/verify-packaging.sh` keeps the boundary honest in CI.
+2. **Extraction trigger:** push the remote, tag `0.1.0-alpha` (publish.yml populates the GitHub Packages feed), then create the product repo (e.g. `enbanc-app`): module library + thin branded host (`AddPlenipoModule` + `PlenipoApp` branding) + own Terraform/CI.
 3. **After extraction:** re-thin the in-repo Legal sample to a demo; platform-shaped needs discovered later (background jobs, Word add-in seam, research connectors) land in the platform repo as primitives, not in the product.
 
 ## Sources

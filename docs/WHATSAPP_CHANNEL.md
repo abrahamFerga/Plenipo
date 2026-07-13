@@ -1,6 +1,6 @@
 # WhatsApp channel
 
-Cortex can answer WhatsApp messages: an inbound text becomes an **authorized agent turn** — the same
+Plenipo can answer WhatsApp messages: an inbound text becomes an **authorized agent turn** — the same
 security spine as the web chat (per-user tool filtering before the model call, auditing, token
 tracking, and the human-in-the-loop approval gate) — and the agent's reply is sent back over the
 Meta WhatsApp Business **Cloud API**.
@@ -8,7 +8,7 @@ Meta WhatsApp Business **Cloud API**.
 ```mermaid
 flowchart LR
     W(["WhatsApp user"]) -->|"text message"| M["Meta Cloud API"]
-    M -->|"webhook POST<br/>(HMAC-signed)"| C["Cortex webhook<br/>/api/channels/whatsapp/webhook"]
+    M -->|"webhook POST<br/>(HMAC-signed)"| C["Plenipo webhook<br/>/api/channels/whatsapp/webhook"]
     C -->|"Allowlisted identity; optional JIT user<br/>whatsapp:{phone}"| R["Authorized<br/>agent runner"]
     R --> L(["LLM"])
     R -->|"reply"| S["IWhatsAppSender"]
@@ -47,11 +47,11 @@ missing settings fails fast):
 Local example (secrets via user-secrets, never committed):
 
 ```bash
-dotnet user-secrets --project samples/Cortex.Sample.Host set "Channels:WhatsApp:Enabled" "true"
-dotnet user-secrets --project samples/Cortex.Sample.Host set "Channels:WhatsApp:VerifyToken" "<your-choice>"
-dotnet user-secrets --project samples/Cortex.Sample.Host set "Channels:WhatsApp:AppSecret" "<meta-app-secret>"
-dotnet user-secrets --project samples/Cortex.Sample.Host set "Channels:WhatsApp:AccessToken" "<cloud-api-token>"
-dotnet user-secrets --project samples/Cortex.Sample.Host set "Channels:WhatsApp:PhoneNumberId" "<phone-number-id>"
+dotnet user-secrets --project samples/Plenipo.Sample.Host set "Channels:WhatsApp:Enabled" "true"
+dotnet user-secrets --project samples/Plenipo.Sample.Host set "Channels:WhatsApp:VerifyToken" "<your-choice>"
+dotnet user-secrets --project samples/Plenipo.Sample.Host set "Channels:WhatsApp:AppSecret" "<meta-app-secret>"
+dotnet user-secrets --project samples/Plenipo.Sample.Host set "Channels:WhatsApp:AccessToken" "<cloud-api-token>"
+dotnet user-secrets --project samples/Plenipo.Sample.Host set "Channels:WhatsApp:PhoneNumberId" "<phone-number-id>"
 ```
 
 In production the two secrets live in Key Vault and reach the container as
@@ -63,7 +63,7 @@ In production the two secrets live in Key Vault and reach the container as
    product; note the **app secret**, a **phone number id**, and a long-lived **access token**.
 2. Under WhatsApp → Configuration, set the webhook callback URL to
    `https://<your-host>/api/channels/whatsapp/webhook` and the verify token to your `VerifyToken`
-   value, then subscribe to the **messages** field. Meta performs a GET handshake; Cortex echoes the
+   value, then subscribe to the **messages** field. Meta performs a GET handshake; Plenipo echoes the
    challenge automatically.
 3. Send a WhatsApp message to the business number — the module's agent answers.
 
@@ -82,7 +82,7 @@ In production the two secrets live in Key Vault and reach the container as
 
 ## Testing without Meta
 
-The E2E suite (`samples/Cortex.Sample.Host.IntegrationTests/WhatsAppChannelTests.cs`) exercises the
+The E2E suite (`samples/Plenipo.Sample.Host.IntegrationTests/WhatsAppChannelTests.cs`) exercises the
 channel with **no Meta account, credentials, or network**: the Mock AI provider answers the agent
 turn and a capturing fake replaces `IWhatsAppSender` (the Cloud API base URL is also configurable if
 you prefer a stand-in HTTP server). The tests drive the webhook exactly as Meta does — anonymous
@@ -90,5 +90,5 @@ POSTs with a real HMAC signature — so signature verification, provisioning, th
 conversation persistence, dedupe, and outbound replies are all covered:
 
 ```bash
-dotnet test samples/Cortex.Sample.Host.IntegrationTests --filter FullyQualifiedName~WhatsApp
+dotnet test samples/Plenipo.Sample.Host.IntegrationTests --filter FullyQualifiedName~WhatsApp
 ```

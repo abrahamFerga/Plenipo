@@ -2,7 +2,7 @@
 
 Design for generalizing the WhatsApp inbound lane into a host-extensible **inbound-channel
 SDK** — the missing half of channel extensibility (outbound notification channels are already
-open via `AddCortexNotificationChannel`). The concrete payoff: products add SMS, Telegram, or
+open via `AddPlenipoNotificationChannel`). The concrete payoff: products add SMS, Telegram, or
 **email intake (IMAP)** without forking, and WhatsApp becomes the SDK's first adapter instead
 of a special case.
 
@@ -69,7 +69,7 @@ public interface IChannelReplySender
 }
 ```
 
-Host registration mirrors every other seam: `builder.AddCortexInboundChannel<TelegramChannel>()`.
+Host registration mirrors every other seam: `builder.AddPlenipoInboundChannel<TelegramChannel>()`.
 Configuration stays per channel (`Channels:{id}:…`), including the tenant binding and target
 module — multi-tenant routing (one number/mailbox per tenant) is a follow-up, same as WhatsApp
 today.
@@ -98,8 +98,8 @@ land as an agent turn ("client intake" with documents filed), optionally answere
 
 1. **Extract `ChannelTurnService`** from `WhatsAppChannelService` — no contract change, the
    WhatsApp tests keep passing untouched. (The seat gate and JIT code stop being duplicated.)
-   **✅ Shipped** — `IChannelTurnService` in `Cortex.Application/Channels`, the implementation in
-   `Cortex.Infrastructure/Channels/ChannelTurnService.cs`; WhatsApp is now a thin adapter.
+   **✅ Shipped** — `IChannelTurnService` in `Plenipo.Application/Channels`, the implementation in
+   `Plenipo.Infrastructure/Channels/ChannelTurnService.cs`; WhatsApp is now a thin adapter.
 2. **Introduce the SDK contracts** + rewrite WhatsApp as the first `IWebhookChannelAdapter`
    (its payload/signature/media code moves into the adapter; the endpoint mapping generalizes
    to `/channels/{id}/webhook` with `/whatsapp/webhook` kept as an alias).

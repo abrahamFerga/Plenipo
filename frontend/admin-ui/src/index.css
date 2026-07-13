@@ -9,18 +9,18 @@
   }
 }
 
-/* Brand accent defaults (Tailwind indigo), shared with @abrahamferga/cortex-ui. Override --cortex-brand-* to rebrand. */
+/* Brand accent defaults (Tailwind indigo), shared with @plenipo/ui. Override --plenipo-brand-* to rebrand. */
 :root {
-  --cortex-brand-50: 238 242 255;
-  --cortex-brand-100: 224 231 255;
-  --cortex-brand-200: 199 210 254;
-  --cortex-brand-300: 165 180 252;
-  --cortex-brand-400: 129 140 248;
-  --cortex-brand-500: 99 102 241;
-  --cortex-brand-600: 79 70 229;
-  --cortex-brand-700: 67 56 202;
-  --cortex-brand-800: 55 48 163;
-  --cortex-brand-900: 49 46 129;
+  --plenipo-brand-50: 238 242 255;
+  --plenipo-brand-100: 224 231 255;
+  --plenipo-brand-200: 199 210 254;
+  --plenipo-brand-300: 165 180 252;
+  --plenipo-brand-400: 129 140 248;
+  --plenipo-brand-500: 99 102 241;
+  --plenipo-brand-600: 79 70 229;
+  --plenipo-brand-700: 67 56 202;
+  --plenipo-brand-800: 55 48 163;
+  --plenipo-brand-900: 49 46 129;
 }
 
 html,

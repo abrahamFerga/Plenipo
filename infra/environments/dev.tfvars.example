@@ -34,7 +34,7 @@ spa_redirect_uris   = ["http://localhost:5173"]
 
 # --- GitHub OIDC -------------------------------------------------------------
 github_owner        = "your-org"
-github_repo         = "Cortex"
+github_repo         = "Plenipo"
 github_environments = ["development"]
 
 # --- App runtime config (plain env; secrets live in Key Vault) ----------------

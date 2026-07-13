@@ -1,4 +1,4 @@
-import { ThemeToggle, useMe } from "@abrahamferga/cortex-ui";
+import { ThemeToggle, useMe } from "@plenipo/ui";
 import { AdminPage } from "../admin/AdminPage";
 
 /** True if the caller holds any platform-administration permission (or the global wildcard). */
@@ -14,7 +14,7 @@ const WORKSPACE_URL = import.meta.env.VITE_WORKSPACE_URL ?? "/";
  * The admin console's chrome: a slim top bar plus the administration surface. This is the
  * host-independent operator UI (security, roles/users, token usage, audit) — the domain UI is a
  * separate app. The console is served at /admin (by the Vite dev server, or by the API host via
- * UseCortexAdminConsole); the /api/admin endpoints it reads remain RBAC-gated server-side.
+ * UsePlenipoAdminConsole); the /api/admin endpoints it reads remain RBAC-gated server-side.
  */
 export function AdminConsoleShell() {
   const { data: me, isLoading, isError } = useMe();
@@ -36,7 +36,7 @@ export function AdminConsoleShell() {
             C
           </div>
           <span className="text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-            Cortex
+            Plenipo
           </span>
           <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400">
             Admin
@@ -64,13 +64,13 @@ export function AdminConsoleShell() {
         </div>
       ) : isError ? (
         <div role="alert" className="grid flex-1 place-items-center p-6 text-center text-sm text-red-600">
-          Could not reach the Cortex API. Check that it is running and that VITE_API_BASE points at it.
+          Could not reach the Plenipo API. Check that it is running and that VITE_API_BASE points at it.
         </div>
       ) : authorized ? (
         <AdminPage />
       ) : (
         <div role="status" className="grid flex-1 place-items-center p-6 text-center text-sm text-slate-500">
-          You do not have permission to administer this Cortex instance.
+          You do not have permission to administer this Plenipo instance.
         </div>
       )}
     </div>

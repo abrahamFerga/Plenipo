@@ -29,9 +29,9 @@ api_max_replicas = 5
 # --- CIAM / auth -------------------------------------------------------------
 ciam_tenant_id      = ""
 ciam_authority_host = ""
-spa_redirect_uris   = ["https://app.cortex.example.com"]
+spa_redirect_uris   = ["https://app.plenipo.example.com"]
 
 # --- GitHub OIDC (production requires manual approval gate) -------------------
 github_owner        = "your-org"
-github_repo         = "Cortex"
+github_repo         = "Plenipo"
 github_environments = ["production"]

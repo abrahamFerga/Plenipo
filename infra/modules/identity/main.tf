@@ -1,7 +1,7 @@
 # =============================================================================
 # module: identity
 # -----------------------------------------------------------------------------
-# User-assigned managed identity for Cortex.Api. This identity is attached to
+# User-assigned managed identity for Plenipo.Api. This identity is attached to
 # the container app and used for:
 #   - Pulling images from ACR (AcrPull, assigned in root main.tf)
 #   - Reading secrets from Key Vault (Key Vault Secrets User, assigned in the

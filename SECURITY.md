@@ -1,8 +1,8 @@
 # Security Policy
 
-Cortex is a **security-first platform** — tool-level authorization, full audit, human-in-the-loop approval,
+Plenipo is a **security-first platform** — tool-level authorization, full audit, human-in-the-loop approval,
 and multi-tenant isolation are core to the design, not add-ons. This document explains how to report a
-vulnerability and summarizes the security model so you can evaluate it before building on Cortex.
+vulnerability and summarizes the security model so you can evaluate it before building on Plenipo.
 
 ## Reporting a vulnerability
 
@@ -18,7 +18,7 @@ aim to acknowledge within a few days and will coordinate a fix and a disclosure 
 
 ## Supported versions
 
-Cortex is pre-1.0 (`0.1.0-alpha`). Security fixes land on the latest `main`; there is no long-term-support
+Plenipo is pre-1.0 (`0.1.0-alpha`). Security fixes land on the latest `main`; there is no long-term-support
 branch yet. **Alpha software is not yet production-hardened** — review the model and hardening notes below
 before deploying.
 
@@ -27,7 +27,7 @@ before deploying.
 | `0.1.0-alpha` (latest `main`) | ✅ |
 | older pre-releases | ❌ |
 
-## Security model (what Cortex enforces)
+## Security model (what Plenipo enforces)
 
 - **Tool authorization _before_ the model call.** For each turn the agent runner resolves a module's tools
   and removes any the caller may not invoke **before** building the LLM request — the model never receives
@@ -71,7 +71,7 @@ before deploying.
 - Configure Entra External ID. The dev-auth fallback is inert outside Development, so you **must** set
   both `Auth:Authority` and `Auth:Audience` in production. A partial configuration fails startup.
 - **Multi-factor authentication** is enrolled and enforced at your IdP (Entra External ID user
-  flows, Keycloak/Authentik for self-hosters) — Cortex deliberately holds no credential store.
+  flows, Keycloak/Authentik for self-hosters) — Plenipo deliberately holds no credential store.
   Set `Auth:RequireMfa` to make the platform additionally **reject any token that was not issued
   after MFA** (judged by the `amr` claim; accepted markers configurable via `Auth:MfaAmrValues`),
   so an IdP misconfiguration can't silently admit single-factor sessions.

@@ -1,16 +1,16 @@
-# Configuring Cortex
+# Configuring Plenipo
 
-This is the single answer to "how is Cortex configured, by whom, and where do secrets go".
+This is the single answer to "how is Plenipo configured, by whom, and where do secrets go".
 
-## What Cortex is (so the configuration model makes sense)
+## What Plenipo is (so the configuration model makes sense)
 
-Cortex is a **base platform, not an application**. It ships as NuGet + npm packages; a *product*
+Plenipo is a **base platform, not an application**. It ships as NuGet + npm packages; a *product*
 (a "vertical" like the-lawyer) is a thin host that installs modules on top of it. That split drives
 the configuration model, because three different people configure three different layers:
 
 | Who | What they decide | Where it lives |
 |-----|------------------|----------------|
-| **Host developer** (builds the product) | Which modules are installed, AI/embedding provider, skills bundle, storage, auth mode, MCP servers | Code (`AddCortexModule<T>()`) + configuration files (below) |
+| **Host developer** (builds the product) | Which modules are installed, AI/embedding provider, skills bundle, storage, auth mode, MCP servers | Code (`AddPlenipoModule<T>()`) + configuration files (below) |
 | **Operator / IT** (deploys it) | Endpoints, database, identity provider, budgets, non-chat service credentials | Environment variables / user-secrets / Key Vault — never files in the repo |
 | **Tenant admin** (runs a firm on it) | AI provider/model/key, modules, connectors, roles, agent profiles, system prompt, token budgets | The **admin console** (`/admin`) — stored in the database, secrets vault-protected |
 | **End user** | Their own connected accounts (e.g. Microsoft 365) | The UI's connect-account flow (OAuth; tokens vault-protected) |
@@ -20,11 +20,11 @@ secrets never in files.**
 
 ## The configuration layers (deploy-time)
 
-Cortex hosts are standard ASP.NET Core apps, so configuration composes in the usual order —
+Plenipo hosts are standard ASP.NET Core apps, so configuration composes in the usual order —
 later layers override earlier ones:
 
 1. `appsettings.json` / `appsettings.{Environment}.json` — committed defaults, **no secrets**.
-2. **`cortex.settings.json`** — the file the `cortex init` wizard writes (see below). Declarative,
+2. **`plenipo.settings.json`** — the file the `plenipo init` wizard writes (see below). Declarative,
    committed, merged on top of appsettings. This is the OpenClaw-style "one file describes the
    installation" artifact.
 3. **Environment variables** — the container/production layer. ASP.NET's `__` convention maps
@@ -40,7 +40,7 @@ Settings**. They never pass through deployment configuration. They are stored **
 `ISecretVault` seam (DataProtection-encrypted at rest by default; `Secrets:Provider=AzureKeyVault`
 switches storage to Key Vault with no migration), and the API only ever reports *that* a value
 exists, never the value. Model ids are fetched live from provider catalogs rather than committed as
-a static list; Azure OpenAI remains manual because Cortex needs the resource's deployment name.
+a static list; Azure OpenAI remains manual because Plenipo needs the resource's deployment name.
 
 | Secret | How it enters | Where it rests |
 |--------|---------------|----------------|
@@ -52,21 +52,21 @@ a static list; Azure OpenAI remains manual because Cortex needs the resource's d
 | Notification webhook signing secret | Admin UI → write-only field | `ISecretVault` |
 | WhatsApp app secret / access token | user-secrets or env vars | Process env only |
 
-## `cortex init` — the defined way to configure a host
+## `plenipo init` — the defined way to configure a host
 
-Every deployment is different (different modules, providers, channels, auth), so Cortex defines
-**one mechanism** instead of one configuration: the **`cortex` CLI** (`src/Cortex.Cli`), the
+Every deployment is different (different modules, providers, channels, auth), so Plenipo defines
+**one mechanism** instead of one configuration: the **`plenipo` CLI** (`src/Plenipo.Cli`), the
 platform's analogue of OpenClaw's installer.
 
 ```bash
-dotnet run --project src/Cortex.Cli -- init --path ./src/MyProduct.Host
+dotnet run --project src/Plenipo.Cli -- init --path ./src/MyProduct.Host
 ```
 
 - An interactive wizard walks the steps (AI provider, knowledge/RAG, document tools, channels,
   file storage, authentication, skills, secret storage); every step can keep the current value.
 - Every prompt has a matching flag (`--non-interactive --ai-provider Mock --rag ...`) so CI and
   scripts can run the same thing headlessly.
-- It writes **`cortex.settings.json`** next to the host — a declarative, committed file the host
+- It writes **`plenipo.settings.json`** next to the host — a declarative, committed file the host
   layers into its configuration. Re-runs are **non-destructive**: only the keys you decided change,
   anything else (including hand-edits) survives.
 - **Secrets are never written** — the wizard prints the `dotnet user-secrets` / env-var commands
@@ -92,10 +92,10 @@ and change without a deploy.
 | `Email` | Outbound SMTP: `Enabled`, `Host`/`Port`/`UseStartTls`, `Username`, `Password`, `FromAddress`, `FromName` | Powers the email notification channel AND user invites; password via user-secrets/env. Unconfigured, invites still work (share the link manually) |
 | `Auth` | `Authority`, `Audience`, `PermissionSource` (Database/Token) | Empty = dev-auth in Development only |
 | `Secrets` | `Provider` (DataProtection/AzureKeyVault), `KeyVaultUri` | Where runtime-entered secrets rest |
-| `DataProtection:KeysPath` | Shared durable directory for the Data Protection key ring | Optional alternative to `cortex-redis`; required outside Development when Redis is absent |
+| `DataProtection:KeysPath` | Shared durable directory for the Data Protection key ring | Optional alternative to `plenipo-redis`; required outside Development when Redis is absent |
 | `Security:OutboundUrls` | `AllowHttp`, `AllowPrivateNetworks` | Both false by default; applies to tenant-configured webhooks, AI endpoints, OAuth and connector URLs |
 | `Cors:Origins` | Allowed SPA origins | Aspire injects these automatically in dev |
-| `ConnectionStrings` | `cortex-platform`, `cortex-audit`, `cortex-redis` | Env vars in containers |
+| `ConnectionStrings` | `plenipo-platform`, `plenipo-audit`, `plenipo-redis` | Env vars in containers |
 | `Connectors:Exclude` | Connector ids to suppress deployment-wide, e.g. `["s3","documenso"]` | Removes a compiled-in connector without recompiling; see below |
 | `Connectors:OperatorEnabled` | Map of restricted connector ids to explicit operator approval | The `local-folder` connector is absent unless `Connectors:OperatorEnabled:local-folder=true`; also set `Connectors:LocalFolder:AllowedRoots` |
 | `Modules:Exclude` | Module ids to suppress deployment-wide | Unlike the per-tenant toggle, exclusion removes endpoints/tools/catalog entry entirely |
@@ -110,7 +110,7 @@ discovered tool flows through the normal security spine — named `{server}_{too
 failed start or chat turn.
 
 ```jsonc
-// cortex.settings.json or appsettings — Stdio (subprocess) or Http (Streamable HTTP)
+// plenipo.settings.json or appsettings — Stdio (subprocess) or Http (Streamable HTTP)
 "Mcp": {
   "Servers": [
     { "Name": "github", "Transport": "Stdio", "Command": "npx",
@@ -123,8 +123,8 @@ failed start or chat turn.
 ### Connectors: what a deployment offers vs. what a tenant uses
 
 Two dials, deliberately separate. **What the deployment offers** is code + config: the built-in
-bundle registers in one line (`builder.AddCortexConnectors()`), any package's connectors register
-with `AddCortexConnectorsFrom(assembly)`, and `Connectors:Exclude` suppresses any of them without
+bundle registers in one line (`builder.AddPlenipoConnectors()`), any package's connectors register
+with `AddPlenipoConnectorsFrom(assembly)`, and `Connectors:Exclude` suppresses any of them without
 recompiling. **What a tenant uses** is the admin's runtime, default-off toggle on the Integrations
 page — enabling a connector there is what makes its tools exist for that tenant, each still
 RBAC-gated and audited. The Integrations page also lists first-party connectors the deployment
@@ -165,13 +165,13 @@ the wizard and offers it via a dismissible banner while the probe returns an emp
 
 Modules can contribute pages to the **admin console** the same way they contribute domain tabs:
 declare `ModuleManifest.AdminTabs` (the same `TabDescriptor` machinery — data table, editor,
-chart, actions) and the admin app renders them under the module's name, no `@cortex/admin-ui`
+chart, actions) and the admin app renders them under the module's name, no `@plenipo/admin-ui`
 fork needed. Every admin tab must declare a `Permission` (validated at startup) — an admin
 surface is never visible by default. Served permission-filtered at `GET /api/admin/extensions`.
 
 ### Inviting people (Admin → Users)
 
-Cortex provisions users just-in-time at first sign-in — which used to mean roles could only be
+Plenipo provisions users just-in-time at first sign-in — which used to mean roles could only be
 assigned to people who had already signed in once. **Standing invites** close that gap: an admin
 names an email address and starting roles, and the first sign-in with that address applies them
 automatically (any IdP — the invite is keyed on the email claim, no token link). With `Email`

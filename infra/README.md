@@ -1,15 +1,15 @@
-# Cortex — Infrastructure (Terraform)
+# Plenipo — Infrastructure (Terraform)
 
-Infrastructure-as-Code for the **Cortex** AI-first platform on Azure. Everything
-is prefixed `cortex` and scoped per environment (`dev`, `staging`, `prod`).
+Infrastructure-as-Code for the **Plenipo** AI-first platform on Azure. Everything
+is prefixed `plenipo` and scoped per environment (`dev`, `staging`, `prod`).
 
 ## Topology provisioned
 
 | Concern        | Azure resource                                   |
 | -------------- | ------------------------------------------------ |
-| API compute    | Azure Container Apps (`Cortex.Api`, scale-to-0)  |
+| API compute    | Azure Container Apps (`Plenipo.Api`, scale-to-0)  |
 | Registry       | Azure Container Registry (managed-identity pull) |
-| Database       | Two independently credentialed PostgreSQL Flexible Servers v17 — `cortex_platform` + `cortex_audit` |
+| Database       | Two independently credentialed PostgreSQL Flexible Servers v17 — `plenipo_platform` + `plenipo_audit` |
 | Cache/backplane| Azure Cache for Redis                            |
 | Secrets        | Azure Key Vault (RBAC authorization)             |
 | App identity   | User-assigned Managed Identity (KV + ACR roles)  |
@@ -38,9 +38,9 @@ infra/
 ### One-time backend bootstrap
 
 ```bash
-az group create -n rg-cortex-tfstate -l westeurope
-az storage account create -n cortextfstate<unique> -g rg-cortex-tfstate -l westeurope --sku Standard_LRS
-az storage container create -n tfstate --account-name cortextfstate<unique>
+az group create -n rg-plenipo-tfstate -l westeurope
+az storage account create -n plenipotfstate<unique> -g rg-plenipo-tfstate -l westeurope --sku Standard_LRS
+az storage container create -n tfstate --account-name plenipotfstate<unique>
 ```
 
 ## Initialize (partial backend config)
@@ -49,14 +49,14 @@ Backend values are passed at init so nothing environment-specific is committed:
 
 ```bash
 terraform init \
-  -backend-config="resource_group_name=rg-cortex-tfstate" \
-  -backend-config="storage_account_name=cortextfstate<unique>" \
+  -backend-config="resource_group_name=rg-plenipo-tfstate" \
+  -backend-config="storage_account_name=plenipotfstate<unique>" \
   -backend-config="container_name=tfstate" \
-  -backend-config="key=cortex-dev.tfstate"
+  -backend-config="key=plenipo-dev.tfstate"
 ```
 
-Use a distinct `key` per environment (e.g. `cortex-dev.tfstate`,
-`cortex-prod.tfstate`).
+Use a distinct `key` per environment (e.g. `plenipo-dev.tfstate`,
+`plenipo-prod.tfstate`).
 
 ## Plan / apply per environment
 
@@ -71,16 +71,16 @@ The deploy pipeline overrides the image:
 ```bash
 terraform apply -auto-approve \
   -var-file=environments/dev.tfvars \
-  -var "api_image=<acr-login-server>/cortex-api:<git-sha>"
+  -var "api_image=<acr-login-server>/plenipo-api:<git-sha>"
 ```
 
 ## Identity & RBAC (Entra External ID)
 
 Authentication uses **Entra External ID** (CIAM — the successor to Azure AD B2C).
 The `entra-external-id` module registers two applications in your CIAM tenant and
-defines **app roles** that map 1:1 to Cortex's system roles.
+defines **app roles** that map 1:1 to Plenipo's system roles.
 
-### How role claims become Cortex permissions
+### How role claims become Plenipo permissions
 
 ```
 Operator assigns user → app role        (e.g. "tenant_admin")  in Entra
@@ -89,7 +89,7 @@ Operator assigns user → app role        (e.g. "tenant_admin")  in Entra
 Entra issues access token with          "roles": ["tenant_admin"]
         │
         ▼
-Cortex API (PermissionResolver)         RolePermissions.ForRole("tenant_admin")
+Plenipo API (PermissionResolver)         RolePermissions.ForRole("tenant_admin")
         │                               → ["platform.*", "chat.*"]
         ▼
 Per-user tool grants (Admin dashboard)  add fine-grained tools.<module>.<tool>
@@ -114,7 +114,7 @@ and its user experience are created out-of-band:
    spa_redirect_uris   = ["http://localhost:5173", "https://app.example.com"]
    ```
 4. `terraform apply`, then assign users to app roles (portal → *Enterprise
-   applications* → `cortex-<env>-api` → *Users and groups*, or scripted via the
+   applications* → `plenipo-<env>-api` → *Users and groups*, or scripted via the
    `entra_app_role_ids` output).
 
 ### Runtime auth wiring (the API's `Auth` config section)
@@ -147,7 +147,7 @@ to header-based dev auth (`X-Dev-Subject`, `X-Dev-Tenant`, `X-Dev-Roles`).
   [docs/WHATSAPP_CHANNEL.md](../docs/WHATSAPP_CHANNEL.md).
 - Composed Npgsql connection strings (`platform-connection-string`,
   `audit-connection-string`) are stored whole and mapped 1:1 onto the
-  `ConnectionStrings__cortex-*` env vars the app binds.
+  `ConnectionStrings__plenipo-*` env vars the app binds.
 - The app reads all secrets at runtime via its **managed identity** (Key Vault
   Secrets User), never via stored connection strings in config.
 - **Admin-entered secrets in Key Vault** (enabled by default): set
@@ -175,7 +175,7 @@ federated-credential subject claims.
 ## TODOs / manual steps
 
 - **CIAM tenant**: created manually; paste IDs into tfvars (see Identity & RBAC).
-- **App-role assignment**: assign users to the `cortex-<env>-api` app roles.
+- **App-role assignment**: assign users to the `plenipo-<env>-api` app roles.
 - **Backend storage**: bootstrap once (above) before first `init`.
 - **Private networking**: Postgres/Redis are public + firewalled in this
   scaffold. For production hardening, add VNet integration + private endpoints.

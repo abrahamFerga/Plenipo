@@ -1,4 +1,4 @@
-# Cortex — CI/CD Workflows
+# Plenipo — CI/CD Workflows
 
 Three GitHub Actions workflows. All Azure access uses **OIDC federation** — no
 `ARM_CLIENT_SECRET` or any cloud password is stored.
@@ -19,11 +19,11 @@ scope as noted):
 | `AZURE_CLIENT_ID`             | repo/env     | Client ID of the CI/CD user-assigned managed identity (`terraform output cicd_identity_client_id`). |
 | `AZURE_TENANT_ID`             | repo/env     | Azure AD tenant ID for the deployment subscription.                |
 | `AZURE_SUBSCRIPTION_ID`       | repo/env     | Target Azure subscription ID.                                      |
-| `ACR_LOGIN_SERVER`            | repo/env     | ACR login server, e.g. `cortexdevacrx1y2z3.azurecr.io` (`terraform output acr_login_server`). |
+| `ACR_LOGIN_SERVER`            | repo/env     | ACR login server, e.g. `plenipodevacrx1y2z3.azurecr.io` (`terraform output acr_login_server`). |
 | `TF_BACKEND_RESOURCE_GROUP`   | repo         | Resource group holding the Terraform state storage account.        |
 | `TF_BACKEND_STORAGE_ACCOUNT`  | repo         | Storage account name for remote state.                             |
 | `TF_BACKEND_CONTAINER`        | repo         | Blob container name for state (e.g. `tfstate`).                    |
-| `TF_STATE_KEY`                | repo/env     | State blob key per environment (e.g. `cortex-staging.tfstate`).   |
+| `TF_STATE_KEY`                | repo/env     | State blob key per environment (e.g. `plenipo-staging.tfstate`).   |
 
 > Per-environment values (`TF_STATE_KEY`, possibly `AZURE_*`) are best set as
 > **GitHub Environment** secrets on the `staging` / `production` environments so
@@ -66,10 +66,10 @@ environment**, the OIDC subject becomes the `environment:` form — so the match
 
 ## Notes / assumptions
 
-- The API Dockerfile is expected at `src/Cortex.Api/Dockerfile` (created
+- The API Dockerfile is expected at `src/Plenipo.Api/Dockerfile` (created
   separately).
-- The frontend is a **pnpm workspace** at `frontend/` (packages `@abrahamferga/cortex-ui` and
-  `@cortex/admin-ui`); CI runs `pnpm -r lint`, `pnpm -r test`, `pnpm build:all`, and
-  the `@abrahamferga/cortex-ui` Playwright E2E.
+- The frontend is a **pnpm workspace** at `frontend/` (packages `@plenipo/ui` and
+  `@plenipo/admin-ui`); CI runs `pnpm -r lint`, `pnpm -r test`, `pnpm build:all`, and
+  the `@plenipo/ui` Playwright E2E.
 - `deploy.yml` deploys **staging** on push to `main`; promote to **production**
   via the manual `workflow_dispatch` (which enforces the approval gate).

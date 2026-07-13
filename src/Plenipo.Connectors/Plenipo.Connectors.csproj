@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The built-in connectors: azure-blob (service-auth Azure Blob Storage) and local-folder
+       (a keyless dev/test connector every deployment can exercise without credentials). -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>Plenipo.Connectors</PackageId>
+    <Description>Built-in Plenipo connectors — Azure Blob Storage and a local-folder dev connector. Register with AddPlenipoConnector&lt;T&gt;().</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.S3" />
+    <PackageReference Include="Azure.Storage.Blobs" />
+    <PackageReference Include="Microsoft.Extensions.AI" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Plenipo.Connectors.Sdk\Plenipo.Connectors.Sdk.csproj" />
+    <ProjectReference Include="..\Plenipo.Application\Plenipo.Application.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -53,6 +53,6 @@ test("a non-administrator is refused", async ({ page }) => {
   await page.goto("/admin/");
 
   await expect(
-    page.getByText("You do not have permission to administer this Cortex instance."),
+    page.getByText("You do not have permission to administer this Plenipo instance."),
   ).toBeVisible();
 });

@@ -2,7 +2,7 @@
 # locals.tf  (container-app module)
 # -----------------------------------------------------------------------------
 # Maps the logical Key Vault secret names (the keys of key_vault_secret_ids) to
-# the environment variable names the Cortex.Api expects, and to the Container
+# the environment variable names the Plenipo.Api expects, and to the Container
 # App `secret` block name they bind to.
 #
 # Only secrets present in key_vault_secret_ids are mapped; unknown secrets are
@@ -15,9 +15,9 @@ locals {
   # and the ConnectionStrings the DbContexts resolve) — env-var form uses "__"
   # for the section separator.
   secret_to_env = {
-    "platform-connection-string" = "ConnectionStrings__cortex-platform"
-    "audit-connection-string"    = "ConnectionStrings__cortex-audit"
-    "redis-connection-string"    = "ConnectionStrings__cortex-redis"
+    "platform-connection-string" = "ConnectionStrings__plenipo-platform"
+    "audit-connection-string"    = "ConnectionStrings__plenipo-audit"
+    "redis-connection-string"    = "ConnectionStrings__plenipo-redis"
 
     # WhatsApp channel (Channels:WhatsApp) — enabled/module/etc. are plain env
     # via extra_env; only the credentials are secret-backed.

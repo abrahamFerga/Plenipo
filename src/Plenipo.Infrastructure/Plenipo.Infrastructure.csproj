@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- EF Core, audit, AI provider wiring, multi-tenancy, module catalog. -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>Plenipo.Infrastructure</PackageId>
+    <Description>Infrastructure for Plenipo — EF Core multi-tenant persistence, audit log, AI provider wiring (OpenAI/AzureOpenAI/Ollama), agent runner.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Azure.AI.DocumentIntelligence" />
+    <PackageReference Include="Azure.Security.KeyVault.Secrets" />
+    <PackageReference Include="MailKit" />
+
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" />
+
+    <PackageReference Include="Microsoft.Extensions.AI" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
+    <PackageReference Include="Microsoft.Agents.AI" />
+    <PackageReference Include="Microsoft.Agents.AI.OpenAI" />
+    <!-- MCP client (official C# SDK, MIT): external tool servers surfaced as RBAC-gated agent tools. -->
+    <PackageReference Include="ModelContextProtocol.Core" />
+    <!-- Anthropic (Claude) provider (MIT) — IChatClient over the Anthropic Messages API. -->
+    <PackageReference Include="Anthropic.SDK" />
+    <PackageReference Include="Azure.AI.OpenAI" />
+    <PackageReference Include="Azure.Identity" />
+
+    <!-- Documents & files: PdfPig (Apache-2.0) reads AND generates PDFs with zero native deps;
+         Azure.Storage.Blobs (MIT) backs the production file store. -->
+    <PackageReference Include="PdfPig" />
+    <PackageReference Include="Azure.Storage.Blobs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Plenipo.Core\Plenipo.Core.csproj" />
+    <ProjectReference Include="..\Plenipo.Application\Plenipo.Application.csproj" />
+    <ProjectReference Include="..\Plenipo.Modules.Sdk\Plenipo.Modules.Sdk.csproj" />
+  </ItemGroup>
+
+</Project>

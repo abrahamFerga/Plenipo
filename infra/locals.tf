@@ -2,7 +2,7 @@
 # locals.tf
 # -----------------------------------------------------------------------------
 # Naming convention + common tags. Everything is lowercase and prefixed with the
-# project name ("cortex"). The standard shape is:
+# project name ("plenipo"). The standard shape is:
 #   "${var.project}-${var.environment}-<resource-short-name>"
 # Some Azure resources disallow hyphens and must be globally unique (ACR, Key
 # Vault, Storage, Postgres) — for those we use a compact, hyphen-free name plus a
@@ -10,11 +10,11 @@
 # =============================================================================
 
 locals {
-  # e.g. "cortex-dev"
+  # e.g. "plenipo-dev"
   name_prefix = "${var.project}-${var.environment}"
 
   # Compact, hyphen-free base for resources with tight naming rules.
-  # e.g. "cortexdev"
+  # e.g. "plenipodev"
   name_compact = "${var.project}${var.environment}"
 
   # Tags applied to every resource via the provider-agnostic merge below.

@@ -1,0 +1,40 @@
+<Solution>
+  <!--
+    Sample domain modules showing how to build on the Plenipo base platform.
+    Each module is an example of a real industry vertical:
+      - Finance  → port of the-ledger (personal finance, categorization, ledger tools)
+      - Nutrition → port of NutriForge (food diary, macro tracking)
+
+    In production these live in their own repos and reference Plenipo.* as NuGet packages.
+    For local development they use ProjectReferences into ../src so changes propagate immediately.
+
+    Future verticals (legal, medical, logistics, ...) follow the same pattern:
+      1. Create a class implementing IModule from Plenipo.Modules.Sdk
+      2. Register services + map endpoints in the module
+      3. In the consuming API host call builder.AddPlenipoModule<YourModule>()
+  -->
+  <Folder Name="/finance/">
+    <Project Path="Plenipo.Modules.Finance/Plenipo.Modules.Finance.csproj" />
+    <Project Path="Plenipo.Modules.Finance.Tests/Plenipo.Modules.Finance.Tests.csproj" />
+  </Folder>
+  <Folder Name="/nutrition/">
+    <Project Path="Plenipo.Modules.Nutrition/Plenipo.Modules.Nutrition.csproj" />
+    <Project Path="Plenipo.Modules.Nutrition.Tests/Plenipo.Modules.Nutrition.Tests.csproj" />
+  </Folder>
+  <Folder Name="/legal/">
+    <Project Path="Plenipo.Modules.Legal/Plenipo.Modules.Legal.csproj" />
+    <Project Path="Plenipo.Modules.Legal.Tests/Plenipo.Modules.Legal.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tasks/">
+    <!-- Minimal module template (the worked example for /BUILDING_A_MODULE.md). Compiled here so it
+         can't drift; not installed in the sample host, so the demo stays focused on three verticals. -->
+    <Project Path="Plenipo.Modules.Tasks/Plenipo.Modules.Tasks.csproj" />
+    <Project Path="Plenipo.Modules.Tasks.Tests/Plenipo.Modules.Tasks.Tests.csproj" />
+  </Folder>
+  <Folder Name="/host/">
+    <Project Path="Plenipo.Sample.Host/Plenipo.Sample.Host.csproj" />
+    <Project Path="Plenipo.Legal.Host/Plenipo.Legal.Host.csproj" />
+    <Project Path="Plenipo.Sample.AppHost/Plenipo.Sample.AppHost.csproj" />
+    <Project Path="Plenipo.Sample.Host.IntegrationTests/Plenipo.Sample.Host.IntegrationTests.csproj" />
+  </Folder>
+</Solution>

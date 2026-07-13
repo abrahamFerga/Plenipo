@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@abrahamferga/cortex-ui";
+import { api } from "@plenipo/ui";
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -104,7 +104,7 @@ function NotificationDeliveryCard() {
             id="webhook-url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://example.com/hooks/cortex — blank disables delivery"
+            placeholder="https://example.com/hooks/plenipo — blank disables delivery"
             className={inputClass}
           />
           {urlInvalid && <p className="text-xs text-red-600">Enter an absolute http(s) URL, or leave blank.</p>}
@@ -125,7 +125,7 @@ function NotificationDeliveryCard() {
             placeholder={
               settings.data?.hasWebhookSecret
                 ? "A secret is on file — enter a new one to replace it"
-                : "Used to sign deliveries (X-Cortex-Signature)"
+                : "Used to sign deliveries (X-Plenipo-Signature)"
             }
             className={inputClass}
           />

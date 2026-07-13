@@ -16,7 +16,7 @@ resource "random_string" "suffix" {
 }
 
 # -----------------------------------------------------------------------------
-# Resource group: rg-cortex-<env>
+# Resource group: rg-plenipo-<env>
 # -----------------------------------------------------------------------------
 resource "azurerm_resource_group" "this" {
   name     = "rg-${local.name_prefix}"
@@ -37,7 +37,7 @@ module "monitoring" {
 }
 
 # -----------------------------------------------------------------------------
-# App identity: user-assigned managed identity for Cortex.Api
+# App identity: user-assigned managed identity for Plenipo.Api
 # (role assignments to Key Vault / ACR are made in their respective modules so
 #  the scope ids are available there).
 # -----------------------------------------------------------------------------
@@ -97,7 +97,7 @@ module "keyvault" {
   redis_connection_string = module.cache.primary_connection_string
 
   # Composed Npgsql connection strings — stored whole so the container app maps
-  # them 1:1 onto ConnectionStrings__cortex-platform / __cortex-audit.
+  # them 1:1 onto ConnectionStrings__plenipo-platform / __plenipo-audit.
   platform_connection_string = "Host=${module.database.fqdn};Port=5432;Database=${module.database.platform_database_name};Username=${module.database.admin_username};Password=${module.database.admin_password};Ssl Mode=Require"
   audit_connection_string    = "Host=${module.database.audit_fqdn};Port=5432;Database=${module.database.audit_database_name};Username=${module.database.audit_admin_username};Password=${module.database.audit_admin_password};Ssl Mode=Require"
 }
@@ -140,7 +140,7 @@ module "cache" {
 }
 
 # -----------------------------------------------------------------------------
-# Container App environment + Cortex.Api container app
+# Container App environment + Plenipo.Api container app
 # -----------------------------------------------------------------------------
 module "container_app" {
   source = "./modules/container-app"
@@ -193,10 +193,10 @@ module "container_app" {
 }
 
 # -----------------------------------------------------------------------------
-# Entra External ID (CIAM): API + SPA app registrations and Cortex app roles
+# Entra External ID (CIAM): API + SPA app registrations and Plenipo app roles
 # -----------------------------------------------------------------------------
 # The CIAM tenant + user flows are provisioned manually (see infra/README). This
-# module registers the API and SPA apps and defines App Roles matching Cortex's
+# module registers the API and SPA apps and defines App Roles matching Plenipo's
 # system roles, so Entra emits a `roles` claim that the API maps to permissions.
 module "entra_external_id" {
   source = "./modules/entra-external-id"

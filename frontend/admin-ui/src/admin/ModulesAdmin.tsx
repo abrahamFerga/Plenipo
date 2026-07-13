@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type ModuleAdmin } from "@abrahamferga/cortex-ui";
+import { api, type ModuleAdmin } from "@plenipo/ui";
 
 function Toggle({ on, disabled, onChange }: { on: boolean; disabled: boolean; onChange: (next: boolean) => void }) {
   return (
@@ -82,9 +82,9 @@ export function ModulesAdmin() {
         <div className="space-y-1 rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400 dark:border-slate-700">
           <p className="font-medium text-slate-500 dark:text-slate-300">No modules are installed in this deployment.</p>
           <p>
-            Modules are installed in code by the product host (<code className="font-mono text-xs">AddCortexModule&lt;T&gt;()</code>)
+            Modules are installed in code by the product host (<code className="font-mono text-xs">AddPlenipoModule&lt;T&gt;()</code>)
             — this page only toggles them per tenant. This deployment's host installs modules in code
-            (AddCortexModule) — none are installed here yet.
+            (AddPlenipoModule) — none are installed here yet.
           </p>
         </div>
       ) : (

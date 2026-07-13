@@ -23,6 +23,6 @@ output "api_service_principal_object_id" {
 }
 
 output "app_role_ids" {
-  description = "Map of Cortex system role -> Entra app role id."
+  description = "Map of Plenipo system role -> Entra app role id."
   value       = { for k, v in random_uuid.app_role : k => v.result }
 }

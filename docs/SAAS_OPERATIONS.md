@@ -1,6 +1,6 @@
-# Operating Cortex verticals as SaaS
+# Operating Plenipo verticals as SaaS
 
-How a domain product built on Cortex (the-lawyer, etc.) is sold and operated: shared SaaS
+How a domain product built on Plenipo (the-lawyer, etc.) is sold and operated: shared SaaS
 tenants, per-customer AI keys and metering, and on-demand dedicated deployments. This document
 maps the business flow onto mechanisms that exist today and names the gaps that are deliberate
 next steps. The end-to-end commercial pipeline (site, Stripe subscriptions, payment-driven
@@ -64,7 +64,7 @@ The deployment artifacts are already customer-agnostic:
 
 **Automation shape (next step, once the repo has a CI remote):** a `deploy-customer` GitHub
 Actions `workflow_dispatch` pipeline — inputs `customer`, `region`, `sku`; steps: select/create the
-Terraform workspace, `terraform apply` with the customer tfvars, run `cortex init
+Terraform workspace, `terraform apply` with the customer tfvars, run `plenipo init
 --non-interactive` for host settings, smoke-test `/alive`. Deprovisioning is `terraform destroy`
 on the workspace. Nothing in the artifacts blocks this today; it's CI wiring, not platform work.
 

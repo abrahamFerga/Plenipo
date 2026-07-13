@@ -1,6 +1,6 @@
-# Selling Cortex products: site, subscriptions, auto-provisioning
+# Selling Plenipo products: site, subscriptions, auto-provisioning
 
-The program plan for turning Cortex verticals (the-lawyer, …) into self-serve commercial
+The program plan for turning Plenipo verticals (the-lawyer, …) into self-serve commercial
 products: a marketing site + per-product docs, subscription tiers, and payment-driven automatic
 provisioning — from "card entered" to "tenant live" (or "dedicated Azure environment live") with
 no operator in the loop. Builds directly on [SAAS_OPERATIONS.md](SAAS_OPERATIONS.md); researched
@@ -41,7 +41,7 @@ deprovisioned (destructive, delayed, reversible for N days)`
 Each product is its own system (own host/repo, sometimes talking peer-to-peer). The platform
 ships the machinery once; a product declares its offering:
 
-- **Platform (Cortex packages — new `Cortex.Commerce`)**: the `/webhooks/stripe` endpoint +
+- **Platform (Plenipo packages — new `Plenipo.Commerce`)**: the `/webhooks/stripe` endpoint +
   event inbox; the entitlement store + state machine; the **provisioning orchestrator**
   (tenant + admin + modules + AI settings + seat limit in one transaction — the
   `tenants:provision` endpoint SAAS_OPERATIONS.md names); the dedicated-env dispatcher
@@ -55,7 +55,7 @@ ships the machinery once; a product declares its offering:
   pulled from each product repo's `docs/` by CI.
 
 Peer-to-peer products change nothing here: each side is provisioned independently; the
-cortex-peer connector is configured inside the tenants after both exist.
+plenipo-peer connector is configured inside the tenants after both exist.
 
 ## Purchase flow (target)
 
@@ -78,7 +78,7 @@ cortex-peer connector is configured inside the tenants after both exist.
    (metered budget or BYOK placeholder) + `MaxSeats`; integration-tested. No Stripe yet — the
    endpoint is the webhook's target and is independently useful to operators today.
 3. **Seat enforcement**: per-tenant `MaxSeats` checked at user creation/JIT provisioning.
-4. **Cortex.Commerce**: Stripe webhook endpoint + event inbox + worker on the jobs primitive;
+4. **Plenipo.Commerce**: Stripe webhook endpoint + event inbox + worker on the jobs primitive;
    entitlement store + state machine; `ProductOffering` declaration surface. Keyless tests via
    recorded Stripe events + signature verification with a test secret.
 5. **Suspension/deprovision paths**: `past_due` flips `IsActive`; cancellation schedules
@@ -87,7 +87,7 @@ cortex-peer connector is configured inside the tenants after both exist.
    per-tenant state + concurrency, callback to mark active. Gated on `AZURE_DEPLOY_ENABLED`.
 7. **Usage → Stripe meters**: push per-tenant token usage as Stripe usage events (platform-key
    tenants only).
-8. **Umbrella site**: new `cortex-site` repo (Astro + Starlight): brand, pricing (JSON-driven),
+8. **Umbrella site**: new `plenipo-site` repo (Astro + Starlight): brand, pricing (JSON-driven),
    the-lawyer product page, docs pulled from repos' `docs/`.
 9. **the-lawyer end-to-end**: declare its ProductOffering, test-mode Stripe checkout →
    provisioned tenant, live walkthrough.

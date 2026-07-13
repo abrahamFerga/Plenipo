@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# smoke-test.sh — prove a RUNNING Cortex instance actually works, end-to-end.
+# smoke-test.sh — prove a RUNNING Plenipo instance actually works, end-to-end.
 # -----------------------------------------------------------------------------
 # `dotnet test` verifies throwaway instances it spins up itself. This verifies
 # YOUR running instance — the exact thing a newcomer wants to confirm after
@@ -11,7 +11,7 @@
 # a side-effecting tool is held for human approval — all via the zero-key Mock
 # provider, so no AI key is required.
 #
-#   Start the demo:  docker compose up -d && dotnet run --project samples/Cortex.Sample.Host
+#   Start the demo:  docker compose up -d && dotnet run --project samples/Plenipo.Sample.Host
 #   Then:            eng/smoke-test.sh                 # defaults to http://localhost:8080
 #                    eng/smoke-test.sh https://my-deployment   # or any running instance
 #
@@ -28,14 +28,14 @@ fail() { printf '  FAIL  %s\n' "$1"; FAILED=1; }
 get()  { curl -fsS --max-time 30 "$BASE$1"; }
 post() { curl -fsS --max-time 30 -X POST -H 'Content-Type: application/json' -d "$2" "$BASE$1"; }
 
-echo "==> Smoke-testing Cortex at $BASE"
+echo "==> Smoke-testing Plenipo at $BASE"
 
 # 1. Liveness — the host is up.
 code="$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 10 "$BASE/alive" 2>/dev/null || true)"
 if [ "$code" = "200" ]; then pass "/alive responds 200"; else
   fail "/alive did not respond 200 (got '${code:-no response}') — is the host running at $BASE?"
   echo ""; echo "FAILED — the host is unreachable; later checks skipped."
-  echo "Start it with: docker compose up -d && dotnet run --project samples/Cortex.Sample.Host"
+  echo "Start it with: docker compose up -d && dotnet run --project samples/Plenipo.Sample.Host"
   exit 1
 fi
 
@@ -68,7 +68,7 @@ printf '%s' "$audit" | grep -q 'summarize_spending' && pass "tool call was audit
 
 echo ""
 if [ "$FAILED" -eq 0 ]; then
-  echo "OK — your Cortex instance loads all modules, serves seeded data, runs an audited tool call, and enforces the approval gate."
+  echo "OK — your Plenipo instance loads all modules, serves seeded data, runs an audited tool call, and enforces the approval gate."
 else
   echo "FAILED — see the checks above."
   exit 1

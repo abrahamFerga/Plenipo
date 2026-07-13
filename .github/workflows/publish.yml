@@ -1,15 +1,15 @@
 # =============================================================================
-# publish.yml — Publish the Cortex platform artifacts.
+# publish.yml — Publish the Plenipo platform artifacts.
 # -----------------------------------------------------------------------------
 # Runs when a GitHub Release is published (the tag drives the version), or on a
 # manual dispatch with an explicit version. Three distribution channels:
 #
-#  1. public npm registry — the @abrahamferga/cortex-ui LIBRARY, so product hosts install it
-#     with `pnpm add @abrahamferga/cortex-ui` (no release-asset copying). Published with
+#  1. public npm registry — the @plenipo/ui LIBRARY, so product hosts install it
+#     with `pnpm add @plenipo/ui` (no release-asset copying). Published with
 #     provenance. Requires the NPM_TOKEN secret (an automation token for the @abrahamferga scope).
 #
 #  2. GitHub Release ASSETS (release trigger only) — the nupkgs plus the two prebuilt UI
-#     bundles (the cortex-ui APP SHELL zip and the @cortex/admin-ui console zip). Assets are
+#     bundles (the plenipo-ui APP SHELL zip and the @plenipo/admin-ui console zip). Assets are
 #     ANONYMOUSLY downloadable, so a product repo can vendor its .packages/ and wwwroot/ from a
 #     release URL with no checkout, no PAT, no registry. The bundles are brand-agnostic: the
 #     shell resolves the product name at runtime from /api/platform/branding.
@@ -18,7 +18,7 @@
 #     (GitHub Packages requires a read:packages PAT even for public repos, which is
 #     why the release assets above are the primary channel.)
 #       dotnet nuget add source https://nuget.pkg.github.com/<OWNER>/index.json \
-#         --name cortex --username <user> --password <a PAT with read:packages>
+#         --name plenipo --username <user> --password <a PAT with read:packages>
 #
 # The local pack+consume path is already proven on every CI run by
 # eng/verify-packaging.sh (see ci.yml).
@@ -38,7 +38,7 @@ on:
 
 # GITHUB_TOKEN needs package-write for GitHub Packages and contents-write to
 # attach assets to the release. id-token: write lets `npm publish --provenance`
-# mint a signed provenance attestation for the @abrahamferga/cortex-ui npm package.
+# mint a signed provenance attestation for the @plenipo/ui npm package.
 permissions:
   contents: write
   packages: write
@@ -75,11 +75,11 @@ jobs:
           fi
           if [ -z "$version" ]; then echo "No version resolved." >&2; exit 1; fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "Publishing Cortex packages @ $version"
+          echo "Publishing Plenipo packages @ $version"
 
       - name: Pack
         run: |
-          dotnet pack Cortex.slnx -c Release -o ./artifacts \
+          dotnet pack Plenipo.slnx -c Release -o ./artifacts \
             -p:PackageVersion="${{ steps.ver.outputs.version }}" \
             -p:RepositoryUrl="${{ github.server_url }}/${{ github.repository }}" \
             -p:PackageProjectUrl="${{ github.server_url }}/${{ github.repository }}"
@@ -109,7 +109,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
           # Writes an .npmrc that authenticates to the public npm registry via NODE_AUTH_TOKEN,
-          # so the publish step below can `npm publish` @abrahamferga/cortex-ui.
+          # so the publish step below can `npm publish` @plenipo/ui.
           registry-url: "https://registry.npmjs.org"
 
       - name: Build UI bundles
@@ -118,27 +118,27 @@ jobs:
           VITE_API_BASE: ""
         run: |
           pnpm -C frontend install --frozen-lockfile
-          pnpm -C frontend/cortex-ui build:app
+          pnpm -C frontend/plenipo-ui build:app
           pnpm -C frontend/admin-ui build
-          (cd frontend/cortex-ui/dist-app && zip -r "$GITHUB_WORKSPACE/artifacts/cortex-ui-app.zip" .)
-          (cd frontend/admin-ui/dist && zip -r "$GITHUB_WORKSPACE/artifacts/cortex-admin-ui.zip" .)
+          (cd frontend/plenipo-ui/dist-app && zip -r "$GITHUB_WORKSPACE/artifacts/plenipo-ui-app.zip" .)
+          (cd frontend/admin-ui/dist && zip -r "$GITHUB_WORKSPACE/artifacts/plenipo-admin-ui.zip" .)
 
-      # Publish the @abrahamferga/cortex-ui LIBRARY to the public npm registry — product hosts that
+      # Publish the @plenipo/ui LIBRARY to the public npm registry — product hosts that
       # build their own app entry on the moduleUi seam (e.g. Networthy's ADR-0008) now install it
-      # with `pnpm add @abrahamferga/cortex-ui`, no release-asset copying. The dist is built with
+      # with `pnpm add @plenipo/ui`, no release-asset copying. The dist is built with
       # VITE_API_BASE="" (frozen at library-build time) so consumers get same-origin API calls; a
       # checked-out source alias still covers dev servers that need a live env. --provenance signs a
       # build attestation (needs id-token: write); --ignore-scripts avoids re-running prepack since
       # we just built. Requires an NPM_TOKEN secret (automation token for the @abrahamferga scope).
-      - name: Publish @abrahamferga/cortex-ui to npm
+      - name: Publish @plenipo/ui to npm
         if: github.event_name == 'release'
         env:
           VITE_API_BASE: ""
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          pnpm -C frontend/cortex-ui build
-          (cd frontend/cortex-ui && npm pkg set version="${{ steps.ver.outputs.version }}")
-          (cd frontend/cortex-ui && npm publish --ignore-scripts --access public --provenance)
+          pnpm -C frontend/plenipo-ui build
+          (cd frontend/plenipo-ui && npm pkg set version="${{ steps.ver.outputs.version }}")
+          (cd frontend/plenipo-ui && npm publish --ignore-scripts --access public --provenance)
 
       - name: Attach artifacts to the release
         if: github.event_name == 'release'

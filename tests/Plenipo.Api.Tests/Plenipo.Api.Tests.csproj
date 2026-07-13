@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- Test code follows xUnit conventions (underscore_names); skip the CA analyzers here. -->
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Hosts the bare platform (no domain modules) via WebApplicationFactory<Program>. -->
+    <ProjectReference Include="..\..\src\Plenipo.Api\Plenipo.Api.csproj" />
+  </ItemGroup>
+
+</Project>

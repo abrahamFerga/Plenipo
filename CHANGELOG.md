@@ -1,11 +1,11 @@
 # Changelog
 
-All notable changes to Cortex are recorded here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); Cortex will adopt
+All notable changes to Plenipo are recorded here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); Plenipo will adopt
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it leaves alpha.
 
 Releases are cut from a tagged GitHub Release (`v*`), which triggers the publish workflow
-(`.github/workflows/publish.yml`) to push the `Cortex.*` NuGet packages and the `@abrahamferga/cortex-ui`
+(`.github/workflows/publish.yml`) to push the `Plenipo.*` NuGet packages and the `@plenipo/ui`
 npm package. Until then, everything lives under **Unreleased**.
 
 ## [Unreleased] — toward 0.1.0-alpha
@@ -18,7 +18,7 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
 
 **Platform (backend NuGet packages)**
 - **Module SDK** — a vertical implements `IModule` and declares a `ModuleManifest` (tools, tabs,
-  roles, agent instructions); the host discovers and installs it with `AddCortexModule<T>()`.
+  roles, agent instructions); the host discovers and installs it with `AddPlenipoModule<T>()`.
   See [BUILDING_A_MODULE.md](BUILDING_A_MODULE.md).
 - **Chat-first agent pipeline** on Microsoft Agent Framework over `Microsoft.Extensions.AI`, streamed
   over SignalR (Redis backplane) and the open **AG-UI** protocol.
@@ -64,11 +64,11 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   notification (category `"{moduleId}.approvals"`, mutable per user via the standard switchboard),
   so approvers act from their inbox instead of camping in the requester's chat.
 - **Separate-systems model** — each vertical is its own product/host/repo on the platform packages
-  (`samples/Cortex.Legal.Host` is the canonical single-vertical shape); systems connect via the
-  **cortex-peer connector**, which lets one deployment's agent ask another's over the open AG-UI
+  (`samples/Plenipo.Legal.Host` is the canonical single-vertical shape); systems connect via the
+  **plenipo-peer connector**, which lets one deployment's agent ask another's over the open AG-UI
   protocol (the peer enforces its own auth, RBAC, tool gating, and audit; credential is a protected
   secret).
-- **Data-source connectors** — a manifest-first **connector SDK** (`Cortex.Connectors.Sdk`:
+- **Data-source connectors** — a manifest-first **connector SDK** (`Plenipo.Connectors.Sdk`:
   `IConnector`, settings schema, tool source) bridging agents to where tenant data already lives.
   Connectors are **default-off per tenant**: an admin enables and configures each one on the new
   **Integrations** page (`/api/admin/connectors`); only then do its tools exist for that tenant's
@@ -88,8 +88,8 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   Legal, `connect_matter_folder` / `sync_matter_folder` attach synced files to the matter AND index
   them into its knowledge collection — "keep this matter in sync with our folder" ends in cited,
   searchable knowledge.
-- **`cortex` CLI** — `cortex init` (interactive wizard or `--non-interactive` flags) writes one
-  declarative `cortex.settings.json` the host layers into configuration; re-runs are
+- **`plenipo` CLI** — `plenipo init` (interactive wizard or `--non-interactive` flags) writes one
+  declarative `plenipo.settings.json` the host layers into configuration; re-runs are
   non-destructive and secrets are never written (user-secrets commands are printed instead).
 - **Permission-aware RAG** (opt-in, `Rag:Enabled`) — documents ingest into **scoped collections**
   (per matter/project, the Harvey-Vault pattern) via a background job; retrieval is **hybrid**
@@ -100,7 +100,7 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   pipeline keyless in dev/CI. Requires pgvector (dev/CI images updated). See
   [docs/PLATFORM_CONNECTORS_RAG_PLAN.md](docs/PLATFORM_CONNECTORS_RAG_PLAN.md).
 
-**Frontend (`@abrahamferga/cortex-ui`, `@cortex/admin-ui`)**
+**Frontend (`@plenipo/ui`, `@plenipo/admin-ui`)**
 - React 18 + Vite libraries: the chat shell (attachments, streaming, retry, approvals), module
   switcher, server-driven data tabs, and the separate admin console. Ships ESM + UMD bundles with
   bundled TypeScript declarations.
@@ -134,7 +134,7 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
 - **Email delivery** — `ISmtpTransport` seam + `EmailNotificationChannel` in the notification
   fan-out (`Email:` config; password via user-secrets/Key Vault).
 - **Host extensibility** — `ITenantProvisionedHook` (act on provisioning; welcome-email worked
-  example), `AddCortexNotificationChannel` / `AddCortexPlatformTools` first-class helpers,
+  example), `AddPlenipoNotificationChannel` / `AddPlenipoPlatformTools` first-class helpers,
   `Auth:DefaultRole` for JIT users, and [BUILDING_A_PRODUCT.md](BUILDING_A_PRODUCT.md)
   cataloging every seam.
 

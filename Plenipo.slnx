@@ -1,0 +1,37 @@
+<Solution>
+  <!--
+    Plenipo base platform — publishable as NuGet + npm packages.
+
+    This solution contains ONLY the platform layer:
+      - Core primitives (entities, results, multi-tenancy)
+      - Module SDK (IModule, ModuleManifest — the contract every domain module implements)
+      - Application layer (RBAC, agent runner, authorization)
+      - Infrastructure (EF Core, audit, agent pipeline, persistence)
+      - AspNetCore integration (auth, endpoints, SignalR, module host wiring)
+      - ServiceDefaults (Aspire health checks, OpenTelemetry)
+      - AppHost (local Aspire orchestration)
+
+    Domain modules live in samples/ (for development) or their own repos (for production).
+    To build a domain app: create a new project, reference Plenipo.* NuGet packages,
+    add your IModule implementations, and call builder.AddPlenipoModule<YourModule>().
+  -->
+  <Folder Name="/src/">
+    <Project Path="src/Plenipo.Core/Plenipo.Core.csproj" />
+    <Project Path="src/Plenipo.Modules.Sdk/Plenipo.Modules.Sdk.csproj" />
+    <Project Path="src/Plenipo.Connectors.Sdk/Plenipo.Connectors.Sdk.csproj" />
+    <Project Path="src/Plenipo.Connectors/Plenipo.Connectors.csproj" />
+    <Project Path="src/Plenipo.Application/Plenipo.Application.csproj" />
+    <Project Path="src/Plenipo.Infrastructure/Plenipo.Infrastructure.csproj" />
+    <Project Path="src/Plenipo.AspNetCore/Plenipo.AspNetCore.csproj" />
+    <Project Path="src/Plenipo.ServiceDefaults/Plenipo.ServiceDefaults.csproj" />
+    <Project Path="src/Plenipo.Api/Plenipo.Api.csproj" />
+    <Project Path="src/Plenipo.Cli/Plenipo.Cli.csproj" />
+    <Project Path="src/Plenipo.AppHost/Plenipo.AppHost.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Plenipo.Application.Tests/Plenipo.Application.Tests.csproj" />
+    <Project Path="tests/Plenipo.Infrastructure.Tests/Plenipo.Infrastructure.Tests.csproj" />
+    <Project Path="tests/Plenipo.Api.Tests/Plenipo.Api.Tests.csproj" />
+    <Project Path="tests/Plenipo.Cli.Tests/Plenipo.Cli.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -29,9 +29,9 @@ api_max_replicas = 3
 # --- CIAM / auth -------------------------------------------------------------
 ciam_tenant_id      = ""
 ciam_authority_host = ""
-spa_redirect_uris   = ["https://staging.cortex.example.com"]
+spa_redirect_uris   = ["https://staging.plenipo.example.com"]
 
 # --- GitHub OIDC -------------------------------------------------------------
 github_owner        = "your-org"
-github_repo         = "Cortex"
+github_repo         = "Plenipo"
 github_environments = ["staging"]

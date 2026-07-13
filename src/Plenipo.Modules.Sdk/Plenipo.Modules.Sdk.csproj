@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The contract every domain module implements. Manifest-first: a module declares its
+    tools, tabs, and required permissions statically before any of its code runs.
+    Ship this package with your module so consumers only need one dependency.
+  -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>Plenipo.Modules.Sdk</PackageId>
+    <Description>Module SDK for Plenipo — IModule, ModuleManifest, ToolDescriptor. Implement these to create a Plenipo domain module.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.Extensions.AI" />
+    <!-- ModuleDbContext (audit-stamping base for module persistence). The core EF package
+         only — providers (Npgsql, …) remain the module's own choice. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Plenipo.Core\Plenipo.Core.csproj" />
+  </ItemGroup>
+
+</Project>

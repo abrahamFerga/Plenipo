@@ -14,7 +14,7 @@ Compose file, ONE mounted state directory holding everything the system cares ab
 credentials, memory index), `docker compose pull && docker compose up -d` as the whole upgrade
 story, and pinned version tags so updates are deliberate. Production setups converge on Docker
 because it gives isolation + easy updates + portable state.
-Cortex equivalents: all state already externalized (Postgres + DataProtection keys), so the
+Plenipo equivalents: all state already externalized (Postgres + DataProtection keys), so the
 gaps are (a) a published container image + compose file, (b) Terraform for the Azure resources,
 (c) pinned-tag upgrade docs.
 
@@ -22,7 +22,7 @@ gaps are (a) a published container image + compose file, (b) Terraform for the A
 bundles (frontmatter name/description + instructions + `references/` + `scripts/`) loaded via
 progressive disclosure — the prompt carries only name+description; the model calls
 `load_skill` / `read_skill_resource` / `run_skill_script` on demand. `UseScriptApproval(true)`
-wraps script execution in the same approval flow Cortex already renders. Scripts are
+wraps script execution in the same approval flow Plenipo already renders. Scripts are
 unsandboxed subprocesses — approval gate is mandatory, and skills directories must be
 deploy-time content, not tenant uploads, until sandboxing (Hyperlight) is evaluated.
 
@@ -48,7 +48,7 @@ KV references instead of env vars).
   secrets are forgotten from KV best-effort. Same write-only admin UI. Delivered.
   Deferred to a later pass: resolving `Ai:ApiKey` through the vault (needs the vault before the
   ChatClient singleton is built — a small startup-ordering refactor).
-- [x] **Phase 3 — Agent skills (MAF file format, Cortex pipeline)**: `Skills:Enabled` +
+- [x] **Phase 3 — Agent skills (MAF file format, Plenipo pipeline)**: `Skills:Enabled` +
   `Skills:Path`; `FileSkillCatalog` loads `SKILL.md` bundles (same on-disk format as MAF
   file-based skills / agentskills.io: frontmatter name+description, instruction body,
   `references/`, `scripts/`). DESIGN DECISION: the progressive-disclosure loop
@@ -59,13 +59,13 @@ KV references instead of env vars).
   the admin UI can't see. `<available_skills>` advertisement appended to instructions only when
   the user can call load_skill. Script runs: interpreter by extension (py/js/sh/ps1), skill-dir
   confinement (traversal rejected), timeout + process-tree kill, approval-gated. Sample skill
-  `samples/Cortex.Sample.Host/skills/brand-voice`. Delivered.
+  `samples/Plenipo.Sample.Host/skills/brand-voice`. Delivered.
   ALSO FIXED (found during integration): connector tools' `RequiresApproval` flag was shown in
   the admin UI but never enforced at run time — the runner's approval set only included module
   manifest tools. Now unioned with per-ModuleTool flags; ApprovalExecutor also falls back to the
   connector catalog so approved connector tools actually re-execute.
 - [x] **Phase 4 — Deployment: containers + compose (the OpenClaw lesson)**: multi-stage
-  Dockerfile for `samples/Cortex.Sample.Host` (modules + connectors + sample skill baked in,
+  Dockerfile for `samples/Plenipo.Sample.Host` (modules + connectors + sample skill baked in,
   non-root runtime), `deploy/compose/` — docker-compose.yml (api + pgvector pg17 + redis, all
   pinned, named volumes as the single state boundary, healthchecks, audit-DB init script),
   `.env.example` (one required value), README covering quickstart / `pull && up -d` upgrades /
@@ -91,7 +91,7 @@ KV references instead of env vars).
     user when they hold platform.ai.manage (covers Token authorization mode, where no role rows
     exist). Delivered.
   - [x] **Eval harness** (docs/EVALS.md): golden-conversation evals as JSON data under
-    `samples/Cortex.Sample.Host.IntegrationTests/Evals/cases/` — one user turn + the
+    `samples/Plenipo.Sample.Host.IntegrationTests/Evals/cases/` — one user turn + the
     behavioral contract (tools routed, approval gate fired, reply must/mustn't say).
     Runs through the REAL pipeline (auth, RBAC filtering, approval, audit, Mock provider)
     via the AG-UI stream; protocol health asserted on every case; add a case = drop a JSON
@@ -108,14 +108,14 @@ KV references instead of env vars).
     processor notifies the enqueuer on Succeeded/Failed (best-effort, never disturbs job state).
     Explicit tenant/user on the Notification record — producers run outside request scopes.
     Delivered — and the webhook channel followed: per-tenant URL + write-only signing secret
-    (ISecretVault, scope Cortex.Notifications.WebhookSecret), payloads HMAC-signed
-    (X-Cortex-Signature: sha256=…, GitHub/Meta scheme), admin surface
+    (ISecretVault, scope Plenipo.Notifications.WebhookSecret), payloads HMAC-signed
+    (X-Plenipo-Signature: sha256=…, GitHub/Meta scheme), admin surface
     /api/admin/notification-settings under the new platform.notifications.manage permission.
     Explicit-tenant config lookup (producers have no ambient tenant). Also fixed in passing:
     tools.skills.* now appear in the permission catalog and the tenant_admin baseline.
     Remaining follow-up: calendar-reminder producer (module-side — belongs to the vertical repo).
-    The UI half landed: NotificationBell in the @abrahamferga/cortex-ui top bar (unread badge, 30s poll,
-    mark-read / mark-all) and an Operations tab in @cortex/admin-ui over /api/admin/ops
+    The UI half landed: NotificationBell in the @plenipo/ui top bar (unread badge, 30s poll,
+    mark-read / mark-all) and an Operations tab in @plenipo/admin-ui over /api/admin/ops
     (jobs / knowledge / connectors / AI+budget cards, backlog + budget warnings, 15s refresh).
   - [x] **Cross-module handoff (in-host)**: generated `ask_{module}` platform tools — one per
     installed module, each carrying the target's description for routing — run a nested,
@@ -124,10 +124,10 @@ KV references instead of env vars).
     nested set + AsyncLocal depth guard; stateless — no conversation row; answer capped at
     4k chars). One permission gates them all (`tools.handoff.ask_module`, tenant_admin
     baseline). Eval-covered: legal chat routes "ask finance …" to ask_finance end to end.
-    The cross-SYSTEM case remains cortex-peer. Known v1 limitation: nested-turn token usage
+    The cross-SYSTEM case remains plenipo-peer. Known v1 limitation: nested-turn token usage
     is not recorded. Delivered.
   - [x] **Admin ops snapshot**: GET `/api/admin/ops` (platform.audit.view) — job queue depth /
     running / failed-24h / oldest-queued age, enabled connectors with binding counts and last
     sync, RAG collections/chunks/last-ingest, webhook-configured flag, AI provider + month
-    tokens vs monthly budget. One tenant-scoped call for "something feels slow". The @cortex/
+    tokens vs monthly budget. One tenant-scoped call for "something feels slow". The @plenipo/
     admin-ui tab over it is queued with the UI bell/badge as one frontend pass. Delivered.

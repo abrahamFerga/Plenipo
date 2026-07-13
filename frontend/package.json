@@ -1,15 +1,15 @@
 {
-  "name": "@cortex/frontend",
+  "name": "@plenipo/frontend",
   "version": "0.1.0-alpha",
   "private": true,
-  "description": "Cortex UI monorepo — base platform library and domain-specific UI packages.",
+  "description": "Plenipo UI monorepo — base platform library and domain-specific UI packages.",
   "packageManager": "pnpm@11.9.0",
   "scripts": {
-    "dev": "pnpm --filter @abrahamferga/cortex-ui dev",
-    "dev:admin": "pnpm --filter @cortex/admin-ui dev",
-    "build": "pnpm --filter @abrahamferga/cortex-ui build",
-    "build:admin": "pnpm --filter @cortex/admin-ui build",
-    "build:all": "pnpm --filter @abrahamferga/cortex-ui build && pnpm --filter @cortex/admin-ui build",
+    "dev": "pnpm --filter @plenipo/ui dev",
+    "dev:admin": "pnpm --filter @plenipo/admin-ui dev",
+    "build": "pnpm --filter @plenipo/ui build",
+    "build:admin": "pnpm --filter @plenipo/admin-ui build",
+    "build:all": "pnpm --filter @plenipo/ui build && pnpm --filter @plenipo/admin-ui build",
     "lint": "pnpm -r lint"
   }
 }

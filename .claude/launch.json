@@ -2,11 +2,11 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "cortex-site",
+      "name": "plenipo-site",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": [
         "--dir",
-        "C:/Users/abrah/source/cortex-site",
+        "C:/Users/abrah/source/plenipo-site",
         "dev",
         "--port",
         "4321"

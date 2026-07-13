@@ -14,11 +14,11 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Resolve @abrahamferga/cortex-ui from source (mirrors the Vite alias), so type-checking the console
-       does not require a prior @abrahamferga/cortex-ui build. */
+    /* Resolve @plenipo/ui from source (mirrors the Vite alias), so type-checking the console
+       does not require a prior @plenipo/ui build. */
     "baseUrl": ".",
     "paths": {
-      "@abrahamferga/cortex-ui": ["../cortex-ui/src/index.ts"]
+      "@plenipo/ui": ["../plenipo-ui/src/index.ts"]
     },
 
     /* Linting */

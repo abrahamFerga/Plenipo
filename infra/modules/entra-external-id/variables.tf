@@ -3,7 +3,7 @@
 # =============================================================================
 
 variable "name_prefix" {
-  description = "Naming prefix, e.g. cortex-dev."
+  description = "Naming prefix, e.g. plenipo-dev."
   type        = string
 }
 
@@ -33,8 +33,8 @@ variable "app_roles" {
   description = <<-EOT
     System roles to expose as Entra app roles on the API application. Assigning a
     user to one of these roles makes Entra emit it in the token's `roles` claim,
-    which Cortex's PermissionResolver expands into permissions. Defaults match
-    Cortex's built-in roles.
+    which Plenipo's PermissionResolver expands into permissions. Defaults match
+    Plenipo's built-in roles.
   EOT
   type = map(object({
     display_name = string

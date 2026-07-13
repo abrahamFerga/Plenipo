@@ -1,5 +1,5 @@
 variable "name_prefix" {
-  description = "Naming prefix, e.g. cortex-dev."
+  description = "Naming prefix, e.g. plenipo-dev."
   type        = string
 }
 

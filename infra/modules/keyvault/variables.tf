@@ -1,10 +1,10 @@
 variable "name_prefix" {
-  description = "Naming prefix, e.g. cortex-dev."
+  description = "Naming prefix, e.g. plenipo-dev."
   type        = string
 }
 
 variable "name_compact" {
-  description = "Hyphen-free compact name base, e.g. cortexdev."
+  description = "Hyphen-free compact name base, e.g. plenipodev."
   type        = string
 }
 
@@ -47,13 +47,13 @@ variable "db_admin_password" {
 }
 
 variable "platform_connection_string" {
-  description = "Composed Npgsql connection string for the platform database (what the app reads as ConnectionStrings__cortex-platform)."
+  description = "Composed Npgsql connection string for the platform database (what the app reads as ConnectionStrings__plenipo-platform)."
   type        = string
   sensitive   = true
 }
 
 variable "audit_connection_string" {
-  description = "Composed Npgsql connection string for the audit database (what the app reads as ConnectionStrings__cortex-audit)."
+  description = "Composed Npgsql connection string for the audit database (what the app reads as ConnectionStrings__plenipo-audit)."
   type        = string
   sensitive   = true
 }

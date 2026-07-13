@@ -7,12 +7,12 @@ harness gives those changes the same regression net code has.
 ## How it works
 
 Each eval is a JSON file under
-`samples/Cortex.Sample.Host.IntegrationTests/Evals/cases/`: one user turn against a
+`samples/Plenipo.Sample.Host.IntegrationTests/Evals/cases/`: one user turn against a
 module's agent plus the behavioral contract the platform must honor. The runner
 (`GoldenConversationEvals`) sends the turn through the **real API** — auth, RBAC tool
 filtering, the approval gate, audit, the deterministic Mock provider — and asserts the
 contract against the parsed AG-UI event stream. Keyless and CI-safe; runs with the rest
-of the integration suite (`dotnet test samples/Cortex.Samples.slnx`).
+of the integration suite (`dotnet test samples/Plenipo.Samples.slnx`).
 
 ## Case schema
 

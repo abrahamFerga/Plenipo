@@ -1,6 +1,6 @@
 <Project>
 
-  <!-- Shared MSBuild properties for every project in the Cortex solution. -->
+  <!-- Shared MSBuild properties for every project in the Plenipo solution. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
@@ -19,12 +19,12 @@
   <!-- NuGet package metadata — applies to packable projects (IsPackable=true in their .csproj). -->
   <PropertyGroup>
     <Version>0.1.0-alpha</Version>
-    <Authors>Cortex Contributors</Authors>
-    <Company>Cortex</Company>
-    <Product>Cortex AI Platform</Product>
+    <Authors>Plenipo Contributors</Authors>
+    <Company>Plenipo</Company>
+    <Product>Plenipo AI Platform</Product>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>cortex;ai;agents;multitenant;dotnet</PackageTags>
+    <PackageTags>plenipo;ai;agents;multitenant;dotnet</PackageTags>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 

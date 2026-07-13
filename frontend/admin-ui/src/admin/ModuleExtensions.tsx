@@ -1,5 +1,5 @@
 import { useParams } from "react-router-dom";
-import { GenericTab } from "@abrahamferga/cortex-ui";
+import { GenericTab } from "@plenipo/ui";
 import { useAdminExtensions } from "./extensions";
 
 /**

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, ConfirmDialog, type AdminUser } from "@abrahamferga/cortex-ui";
+import { api, ConfirmDialog, type AdminUser } from "@plenipo/ui";
 import { InvitesPanel } from "./InvitesPanel";
 
 function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {

@@ -1,7 +1,7 @@
 # =============================================================================
 # module: container-app
 # -----------------------------------------------------------------------------
-# Container App Environment (wired to Log Analytics) + the Cortex.Api container
+# Container App Environment (wired to Log Analytics) + the Plenipo.Api container
 # app. The app:
 #   - Runs under the supplied user-assigned managed identity.
 #   - Pulls its image from ACR via that identity (registry block, no creds).
@@ -67,7 +67,7 @@ resource "azurerm_container_app" "api" {
     max_replicas = var.max_replicas
 
     container {
-      name   = "cortex-api"
+      name   = "plenipo-api"
       image  = var.image
       cpu    = var.cpu
       memory = var.memory
@@ -93,7 +93,7 @@ resource "azurerm_container_app" "api" {
       }
       env {
         name  = "OTEL_SERVICE_NAME"
-        value = "cortex-api"
+        value = "plenipo-api"
       }
 
       # Auth (Entra External ID) — the keys AuthSetup binds: Auth:Authority and

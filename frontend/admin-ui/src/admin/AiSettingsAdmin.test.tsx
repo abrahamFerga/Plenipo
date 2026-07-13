@@ -12,7 +12,7 @@ const SETTINGS = {
   modelOverride: null,
   endpointOverride: null,
   hasApiKey: false,
-  defaultSystemPrompt: "You are Cortex.",
+  defaultSystemPrompt: "You are Plenipo.",
   defaultMaxConversationTokens: 0,
   defaultMaxMonthlyTokens: 0,
   defaultProvider: "Mock",
@@ -58,7 +58,7 @@ describe("AiSettingsAdmin", () => {
     stubApi();
     renderSettings();
     const textarea = (await screen.findByLabelText("System prompt")) as HTMLTextAreaElement;
-    expect(textarea.placeholder).toContain("You are Cortex.");
+    expect(textarea.placeholder).toContain("You are Plenipo.");
   });
 
   it("saves the tenant overrides as a PUT (blank system prompt ⇒ null)", async () => {

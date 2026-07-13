@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, ConfirmDialog, type AdminTenant } from "@abrahamferga/cortex-ui";
+import { api, ConfirmDialog, type AdminTenant } from "@plenipo/ui";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString();

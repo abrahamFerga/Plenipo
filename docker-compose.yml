@@ -1,4 +1,4 @@
-# Local development dependencies for Cortex. See GETTING_STARTED.md.
+# Local development dependencies for Plenipo. See GETTING_STARTED.md.
 #
 #   docker compose up -d
 #
@@ -10,11 +10,11 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: cortex_platform
+      POSTGRES_DB: plenipo_platform
     ports:
       - "5432:5432"
     volumes:
-      - cortex-pgdata:/var/lib/postgresql/data
+      - plenipo-pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -27,4 +27,4 @@ services:
       - "6379:6379"
 
 volumes:
-  cortex-pgdata:
+  plenipo-pgdata:

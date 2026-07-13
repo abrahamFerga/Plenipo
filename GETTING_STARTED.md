@@ -1,10 +1,10 @@
-# Getting started with Cortex
+# Getting started with Plenipo
 
-Cortex is a **base platform for AI-first, chat-first apps**. This guide gets you from a clone to a
+Plenipo is a **base platform for AI-first, chat-first apps**. This guide gets you from a clone to a
 running chat assistant — with three demo verticals (Finance, Nutrition, Legal), an admin/security
 dashboard, and token-usage monitoring — in a few minutes. No AI API key required: a built-in **Mock**
 provider answers so the chat works out of the box, and it even performs **real, audited tool calls**
-(and triggers the human-in-the-loop approval gate) so you can see Cortex's security pipeline with zero setup.
+(and triggers the human-in-the-loop approval gate) so you can see Plenipo's security pipeline with zero setup.
 
 ## Prerequisites
 
@@ -27,7 +27,7 @@ docker compose up -d        # Postgres on :5432, Redis on :6379
 ### 2. Run the API on port 8080
 
 ```bash
-dotnet run --project samples/Cortex.Sample.Host
+dotnet run --project samples/Plenipo.Sample.Host
 ```
 
 This is the sample app built **on** the platform: it installs the Finance, Nutrition, and Legal
@@ -37,8 +37,8 @@ modules. On first run it applies the database migrations and seeds a `dev` tenan
 
 ### 3. Run the UI
 
-The frontend is **two apps**: the end-user **domain UI** (`@abrahamferga/cortex-ui`) and the **admin console**
-(`@cortex/admin-ui`). Both are Vite dev servers pointed at the API.
+The frontend is **two apps**: the end-user **domain UI** (`@plenipo/ui`) and the **admin console**
+(`@plenipo/admin-ui`). Both are Vite dev servers pointed at the API.
 
 ```bash
 cd frontend
@@ -71,7 +71,7 @@ Open **http://localhost:5173** (the domain UI) and you can:
 ### See the security pipeline — no API key needed
 
 The Mock provider doesn't just chat; on request it drives **real** tool calls through the same pipeline a
-real model would, so you can witness Cortex's signature capability immediately:
+real model would, so you can witness Plenipo's signature capability immediately:
 
 1. In **Finance**, send: *"Summarize my spending using a tool."* The assistant actually calls the
    `summarize_spending` tool over the demo ledger, so it comes back with real category totals (try
@@ -94,23 +94,23 @@ domain UI and the admin console) as Vite dev servers — the whole stack in one 
 telemetry dashboard. Install the front-end deps once, then run the host:
 
 ```bash
-dotnet run --project samples/Cortex.Sample.AppHost   # or `aspire run` from that directory
+dotnet run --project samples/Plenipo.Sample.AppHost   # or `aspire run` from that directory
 ```
 
 pnpm must be on PATH (`corepack enable`, or `npm i -g pnpm` on Windows without admin); the front-end
 dependencies install themselves — each UI has an `…-installer` helper resource that runs
 `pnpm install` before the dev server starts (a ~1s no-op when deps are already current).
 
-> **Reading the dashboard:** `cortex-ui-installer`, `cortex-admin-ui-installer`, and
-> `cortex-sample-rebuilder` are **on-demand helpers, not services** — the installers run to
+> **Reading the dashboard:** `plenipo-ui-installer`, `plenipo-admin-ui-installer`, and
+> `plenipo-sample-rebuilder` are **on-demand helpers, not services** — the installers run to
 > completion ("Finished") on every start, and the rebuilder stays "NotStarted" until you use the
 > dashboard's Rebuild command. Every real service (API, both UIs, Postgres, Redis, pgAdmin) should
 > show **Running / Healthy**.
 
-The dashboard lists every resource with its (dynamic) URL — `cortex-sample` (API), `cortex-ui` (domain
-UI), `cortex-admin-ui` (admin console) — and shows logs, traces (including **agent runs and LLM calls**),
+The dashboard lists every resource with its (dynamic) URL — `plenipo-sample` (API), `plenipo-ui` (domain
+UI), `plenipo-admin-ui` (admin console) — and shows logs, traces (including **agent runs and LLM calls**),
 and metrics. Aspire wires each UI's `VITE_API_BASE` to the API endpoint and adds the UI origins to the
-API's CORS policy automatically, so nothing needs pointing by hand — just open `cortex-ui` from the dashboard.
+API's CORS policy automatically, so nothing needs pointing by hand — just open `plenipo-ui` from the dashboard.
 
 To use a commercial model, open **Admin → AI Settings** after startup and configure the tenant's
 provider, model, and write-only key. The model selector loads the current catalog from the provider.
@@ -128,33 +128,33 @@ call, audit on every invocation, and the human-in-the-loop approval gate for sid
 
 | Symptom | Fix |
 |---------|-----|
-| **`Cortex could not reach PostgreSQL …`** on startup | Docker isn't running, or the database container hasn't started yet. Run `docker compose up -d`, wait a few seconds, then start the app again. |
+| **`Plenipo could not reach PostgreSQL …`** on startup | Docker isn't running, or the database container hasn't started yet. Run `docker compose up -d`, wait a few seconds, then start the app again. |
 | **Port already in use** | The dev ports are **5432** (Postgres), **6379** (Redis), **8080** (API), **5173** (domain UI), **5174** (admin console). If you already run Postgres locally on 5432, stop it — or edit `docker-compose.yml` and the connection strings. |
-| **`dotnet test samples/…` won't start** | The integration tests spin up a throwaway Postgres via Testcontainers, so **Docker must be running**. The `Cortex.slnx` unit tests don't need it. |
-| **The UI can't reach the API** | The API isn't running, or isn't at `http://localhost:8080`. Start it (`dotnet run --project samples/Cortex.Sample.Host`), or point the UI elsewhere with `VITE_API_BASE` (see `.env.example`). |
+| **`dotnet test samples/…` won't start** | The integration tests spin up a throwaway Postgres via Testcontainers, so **Docker must be running**. The `Plenipo.slnx` unit tests don't need it. |
+| **The UI can't reach the API** | The API isn't running, or isn't at `http://localhost:8080`. Start it (`dotnet run --project samples/Plenipo.Sample.Host`), or point the UI elsewhere with `VITE_API_BASE` (see `.env.example`). |
 | **Chat errors about the AI provider** | Check the tenant connection under Admin → AI Settings. OpenAI/Anthropic require a vaulted tenant key; Azure requires a deployment name/endpoint; the default **Mock** provider needs no setup. |
 | **Aspire AppHost exits: `pnpm was not found on PATH`** | The front-end resources are launched via pnpm. Run `corepack enable` (elevated on Windows) or `npm install -g pnpm`, then `pnpm --dir frontend install`, and start the AppHost again. |
-| **Aspire stack hangs: containers run but the API never starts (console shows nothing)** | Almost always a **Postgres password/volume mismatch**: Postgres bakes the password into the data volume at first init and never re-reads it, so if the password changed since, every health check fails (dashboard → `cortex-pg` shows `28P01 password authentication failed`) and `WaitFor` blocks the API — and everything downstream — forever. The sample now pins a **stable dev password** (`cortex-dev-only`, overridable via the `Parameters:cortex-pg-password` user-secret), so this only recurs if you change it. To keep your dev data, reset the role inside the running container: temporarily allow local trust in `pg_hba.conf`, `ALTER USER postgres PASSWORD '<the configured password>'`, then restore it. Or just throw the dev data away: `docker volume ls \| findstr cortex`, then `docker volume rm <name>` and rerun. |
+| **Aspire stack hangs: containers run but the API never starts (console shows nothing)** | Almost always a **Postgres password/volume mismatch**: Postgres bakes the password into the data volume at first init and never re-reads it, so if the password changed since, every health check fails (dashboard → `plenipo-pg` shows `28P01 password authentication failed`) and `WaitFor` blocks the API — and everything downstream — forever. The sample now pins a **stable dev password** (`plenipo-dev-only`, overridable via the `Parameters:plenipo-pg-password` user-secret), so this only recurs if you change it. To keep your dev data, reset the role inside the running container: temporarily allow local trust in `pg_hba.conf`, `ALTER USER postgres PASSWORD '<the configured password>'`, then restore it. Or just throw the dev data away: `docker volume ls \| findstr plenipo`, then `docker volume rm <name>` and rerun. |
 
 ## What's next
 
 - **Understand how it works**: [ARCHITECTURE.md](ARCHITECTURE.md) maps the platform, the chat security
   spine, the module system, and the data model (with diagrams).
 - **Build your own vertical**: [BUILDING_A_MODULE.md](BUILDING_A_MODULE.md) walks you through a complete
-  module from scratch (worked example: `samples/Cortex.Modules.Tasks`). In short — implement `IModule` and
-  call `builder.AddCortexModule<YourModule>()`; the dashboard, RBAC, audit, token tracking, and chat all
+  module from scratch (worked example: `samples/Plenipo.Modules.Tasks`). In short — implement `IModule` and
+  call `builder.AddPlenipoModule<YourModule>()`; the dashboard, RBAC, audit, token tracking, and chat all
   apply automatically.
-- **Consume Cortex as packages** (NuGet for the backend; `@abrahamferga/cortex-ui` for the domain UI and
-  `@cortex/admin-ui` for the admin console) — see [README.md](README.md).
+- **Consume Plenipo as packages** (NuGet for the backend; `@plenipo/ui` for the domain UI and
+  `@plenipo/admin-ui` for the admin console) — see [README.md](README.md).
 - **Deploy to Azure**: Terraform (Container Apps, Postgres, Redis, Key Vault, Entra External ID) +
   GitHub Actions are in `infra/` and `.github/workflows/`.
 
 ## Verify your setup
 
 ```bash
-dotnet build Cortex.slnx && dotnet test Cortex.slnx
-dotnet build samples/Cortex.Samples.slnx && dotnet test samples/Cortex.Samples.slnx   # needs Docker
-cd frontend && pnpm install && pnpm -r lint && pnpm --filter @abrahamferga/cortex-ui test && pnpm build:all
+dotnet build Plenipo.slnx && dotnet test Plenipo.slnx
+dotnet build samples/Plenipo.Samples.slnx && dotnet test samples/Plenipo.Samples.slnx   # needs Docker
+cd frontend && pnpm install && pnpm -r lint && pnpm --filter @plenipo/ui test && pnpm build:all
 ```
 
 Those check throwaway instances the tests spin up themselves. To verify the instance **you** just

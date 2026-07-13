@@ -5,17 +5,17 @@
 # =============================================================================
 
 output "resource_group_name" {
-  description = "Name of the resource group hosting all Cortex resources."
+  description = "Name of the resource group hosting all Plenipo resources."
   value       = azurerm_resource_group.this.name
 }
 
 output "api_fqdn" {
-  description = "Public FQDN of the Cortex.Api container app ingress."
+  description = "Public FQDN of the Plenipo.Api container app ingress."
   value       = module.container_app.fqdn
 }
 
 output "api_url" {
-  description = "Base HTTPS URL of the Cortex.Api (use <url>/health for smoke tests)."
+  description = "Base HTTPS URL of the Plenipo.Api (use <url>/health for smoke tests)."
   value       = "https://${module.container_app.fqdn}"
 }
 
@@ -40,7 +40,7 @@ output "key_vault_name" {
 }
 
 output "app_identity_client_id" {
-  description = "Client ID of the user-assigned managed identity used by Cortex.Api."
+  description = "Client ID of the user-assigned managed identity used by Plenipo.Api."
   value       = module.identity.client_id
 }
 
@@ -101,6 +101,6 @@ output "entra_spa_client_id" {
 }
 
 output "entra_app_role_ids" {
-  description = "Map of Cortex system role -> Entra app role id (for scripted role assignments)."
+  description = "Map of Plenipo system role -> Entra app role id (for scripted role assignments)."
   value       = module.entra_external_id.app_role_ids
 }

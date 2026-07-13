@@ -1,6 +1,6 @@
 # Files & document tools
 
-Cortex gives every module's agent a set of **platform document tools** and a **tenant-scoped file
+Plenipo gives every module's agent a set of **platform document tools** and a **tenant-scoped file
 store**, so flows like the lawyer scenario work out of the box:
 
 > Attach a PDF in chat → *"Store this as part of the case of Julia Assange"* → the agent reads the
@@ -30,7 +30,7 @@ Everything is open source with permissive licenses (a project requirement):
   "Provider": "Local",          // default — zero setup, files under data/files
   // "Provider": "AzureBlob",   // production
   // "AzureBlobConnectionString": "<via Key Vault / user-secrets>",
-  // "AzureBlobContainer": "cortex-files",
+  // "AzureBlobContainer": "plenipo-files",
   "MaxUploadBytes": 20971520
 }
 ```
@@ -38,7 +38,7 @@ Everything is open source with permissive licenses (a project requirement):
 ## The document tools (`tools.documents.*`)
 
 Registered as an `IPlatformToolSource`, so they're appended to **every** module's agent — and like
-all Cortex tools, each is permission-gated *before the model sees its schema*:
+all Plenipo tools, each is permission-gated *before the model sees its schema*:
 
 | Tool | Permission | What it does |
 |------|-----------|--------------|
@@ -128,7 +128,7 @@ warrant the human-in-the-loop gate.
 
 ## Testing
 
-`samples/Cortex.Sample.Host.IntegrationTests/FileAndDocumentToolTests.cs` covers everything keyless:
+`samples/Plenipo.Sample.Host.IntegrationTests/FileAndDocumentToolTests.cs` covers everything keyless:
 upload/download round-trip, RBAC (`guest` denied), tenant isolation, and a full
 `generate_pdf` → `read_document` round-trip through the same permission-filtered tool surface the
 agent uses — PdfPig writes the PDF and reads it back, no API keys, no native dependencies.

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { api } from "@abrahamferga/cortex-ui";
+import { api } from "@plenipo/ui";
 
 function formatTokens(n: number): string {
   return new Intl.NumberFormat("en-US").format(n);

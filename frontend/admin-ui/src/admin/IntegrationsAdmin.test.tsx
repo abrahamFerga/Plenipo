@@ -39,8 +39,8 @@ const AVAILABLE = [
     id: "documenso",
     displayName: "Documenso e-signature",
     description: "Send documents for signature.",
-    package: "Cortex.Connectors",
-    registration: "builder.AddCortexConnectors()",
+    package: "Plenipo.Connectors",
+    registration: "builder.AddPlenipoConnectors()",
   },
 ];
 
@@ -92,7 +92,7 @@ describe("IntegrationsAdmin", () => {
 
     expect(await screen.findByText("Documenso e-signature")).toBeTruthy();
     expect(screen.getByText("not installed")).toBeTruthy();
-    expect(screen.getByText("Cortex.Connectors")).toBeTruthy();
+    expect(screen.getByText("Plenipo.Connectors")).toBeTruthy();
     // An uninstalled connector offers no per-tenant switch — only the installed two do.
     expect(screen.getAllByRole("switch")).toHaveLength(2);
   });

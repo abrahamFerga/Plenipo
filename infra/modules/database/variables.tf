@@ -1,10 +1,10 @@
 variable "name_prefix" {
-  description = "Naming prefix, e.g. cortex-dev."
+  description = "Naming prefix, e.g. plenipo-dev."
   type        = string
 }
 
 variable "name_compact" {
-  description = "Hyphen-free compact name base, e.g. cortexdev."
+  description = "Hyphen-free compact name base, e.g. plenipodev."
   type        = string
 }
 
@@ -44,7 +44,7 @@ variable "storage_mb" {
 variable "admin_username" {
   description = "Administrator login name."
   type        = string
-  default     = "cortexadmin"
+  default     = "plenipoadmin"
 }
 
 variable "allowed_cidr" {

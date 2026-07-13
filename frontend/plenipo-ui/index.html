@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <!-- viewport-fit=cover: without it iOS reports env(safe-area-inset-bottom) as 0 and the
+         bottom navigation bar would sit under the home indicator. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- %VITE_BRAND_NAME% resolves at build time (Vite HTML env replacement); the config
+         defaults it to "Plenipo" so unbranded builds are unchanged. -->
+    <title>%VITE_BRAND_NAME%</title>
+    <!-- Apply the stored theme before the bundle loads so a dark-mode reload never flashes light.
+         Keep in sync with src/lib/theme.ts (@plenipo/ui). -->
+    <script>
+      try {
+        var t = localStorage.getItem("plenipo.theme");
+        if (t === "dark" || ((t === null || t === "system") && matchMedia("(prefers-color-scheme: dark)").matches))
+          document.documentElement.classList.add("dark");
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

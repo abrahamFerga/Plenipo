@@ -5,7 +5,7 @@ Three platform capabilities, designed together because they share seams:
 1. **Connectors** — pluggable bridges to where a customer's data already lives
    (SharePoint / Microsoft 365, Azure Blob, iManage, Google Drive, …), enable/disable-able
    per tenant, easy for domain modules to declare and consume.
-2. **`cortex init` CLI wizard** — an OpenClaw-style installer that asks which channels,
+2. **`plenipo init` CLI wizard** — an OpenClaw-style installer that asks which channels,
    connectors, and features to enable and writes one config.
 3. **RAG pipeline** — opt-in document ingestion into permission-aware, *scoped* retrieval
    collections ("smaller RAG databases per case"), queryable from chat.
@@ -39,7 +39,7 @@ this explicitly; re-enable forces re-auth).
 
 **Scoped binding**: Harvey binds at most **one** synced folder/matter per Vault project —
 per-project connector bindings instead of global indexing. This matches matter-centric
-products and is the pattern Cortex should copy for module resources.
+products and is the pattern Plenipo should copy for module resources.
 
 **RAG in legal AI converged on scope-first retrieval**: Harvey Vault makes each project its
 own corpus (~1,000 files) with explicit sharing; retrieval never spans projects the user
@@ -78,7 +78,7 @@ config, and a full `--non-interactive` flag surface for scripting.
 
 - **Mirror the module pattern.** Connectors are to *data sources* what `IModule` is to
   *domains*. Same lifecycle: a manifest, DI registration, per-tenant enablement, dotted
-  permissions, audited tool calls. A team that has written a Cortex module can write a
+  permissions, audited tool calls. A team that has written a Plenipo module can write a
   connector without learning anything new.
 - **Both lanes, Lane A first.** On-demand connectors (browse/search/fetch as the current
   user) are smaller, have zero ACL-staleness risk, and unblock the lawyer scenario
@@ -89,7 +89,7 @@ config, and a full `--non-interactive` flag surface for scripting.
   (attachments convention, `read_document`, matters, RAG ingestion) already works on
   `StoredFile`. Connectors need no special downstream integration.
 
-### 1.2 Contract (new project: `Cortex.Connectors.Sdk`, mirroring `Cortex.Modules.Sdk`)
+### 1.2 Contract (new project: `Plenipo.Connectors.Sdk`, mirroring `Plenipo.Modules.Sdk`)
 
 ```csharp
 public interface IConnector
@@ -175,15 +175,15 @@ ConnectorBinding      (TenantId, ConnectorId, ModuleId, ResourceType, ResourceId
 
 ---
 
-## Part 2 — `cortex init`: the install wizard
+## Part 2 — `plenipo init`: the install wizard
 
-A .NET global tool (`dotnet tool install -g Cortex.Cli`), new project `src/Cortex.Cli`,
+A .NET global tool (`dotnet tool install -g Plenipo.Cli`), new project `src/Plenipo.Cli`,
 using **Spectre.Console** (MIT) for the wizard UX. Copies OpenClaw's proven shape:
 
 **Timeline shown upfront; QuickStart vs Advanced; every step skippable and revisitable:**
 
 ```
-cortex init
+plenipo init
   1. Detect existing install        → keep / review / reset (never wipes without --reset)
   2. Prerequisites check            → Docker, .NET 10, Node 20 (fail with fix instructions)
   3. Deployment mode                → local dev (Aspire) | server (compose/Terraform pointers)
@@ -200,15 +200,15 @@ cortex init
 Rules carried over from OpenClaw, adapted to .NET conventions:
 
 - **One declarative config as source of truth** — the wizard *writes standard ASP.NET
-  configuration* (`cortex.settings.json` layered onto appsettings), because every knob it
+  configuration* (`plenipo.settings.json` layered onto appsettings), because every knob it
   touches (Ai:\*, Files:\*, Channels:WhatsApp:\*, Connectors:\*, Rag:\*) is already bound
   via `IConfiguration`. No parallel config system.
 - **Secrets never in the file**: wizard pipes them to `dotnet user-secrets` (dev) or emits
   Key-Vault/env-var references (server mode), matching the repo's existing rule.
-- **Idempotent re-runs**: re-running `cortex init` diffs and updates; `--reset` to start over.
+- **Idempotent re-runs**: re-running `plenipo init` diffs and updates; `--reset` to start over.
 - **Full non-interactive surface** for CI/scripts:
-  `cortex init --non-interactive --ai-provider Mock --channels web,whatsapp --connectors azure-blob --enable-rag --json`.
-- Post-install single-section changes: `cortex configure connectors`, `cortex configure channels`
+  `plenipo init --non-interactive --ai-provider Mock --channels web,whatsapp --connectors azure-blob --enable-rag --json`.
+- Post-install single-section changes: `plenipo configure connectors`, `plenipo configure channels`
   (same prompts, section-scoped).
 
 The wizard builds its channel/connector/module catalogs **from the manifests in the
@@ -243,7 +243,7 @@ story extends naturally. Composite indexes lead with `(TenantId, CollectionId)`.
 
 ### 3.2 Authorization: two layers + fail-closed recheck
 
-Mirrors Intapp-wall (coarse) + DMS ACL (fine), on seams Cortex already has:
+Mirrors Intapp-wall (coarse) + DMS ACL (fine), on seams Plenipo already has:
 
 1. **Collection gate (coarse)** — querying a collection requires a dotted permission
    (`rag.query` + module scoping) **and**, when the collection is bound to a module
@@ -304,8 +304,8 @@ StoredFile → IDocumentReader.ExtractTextAsync (PdfPig / OCR seam — already b
 | Phase | Slice | Why first |
 |---|---|---|
 | **1** ✅ | RAG core: `RagCollection`/`RagChunk` + pgvector, ingestion job, hybrid+RRF query with tenant/collection filters + fail-closed recheck, `search_knowledge` tool, `MockEmbeddingGenerator`, matter-scoped collections in Legal | **Shipped.** `IRagService`/`IRagCollectionGate` (Application seams), raw-SQL hybrid RRF with the embedding-model pin, `platform.rag-ingest` job, `tools.knowledge.search_knowledge` platform tool, legal `index_matter_documents` + matter walls (`restrict_matter_access` / `open_matter_access` — item 10), pgvector images in AppHosts/compose/Testcontainers. Deferred within phase 1: RLS backstop (needs session-variable plumbing), per-chunk source-ACL snapshots (arrives with Lane B), page-range provenance (extraction is not page-aware yet) |
-| **2** ✅ | Connector SDK + enablement: `Cortex.Connectors.Sdk`, `TenantConnector`/`ITenantConnectorStore`, admin Integrations page, `azure-blob` + `local-folder` connectors (Lane A) | **Shipped.** `IConnector`/`ConnectorManifest`/`IConnectorToolSource`/`IConnectorSettings` (SDK package), default-OFF per-tenant enablement consulted by the agent runner (`IConnectorToolCatalog` — a disabled connector's tools are never built), `/api/admin/connectors` with schema-driven settings (secrets write-only + DataProtection at rest), admin-ui Integrations page, `AddCortexConnector<T>()`, `tools.connectors.{id}.{tool}` permissions in the security catalog, fetch-lands-in-`IFileStore` convention. Deferred within phase 2: per-user OAuth (`UserConnectorLogin`, disable-revokes-tokens) — arrives with `msgraph` in phase 4 |
-| **3** ✅ | `cortex init` wizard (QuickStart + non-interactive), catalogs driven by manifests | **Shipped.** `Cortex.Cli` dotnet tool (`cortex init`): stepped wizard (AI/RAG/documents/channels/storage/auth) + full `--non-interactive` flag surface; writes one declarative `cortex.settings.json` the platform layers between appsettings.json and the environment file; re-runs are non-destructive; secrets never written — the wizard prints the `dotnet user-secrets` commands. Deferred within phase 3: prerequisite checks, health-check boot, and install-on-select (connectors/modules are per-tenant runtime toggles in the admin console, which the wizard points at) |
+| **2** ✅ | Connector SDK + enablement: `Plenipo.Connectors.Sdk`, `TenantConnector`/`ITenantConnectorStore`, admin Integrations page, `azure-blob` + `local-folder` connectors (Lane A) | **Shipped.** `IConnector`/`ConnectorManifest`/`IConnectorToolSource`/`IConnectorSettings` (SDK package), default-OFF per-tenant enablement consulted by the agent runner (`IConnectorToolCatalog` — a disabled connector's tools are never built), `/api/admin/connectors` with schema-driven settings (secrets write-only + DataProtection at rest), admin-ui Integrations page, `AddPlenipoConnector<T>()`, `tools.connectors.{id}.{tool}` permissions in the security catalog, fetch-lands-in-`IFileStore` convention. Deferred within phase 2: per-user OAuth (`UserConnectorLogin`, disable-revokes-tokens) — arrives with `msgraph` in phase 4 |
+| **3** ✅ | `plenipo init` wizard (QuickStart + non-interactive), catalogs driven by manifests | **Shipped.** `Plenipo.Cli` dotnet tool (`plenipo init`): stepped wizard (AI/RAG/documents/channels/storage/auth) + full `--non-interactive` flag surface; writes one declarative `plenipo.settings.json` the platform layers between appsettings.json and the environment file; re-runs are non-destructive; secrets never written — the wizard prints the `dotnet user-secrets` commands. Deferred within phase 3: prerequisite checks, health-check boot, and install-on-select (connectors/modules are per-tenant runtime toggles in the admin console, which the wizard points at) |
 | **4** ✅ | `msgraph` (SharePoint/OneDrive) delegated connector + per-user OAuth flow + disable-revokes | **Shipped.** Platform-level delegated-auth machinery (`UserConnectorLogin` protected token sessions, auth-code+PKCE start/callback endpoints with data-protected state, transparent refresh, `IOAuthTokenClient` seam) + the `msgraph` connector (Graph v1.0 REST via `IGraphApiClient` seam — no Graph SDK dependency; `list_m365_files` / approval-gated `fetch_from_m365` ride the CURRENT user's token, so Graph enforces their own permissions). **Disable revokes every session**; re-enable forces re-auth. E2E-tested keylessly with a fake IdP + fake Graph while the platform flow stays real |
 | **5** ✅ | Lane B: connector sync jobs → RAG ingestion, `ConnectorBinding` scoped folders (Harvey-style), ACL snapshot sync | **Shipped** (ahead of 4 — keyless-testable). `IConnectorSyncSource` (SDK), `ConnectorBinding` (one per resource, rebind replaces), `platform.connector-sync` job (incremental via per-item stamps, fail-closed on every seam), `IConnectorSyncHandler` module seam; legal: `connect_matter_folder`/`sync_matter_folder` → files attach to the matter AND index into its collection. Deferred: source-ACL snapshots onto chunks (needs an ACL-bearing source, i.e. phase 4's msgraph), scheduled auto-sync (manual/tool-triggered v1) |
 

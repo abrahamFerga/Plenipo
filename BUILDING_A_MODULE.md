@@ -1,15 +1,15 @@
-# Build your first Cortex module
+# Build your first Plenipo module
 
-Cortex is a **base platform**: a new vertical (finance, legal, nutrition, your industry) is a **module**,
+Plenipo is a **base platform**: a new vertical (finance, legal, nutrition, your industry) is a **module**,
 not a fork. This guide builds a complete — if deliberately tiny — module from scratch: a **to-do list**.
 By the end you'll have a chat agent with two tools, a data tab, per-tool permissions, audit logging, and a
 human-approval gate for the tool that writes — most of which the platform gives you for free.
 
-The finished code is in [`samples/Cortex.Modules.Tasks`](samples/Cortex.Modules.Tasks). Read it alongside
+The finished code is in [`samples/Plenipo.Modules.Tasks`](samples/Plenipo.Modules.Tasks). Read it alongside
 this guide, or copy that folder and rename `tasks` to your own vertical.
 
-> **Prerequisite:** a host that references `Cortex.AspNetCore` — either the sample
-> ([`samples/Cortex.Sample.Host`](samples/Cortex.Sample.Host)) or your own. New to Cortex? Run
+> **Prerequisite:** a host that references `Plenipo.AspNetCore` — either the sample
+> ([`samples/Plenipo.Sample.Host`](samples/Plenipo.Sample.Host)) or your own. New to Plenipo? Run
 > [GETTING_STARTED.md](GETTING_STARTED.md) first so you have the stack up.
 
 ## A module is four small pieces
@@ -135,7 +135,7 @@ public sealed class TasksToolSource : IModuleToolSource
 }
 ```
 
-This is where Cortex's signature behaviour lives: **the runner filters this list by the caller's
+This is where Plenipo's signature behaviour lives: **the runner filters this list by the caller's
 permissions _before_ building the model request**, so a user without `tools.tasks.add_task` never even
 sees that tool's schema. And a `RequiresApproval` tool is intercepted and parked for approval instead of
 executing.
@@ -223,7 +223,7 @@ The Legal sample's matter working file is the worked example.
 One line in your host:
 
 ```csharp
-builder.AddCortexModule<TasksModule>();
+builder.AddPlenipoModule<TasksModule>();
 ```
 
 That's the whole integration. The module now appears in the switcher, its agent answers chat with your
@@ -251,7 +251,7 @@ With `TasksModule` installed in your host (Step 5 — the sample host doesn't sh
 ## Test it
 
 A module is plain code, so it's plain to test — no host required. The example ships with
-[`samples/Cortex.Modules.Tasks.Tests`](samples/Cortex.Modules.Tasks.Tests), a handful of fast xUnit tests
+[`samples/Plenipo.Modules.Tasks.Tests`](samples/Plenipo.Modules.Tasks.Tests), a handful of fast xUnit tests
 that are a good shape for your own vertical:
 
 - the **manifest** declares the tools you expect, with the right permissions and `RequiresApproval`;
@@ -260,13 +260,13 @@ that are a good shape for your own vertical:
 - the **tools** behave — adding a task then listing reflects it.
 
 ```bash
-dotnet test samples/Cortex.Modules.Tasks.Tests
+dotnet test samples/Plenipo.Modules.Tasks.Tests
 ```
 
 Wire the same project into CI and your module is covered before it ever reaches a host.
 
 ## Where to go next
 
-- **Full source:** [`samples/Cortex.Modules.Tasks`](samples/Cortex.Modules.Tasks) — copy it to start your own.
-- **Persistence & migrations:** the Finance sample ([`samples/Cortex.Modules.Finance`](samples/Cortex.Modules.Finance)) — its own `DbContext`, tenant-scoped rows, seeded demo data.
+- **Full source:** [`samples/Plenipo.Modules.Tasks`](samples/Plenipo.Modules.Tasks) — copy it to start your own.
+- **Persistence & migrations:** the Finance sample ([`samples/Plenipo.Modules.Finance`](samples/Plenipo.Modules.Finance)) — its own `DbContext`, tenant-scoped rows, seeded demo data.
 - **How it all fits together:** [ARCHITECTURE.md](ARCHITECTURE.md) — the chat security spine, the module system, and the data model, with diagrams.

@@ -1,14 +1,14 @@
-# Cortex — single-box deployment (the OpenClaw model: one compose file, pinned tags,
+# Plenipo — single-box deployment (the OpenClaw model: one compose file, pinned tags,
 # state in named volumes, `docker compose pull && docker compose up -d` as the upgrade).
 # Quickstart and upgrade/backup notes: see README.md next to this file.
-name: cortex
+name: plenipo
 
 services:
   api:
-    image: ${CORTEX_IMAGE:-cortex-sample:local}
+    image: ${PLENIPO_IMAGE:-plenipo-sample:local}
     build:
       context: ../..
-      dockerfile: samples/Cortex.Sample.Host/Dockerfile
+      dockerfile: samples/Plenipo.Sample.Host/Dockerfile
     depends_on:
       postgres:
         condition: service_healthy
@@ -19,12 +19,12 @@ services:
     environment:
       # Production is the safe default. Development must be selected explicitly and the published
       # port binds to loopback by default so dev-header system-admin auth is not internet-exposed.
-      ASPNETCORE_ENVIRONMENT: ${CORTEX_ENVIRONMENT:-Production}
+      ASPNETCORE_ENVIRONMENT: ${PLENIPO_ENVIRONMENT:-Production}
       Auth__Authority: ${AUTH_AUTHORITY:-}
       Auth__Audience: ${AUTH_AUDIENCE:-}
-      ConnectionStrings__cortex-platform: Host=postgres;Port=5432;Database=cortex_platform;Username=postgres;Password=${POSTGRES_PASSWORD:?create .env from .env.example}
-      ConnectionStrings__cortex-audit: Host=audit-postgres;Port=5432;Database=cortex_audit;Username=postgres;Password=${AUDIT_POSTGRES_PASSWORD:?set a distinct audit password in .env}
-      ConnectionStrings__cortex-redis: redis:6379
+      ConnectionStrings__plenipo-platform: Host=postgres;Port=5432;Database=plenipo_platform;Username=postgres;Password=${POSTGRES_PASSWORD:?create .env from .env.example}
+      ConnectionStrings__plenipo-audit: Host=audit-postgres;Port=5432;Database=plenipo_audit;Username=postgres;Password=${AUDIT_POSTGRES_PASSWORD:?set a distinct audit password in .env}
+      ConnectionStrings__plenipo-redis: redis:6379
       Ai__Provider: ${AI_PROVIDER:-Mock}
       Ai__Model: ${AI_MODEL:-gpt-4o-mini}
       Rag__Enabled: "true"
@@ -33,7 +33,7 @@ services:
       Skills__Enabled: "true"
       Skills__Path: skills
     ports:
-      - "${CORTEX_BIND_ADDRESS:-127.0.0.1}:${CORTEX_PORT:-8080}:8080"
+      - "${PLENIPO_BIND_ADDRESS:-127.0.0.1}:${PLENIPO_PORT:-8080}:8080"
     restart: unless-stopped
 
   postgres:
@@ -43,11 +43,11 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?create .env from .env.example}
-      POSTGRES_DB: cortex_platform
+      POSTGRES_DB: plenipo_platform
     volumes:
-      - cortex-pgdata:/var/lib/postgresql/data
+      - plenipo-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d cortex_platform"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d plenipo_platform"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -58,11 +58,11 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${AUDIT_POSTGRES_PASSWORD:?set a distinct audit password in .env}
-      POSTGRES_DB: cortex_audit
+      POSTGRES_DB: plenipo_audit
     volumes:
-      - cortex-audit-pgdata:/var/lib/postgresql/data
+      - plenipo-audit-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d cortex_audit"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d plenipo_audit"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -72,12 +72,12 @@ services:
     image: redis:7.4-alpine
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
-      - cortex-redisdata:/data
+      - plenipo-redisdata:/data
     restart: unless-stopped
 
 # ALL state lives in these two volumes (plus your .env) — back them up and the
 # deployment is portable to any Docker host.
 volumes:
-  cortex-pgdata:
-  cortex-audit-pgdata:
-  cortex-redisdata:
+  plenipo-pgdata:
+  plenipo-audit-pgdata:
+  plenipo-redisdata:

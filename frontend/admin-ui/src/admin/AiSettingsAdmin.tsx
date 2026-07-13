@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@abrahamferga/cortex-ui";
+import { api } from "@plenipo/ui";
 
 interface FormState {
   prompt: string;

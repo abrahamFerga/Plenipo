@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Platform-level use cases and abstractions (chat, audit, tenants, RBAC contracts). -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>Plenipo.Application</PackageId>
+    <Description>Application layer for Plenipo — RBAC, agent runner abstractions, authorization, permission matching.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.Extensions.AI" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Plenipo.Core\Plenipo.Core.csproj" />
+    <ProjectReference Include="..\Plenipo.Modules.Sdk\Plenipo.Modules.Sdk.csproj" />
+    <ProjectReference Include="..\Plenipo.Connectors.Sdk\Plenipo.Connectors.Sdk.csproj" />
+  </ItemGroup>
+
+</Project>

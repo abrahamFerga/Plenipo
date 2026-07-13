@@ -76,7 +76,7 @@ resource "azurerm_key_vault_secret" "db_admin_password" {
 }
 
 # Composed Npgsql connection strings — exactly what the app binds as
-# ConnectionStrings__cortex-platform / ConnectionStrings__cortex-audit.
+# ConnectionStrings__plenipo-platform / ConnectionStrings__plenipo-audit.
 resource "azurerm_key_vault_secret" "platform_connection_string" {
   name         = "platform-connection-string"
   value        = var.platform_connection_string

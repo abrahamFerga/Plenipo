@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The contract every data-source connector implements (SharePoint, Azure Blob, iManage, …).
+    Manifest-first, mirroring the module SDK: a connector declares its identity, auth mode, settings
+    schema, and tools statically; per-tenant enablement, RBAC, approvals, and audit come from the
+    platform. Ship this package with your connector so consumers only need one dependency.
+  -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>Plenipo.Connectors.Sdk</PackageId>
+    <Description>Connector SDK for Plenipo — IConnector, ConnectorManifest, IConnectorToolSource. Implement these to bridge Plenipo to an external data source.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Plenipo.Modules.Sdk\Plenipo.Modules.Sdk.csproj" />
+  </ItemGroup>
+
+</Project>

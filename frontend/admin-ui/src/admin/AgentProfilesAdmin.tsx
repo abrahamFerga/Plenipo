@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, ConfirmDialog, type AgentProfile, type SecurityCatalog } from "@abrahamferga/cortex-ui";
+import { api, ConfirmDialog, type AgentProfile, type SecurityCatalog } from "@plenipo/ui";
 
 const inputClass =
   "w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800";

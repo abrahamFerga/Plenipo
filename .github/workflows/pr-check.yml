@@ -108,7 +108,7 @@ jobs:
               plan = plan.slice(0, max) + '\n... (truncated) ...';
             }
 
-            const marker = '<!-- cortex-tf-plan -->';
+            const marker = '<!-- plenipo-tf-plan -->';
             const body = [
               marker,
               '## Terraform Plan (dev)',

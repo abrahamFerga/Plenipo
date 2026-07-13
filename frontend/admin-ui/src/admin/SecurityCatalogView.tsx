@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { api, hasPermission, type PermissionInfo, type RoleInfo } from "@abrahamferga/cortex-ui";
+import { api, hasPermission, type PermissionInfo, type RoleInfo } from "@plenipo/ui";
 
 function PermissionRow({ p, roles }: { p: PermissionInfo; roles: RoleInfo[] }) {
   const grantedTo = roles.filter((r) => hasPermission(r.permissions, p.permission));

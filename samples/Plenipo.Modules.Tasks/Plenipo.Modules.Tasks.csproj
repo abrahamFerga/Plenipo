@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The minimal module template — the worked example behind /BUILDING_A_MODULE.md. Uses an in-memory
+       store so it carries no database. Intentionally NOT registered in Plenipo.Sample.Host so the demo
+       stays focused on three real-industry verticals; register it in your own host to see it live. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.Extensions.AI" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Plenipo.Core\Plenipo.Core.csproj" />
+    <ProjectReference Include="..\..\src\Plenipo.Application\Plenipo.Application.csproj" />
+    <ProjectReference Include="..\..\src\Plenipo.Modules.Sdk\Plenipo.Modules.Sdk.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type AvailableConnector, type ConnectorAdmin } from "@abrahamferga/cortex-ui";
+import { api, type AvailableConnector, type ConnectorAdmin } from "@plenipo/ui";
 
 function Toggle({ on, disabled, onChange }: { on: boolean; disabled: boolean; onChange: (next: boolean) => void }) {
   return (
