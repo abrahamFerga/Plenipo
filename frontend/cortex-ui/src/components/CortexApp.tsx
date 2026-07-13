@@ -26,7 +26,7 @@ export interface CortexAppProps {
  * platform shell so a host can mount the whole thing in one component.
  *
  * @example
- * import { CortexApp, defineModule } from "@cortex/ui";
+ * import { CortexApp, defineModule } from "@abrahamferga/cortex-ui";
  * const finance = defineModule("finance", { tabs: { transactions: TransactionsBoard } });
  * createRoot(el).render(<CortexApp moduleUi={[finance]} />);
  *

@@ -4,8 +4,8 @@
  * instead of touching component classes. Consumers that run their own Tailwind include this preset:
  *
  *   // tailwind.config.js
- *   import cortexPreset from "@cortex/ui/tailwind-preset";
- *   export default { presets: [cortexPreset], content: [..., "./node_modules/@cortex/ui/dist/**\/*.js"] };
+ *   import cortexPreset from "@abrahamferga/cortex-ui/tailwind-preset";
+ *   export default { presets: [cortexPreset], content: [..., "./node_modules/@abrahamferga/cortex-ui/dist/**\/*.js"] };
  *
  * @type {import('tailwindcss').Config}
  */

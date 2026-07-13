@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@cortex/ui";
+import { api } from "@abrahamferga/cortex-ui";
 
 /**
  * Standing email invites: name an address and starting roles BEFORE the person has ever signed

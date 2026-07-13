@@ -39,7 +39,7 @@ flowchart TD
   Host["Your API host<br/>(samples/Cortex.Sample.Host)"]
   Host --> Web
   Host -. "AddCortexModule" .-> Module
-  UI["@cortex/ui (React)<br/>domain shell"] -- "/api/platform/modules" --> Host
+  UI["@abrahamferga/cortex-ui (React)<br/>domain shell"] -- "/api/platform/modules" --> Host
   Admin["@cortex/admin-ui<br/>admin console @ /admin"] -- "/api/admin/*" --> Host
 ```
 
@@ -172,7 +172,7 @@ usage) surface in the **Aspire dashboard** alongside HTTP and database activity.
 The frontend is **two surfaces**, deliberately separated so the product UI can be adapted/branded per host
 while operator administration stays generic and consistent across every deployment:
 
-- **`@cortex/ui`** — the **end-user / domain** shell (a React + Vite library). It is **server-driven**: it
+- **`@abrahamferga/cortex-ui`** — the **end-user / domain** shell (a React + Vite library). It is **server-driven**: it
   builds the module switcher, tabs, and routes entirely from `GET /api/platform/modules`, so installing a
   backend module automatically adds its UI. It talks to the agent over SignalR (and ships an AG-UI client)
   and shows per-turn token usage. Domain-specific UI ships as separate packages that depend on it; the base
@@ -181,7 +181,7 @@ while operator administration stays generic and consistent across every deployme
 - **`@cortex/admin-ui`** — the **admin console** (a standalone app, not a library): the security map, a
   **schema-driven role editor** (every permission toggle derived from the live catalog, so a new module's
   tools appear with no UI change — plus a free-text escape hatch for wildcards), users & grants,
-  token-usage, and audit views. It reuses `@cortex/ui`'s client layer and is served at
+  token-usage, and audit views. It reuses `@abrahamferga/cortex-ui`'s client layer and is served at
   `/admin` — by its own Vite dev server in development, or by the API host in an integrated deployment via
   `app.UseCortexAdminConsole()` (Cortex's analogue of OpenClaw's "control UI built into the gateway"). The
   console is just static assets; the `/api/admin/*` endpoints it reads stay RBAC-gated server-side, so the
@@ -198,7 +198,7 @@ while operator administration stays generic and consistent across every deployme
 | Multi-tenancy | `src/Cortex.Infrastructure/Persistence/PlatformDbContext.cs` |
 | Endpoints (platform/chat/admin/approvals/AG-UI) | `src/Cortex.AspNetCore/Endpoints/` |
 | Serving the admin console at `/admin` | `src/Cortex.AspNetCore/Hosting/AdminConsoleExtensions.cs` |
-| Domain (end-user) UI | `frontend/cortex-ui/` (`@cortex/ui`) |
+| Domain (end-user) UI | `frontend/cortex-ui/` (`@abrahamferga/cortex-ui`) |
 | Admin console app | `frontend/admin-ui/` (`@cortex/admin-ui`) |
 | A worked example module | `samples/Cortex.Modules.Finance/` |
 | Infra (Azure) | `infra/` (Terraform) + `.github/workflows/` |

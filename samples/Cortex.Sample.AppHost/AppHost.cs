@@ -3,7 +3,7 @@ using Aspire.Hosting.ApplicationModel;
 // Cortex sample-app orchestration — the one-command way to run the FULL stack locally:
 //   • Postgres (platform + audit databases) and Redis (SignalR backplane / cache)
 //   • the sample API (Cortex.Sample.Host with the Finance + Nutrition + Legal modules)
-//   • both front-ends as Vite dev servers: the end-user workspace (@cortex/ui) and the
+//   • both front-ends as Vite dev servers: the end-user workspace (@abrahamferga/cortex-ui) and the
 //     admin console (@cortex/admin-ui)
 //
 // The chat assistant runs on the dependency-free "Mock" provider, so everything works with

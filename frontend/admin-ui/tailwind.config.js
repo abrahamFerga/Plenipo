@@ -1,4 +1,4 @@
-// Share the same brand color token as @cortex/ui so the admin console themes with the domain UI.
+// Share the same brand color token as @abrahamferga/cortex-ui so the admin console themes with the domain UI.
 import cortexPreset from "../cortex-ui/tailwind-preset.js";
 
 /** @type {import('tailwindcss').Config} */

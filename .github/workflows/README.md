@@ -68,8 +68,8 @@ environment**, the OIDC subject becomes the `environment:` form — so the match
 
 - The API Dockerfile is expected at `src/Cortex.Api/Dockerfile` (created
   separately).
-- The frontend is a **pnpm workspace** at `frontend/` (packages `@cortex/ui` and
+- The frontend is a **pnpm workspace** at `frontend/` (packages `@abrahamferga/cortex-ui` and
   `@cortex/admin-ui`); CI runs `pnpm -r lint`, `pnpm -r test`, `pnpm build:all`, and
-  the `@cortex/ui` Playwright E2E.
+  the `@abrahamferga/cortex-ui` Playwright E2E.
 - `deploy.yml` deploys **staging** on push to `main`; promote to **production**
   via the manual `workflow_dispatch` (which enforces the approval gate).

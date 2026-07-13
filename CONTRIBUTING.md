@@ -25,7 +25,7 @@ samples/Cortex.Samples.slnx  # example apps built ON the platform
   Cortex.Sample.Host         # runnable host wiring all three modules
   Cortex.Sample.AppHost      # Aspire orchestration for the sample
   Cortex.Sample.Host.IntegrationTests       # end-to-end API tests (WebApplicationFactory + Testcontainers)
-frontend/cortex-ui           # @cortex/ui — React + Vite library
+frontend/cortex-ui           # @abrahamferga/cortex-ui — React + Vite library
 infra/                       # Terraform (azurerm) + Entra External ID
 .github/workflows/           # CI/CD
 ```
@@ -44,14 +44,14 @@ dotnet test  Cortex.slnx
 dotnet build samples/Cortex.Samples.slnx
 dotnet test  samples/Cortex.Samples.slnx
 
-# Frontend (a pnpm workspace — install once at the root; covers @cortex/ui + @cortex/admin-ui)
+# Frontend (a pnpm workspace — install once at the root; covers @abrahamferga/cortex-ui + @cortex/admin-ui)
 cd frontend && corepack enable && pnpm install && pnpm -r lint && pnpm -r test && pnpm build:all
 
 # Packaging: pack the platform and build a throwaway module against the packages
 # (proves the "consume Cortex as NuGet packages" path; also runs in CI).
 bash eng/verify-packaging.sh
 
-# Same idea for the frontend: pack @cortex/ui and type-check a fresh consumer against
+# Same idea for the frontend: pack @abrahamferga/cortex-ui and type-check a fresh consumer against
 # its shipped declarations (proves the npm package is usable; also runs in CI).
 bash eng/verify-frontend-packaging.sh
 ```

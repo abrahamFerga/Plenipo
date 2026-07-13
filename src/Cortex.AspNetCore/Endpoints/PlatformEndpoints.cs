@@ -46,7 +46,7 @@ public static class PlatformEndpoints
         .WithName("Platform_GetMe");
 
         // The product's public identity, resolved at RUNTIME from host configuration
-        // (Branding:ProductName). This is what lets ONE prebuilt @cortex/ui bundle serve every
+        // (Branding:ProductName). This is what lets ONE prebuilt @abrahamferga/cortex-ui bundle serve every
         // product — the shell asks the host who it is instead of baking the name in at build
         // time. Anonymous on purpose: the name must render before any sign-in.
         group.MapGet("/branding", (IConfiguration configuration) =>

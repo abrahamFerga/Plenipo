@@ -4,7 +4,7 @@ using Aspire.Hosting.ApplicationModel;
 //   • a Postgres server hosting the platform + audit databases
 //   • a Redis instance backing the SignalR backplane (the API picks it up via AddCortexRealtime)
 //   • the Cortex API wired to all of them
-//   • both front-ends as Vite dev servers: the end-user workspace (@cortex/ui) and the
+//   • both front-ends as Vite dev servers: the end-user workspace (@abrahamferga/cortex-ui) and the
 //     admin console (@cortex/admin-ui)
 //
 // The chat assistant defaults to the dependency-free "Mock" provider, so the stack runs with zero

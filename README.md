@@ -21,8 +21,8 @@ ship it. It unifies the patterns proven in two earlier apps — **NutriForge** (
 
 | Idea | How Cortex does it |
 |------|--------------------|
-| **Base, not fork** | The platform is 6 NuGet packages + two npm libraries (the domain shell `@cortex/ui` and the admin console `@cortex/admin-ui`). Your product references them and adds modules. |
-| **Two UIs** | The end-user **domain UI** (`@cortex/ui`, branded per product) and the generic **admin console** (`@cortex/admin-ui`, served at `/admin`) are separate surfaces, so operator administration is consistent everywhere while the product UI stays adaptable. |
+| **Base, not fork** | The platform is 6 NuGet packages + two npm libraries (the domain shell `@abrahamferga/cortex-ui` and the admin console `@cortex/admin-ui`). Your product references them and adds modules. |
+| **Two UIs** | The end-user **domain UI** (`@abrahamferga/cortex-ui`, branded per product) and the generic **admin console** (`@cortex/admin-ui`, served at `/admin`) are separate surfaces, so operator administration is consistent everywhere while the product UI stays adaptable. |
 | **Chat-first** | Every module gets an agent; the dashboard front page is chat (over SignalR or the open **AG-UI** protocol). A **WhatsApp channel** (Meta Cloud API) routes phone messages through the same authorized runner — see [docs/WHATSAPP_CHANNEL.md](docs/WHATSAPP_CHANNEL.md). |
 | **Modules, not forks** | A vertical implements `IModule`: a manifest of tools + tabs, its own services and endpoints. The host discovers and loads them. |
 | **Verticals are separate systems** | Each vertical ships as its **own product** — own host, own repo, own deployment, own database — installing only its module(s) on the platform packages (see `samples/Cortex.Legal.Host` for the shape). A business that wants only finance runs only Cortex-for-finance. Systems connect through the **cortex-peer connector**: one deployment's agent asks another's over the open AG-UI protocol, with the peer enforcing its own auth, RBAC, and audit. `Cortex.Sample.Host` bundles three modules purely as a dev showcase. |
@@ -82,7 +82,7 @@ samples/Cortex.Samples.slnx          # example apps built ON the platform (NuGet
 ├── Cortex.Sample.Host/              # runnable host wiring all three modules
 └── Cortex.Sample.AppHost/           # Aspire orchestration for the sample (Postgres ×2, Redis, mock chat)
 
-frontend/cortex-ui/                  # @cortex/ui — React + Vite library: the end-user (domain) chat shell + server-driven tabs
+frontend/cortex-ui/                  # @abrahamferga/cortex-ui — React + Vite library: the end-user (domain) chat shell + server-driven tabs
 frontend/admin-ui/                   # @cortex/admin-ui — the admin console app (security/RBAC/users/usage/audit), served at /admin
 infra/                               # Terraform (azurerm): Container Apps, Postgres, Redis, Key Vault, Entra External ID
 .claude/skills/run-cortex/           # skill: run Aspire, read logs/telemetry, run the UI, test the chatbot
@@ -144,7 +144,7 @@ chat-provider API key. Azure managed identity and local Ollama remain keyless de
 # Frontend — two apps, each a Vite dev server pointed at the API (VITE_API_BASE, default http://localhost:8080).
 cd frontend
 pnpm install
-pnpm dev          # @cortex/ui — the end-user domain shell, on http://localhost:5173
+pnpm dev          # @abrahamferga/cortex-ui — the end-user domain shell, on http://localhost:5173
 pnpm dev:admin    # @cortex/admin-ui — the admin console, on http://localhost:5174/admin
 ```
 
@@ -248,7 +248,7 @@ bad package metadata fails the build instead of reaching you.
 The frontend is split into two surfaces so the **product UI stays adaptable** while **operator administration
 stays consistent** across every Cortex deployment:
 
-- **`@cortex/ui`** (`frontend/cortex-ui`) — the **end-user / domain** shell, an npm library (Vite library mode,
+- **`@abrahamferga/cortex-ui`** (`frontend/cortex-ui`) — the **end-user / domain** shell, an npm library (Vite library mode,
   ESM + UMD, with bundled **TypeScript declarations**). It exports the batteries-included `CortexApp` (and the
   lower-level `AppShell`), a **client-side module registry** (`defineModule` — register your own React pages per
   module tab, with a server-driven generic fallback), the chat shell, RBAC primitives (`usePermission`,
@@ -257,7 +257,7 @@ stays consistent** across every Cortex deployment:
   name/logo, and **dark mode** — a persisted light/dark/system `ThemeToggle` ships in both app headers).
   A product brands and composes it; the base library carries no vertical-specific and no admin code.
 - **`@cortex/admin-ui`** (`frontend/admin-ui`) — the **admin console**, a standalone app (not a library) that
-  owns the administration views: Roles (with the live permission map in-page), Users, Modules, Integrations, Tenants, AI Settings, Agent Profiles, Token Usage, Audit Log, and Operations. It reuses `@cortex/ui`'s client layer for API
+  owns the administration views: Roles (with the live permission map in-page), Users, Modules, Integrations, Tenants, AI Settings, Agent Profiles, Token Usage, Audit Log, and Operations. It reuses `@abrahamferga/cortex-ui`'s client layer for API
   access and is served at `/admin` (by its own Vite dev server, or by the API host via
   `app.UseCortexAdminConsole()`). This is the platform's analogue of OpenClaw's "control UI built into the
   gateway": every host gets a generic security/RBAC/usage/audit console for free, independent of its domain UI.
@@ -267,8 +267,8 @@ host's React pages for each module's tabs — anything you don't register falls 
 
 ```tsx
 import { createRoot } from "react-dom/client";
-import { CortexApp, defineModule } from "@cortex/ui";
-import "@cortex/ui/theme.css"; // brand accent defaults — override --cortex-brand-* to rebrand
+import { CortexApp, defineModule } from "@abrahamferga/cortex-ui";
+import "@abrahamferga/cortex-ui/theme.css"; // brand accent defaults — override --cortex-brand-* to rebrand
 import { TransactionsBoard } from "./finance";
 
 const finance = defineModule("finance", { tabs: { transactions: TransactionsBoard } });
@@ -282,7 +282,7 @@ createRoot(document.getElementById("root")!).render(
 ```
 
 Point it at your API with `VITE_API_BASE` (defaults to `http://localhost:8080`). **Rebrand** by overriding the
-`--cortex-brand-*` CSS variables (include `@cortex/ui/tailwind-preset` if you run your own Tailwind) and
+`--cortex-brand-*` CSS variables (include `@abrahamferga/cortex-ui/tailwind-preset` if you run your own Tailwind) and
 setting the product name/logo via `branding`. Inside a tab component you get the platform's RBAC primitives
 (`usePermission`, `PermissionGate`) and typed API errors (`ApiError`). Hosts that own their router and query
 client can compose the lower-level `AppShell` instead. This public surface is type-checked against the
@@ -297,7 +297,7 @@ provider that performs real, audited tool calls and triggers the approval gate �
 is demonstrable with no API key), a **WhatsApp channel** (Meta Cloud API webhook, HMAC-verified, JIT phone-user provisioning, keyless E2E tests),
 the admin/security dashboard, multi-tenancy, the Redis SignalR backplane,
 **NuGet + npm packaging** — both proven by pack-and-consume smoke tests in CI and published on release
-(the .NET libraries to GitHub Packages; `@cortex/ui` ships bundled TypeScript declarations), Terraform
+(the .NET libraries to GitHub Packages; `@abrahamferga/cortex-ui` ships bundled TypeScript declarations), Terraform
 (azurerm) + Entra External ID app registrations + GitHub Actions (CI, deploy, publish) + Dependabot,
 three sample verticals (Finance with a rule-based categorizer + budgets,
 Nutrition, Legal) — Finance ships with a seeded demo ledger so its tabs and spending/budget tools work out

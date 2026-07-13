@@ -25,7 +25,7 @@ curl -N -X POST http://localhost:8080/api/agui/finance \
   -d '{"messages":[{"id":"m1","role":"user","content":"How much did I spend on groceries?"}]}'
 ```
 
-The React front-ends (`@cortex/ui`, `@cortex/admin-ui`) run separately for now
+The React front-ends (`@abrahamferga/cortex-ui`, `@cortex/admin-ui`) run separately for now
 (`pnpm -C frontend dev` with `VITE_API_BASE=http://localhost:8080`); a bundled UI
 container is on the roadmap.
 

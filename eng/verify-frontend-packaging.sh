@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # =============================================================================
-# verify-frontend-packaging.sh — prove @cortex/ui is consumable as an npm package.
+# verify-frontend-packaging.sh — prove @abrahamferga/cortex-ui is consumable as an npm package.
 # -----------------------------------------------------------------------------
 # The backend has eng/verify-packaging.sh (pack + build a consuming module). This is
-# the frontend mirror: it `npm pack`s @cortex/ui and then a throwaway TypeScript app
+# the frontend mirror: it `npm pack`s @abrahamferga/cortex-ui and then a throwaway TypeScript app
 # installs that tarball and type-checks an import of the public API — so a broken
 # build, missing bundle, or (the phase-32 gap) missing .d.ts fails CI instead of
 # silently shipping an unusable package.
@@ -18,9 +18,10 @@ UI="$ROOT/frontend/cortex-ui"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-echo "==> Packing @cortex/ui (prepack rebuilds it first)"
+echo "==> Packing @abrahamferga/cortex-ui (prepack rebuilds it first)"
 ( cd "$UI" && npm pack --pack-destination "$WORK" >/dev/null )
-TGZ="$(ls "$WORK"/cortex-ui-*.tgz)"
+# npm pack names a scoped package <scope>-<name>-<version>.tgz; WORK holds only this one tarball.
+TGZ="$(ls "$WORK"/*.tgz)"
 echo "    packed: $(basename "$TGZ")"
 
 CONS="$WORK/consumer"
@@ -34,7 +35,7 @@ cat > "$CONS/package.json" <<'EOF'
   "private": true,
   "type": "module",
   "dependencies": {
-    "@cortex/ui": "file:cortex-ui.tgz",
+    "@abrahamferga/cortex-ui": "file:cortex-ui.tgz",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.27.0",
@@ -87,7 +88,7 @@ import {
   type CortexBranding,
   type Module,
   type Me,
-} from "@cortex/ui";
+} from "@abrahamferga/cortex-ui";
 
 // A host registers its own React page for a module tab; unregistered tabs fall back to the generic view.
 function TransactionsBoard({ moduleId, tab }: ModuleTabProps) {
@@ -110,11 +111,11 @@ export function App() {
 }
 EOF
 
-echo "==> Installing the consumer (pulls @cortex/ui from the tarball + its peers)"
+echo "==> Installing the consumer (pulls @abrahamferga/cortex-ui from the tarball + its peers)"
 ( cd "$CONS" && npm install --no-audit --no-fund --loglevel=error )
 
-echo "==> Type-checking the consumer against @cortex/ui's shipped declarations"
+echo "==> Type-checking the consumer against @abrahamferga/cortex-ui's shipped declarations"
 ( cd "$CONS" && npx --no-install tsc --noEmit )
 
 echo ""
-echo "OK — @cortex/ui packs and a fresh TypeScript app consumes it with full types."
+echo "OK — @abrahamferga/cortex-ui packs and a fresh TypeScript app consumes it with full types."

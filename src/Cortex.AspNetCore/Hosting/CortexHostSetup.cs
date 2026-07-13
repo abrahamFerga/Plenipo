@@ -159,7 +159,7 @@ public static class CortexHostSetup
         // otherwise, so a bare platform host still runs. Must come after UseAuthorization().
         app.UseCortexAdminConsole();
 
-        // Serve the product's domain UI (@cortex/ui, built with the product's branding) at / when its
+        // Serve the product's domain UI (@abrahamferga/cortex-ui, built with the product's branding) at / when its
         // assets are present under wwwroot/app — the no-registry distribution path. No-op otherwise.
         app.UseCortexDomainUi();
 

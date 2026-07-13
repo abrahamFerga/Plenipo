@@ -61,7 +61,7 @@ public sealed class PermissionMatcherTests
     }
 
     // Security-critical negatives — a wildcard is honoured ONLY at a segment boundary (a star that follows
-    // a dot). These mirror @cortex/ui's hasPermission tests so the enforcement and its client mirror can't
+    // a dot). These mirror @abrahamferga/cortex-ui's hasPermission tests so the enforcement and its client mirror can't
     // drift into a privilege-escalation bug.
 
     [Fact]

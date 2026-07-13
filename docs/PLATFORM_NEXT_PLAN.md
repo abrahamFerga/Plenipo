@@ -114,7 +114,7 @@ KV references instead of env vars).
     Explicit-tenant config lookup (producers have no ambient tenant). Also fixed in passing:
     tools.skills.* now appear in the permission catalog and the tenant_admin baseline.
     Remaining follow-up: calendar-reminder producer (module-side — belongs to the vertical repo).
-    The UI half landed: NotificationBell in the @cortex/ui top bar (unread badge, 30s poll,
+    The UI half landed: NotificationBell in the @abrahamferga/cortex-ui top bar (unread badge, 30s poll,
     mark-read / mark-all) and an Operations tab in @cortex/admin-ui over /api/admin/ops
     (jobs / knowledge / connectors / AI+budget cards, backlog + budget warnings, 15s refresh).
   - [x] **Cross-module handoff (in-host)**: generated `ask_{module}` platform tools — one per
