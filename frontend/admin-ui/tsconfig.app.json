@@ -14,11 +14,11 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Resolve @cortex/ui from source (mirrors the Vite alias), so type-checking the console
-       does not require a prior @cortex/ui build. */
+    /* Resolve @abrahamferga/cortex-ui from source (mirrors the Vite alias), so type-checking the console
+       does not require a prior @abrahamferga/cortex-ui build. */
     "baseUrl": ".",
     "paths": {
-      "@cortex/ui": ["../cortex-ui/src/index.ts"]
+      "@abrahamferga/cortex-ui": ["../cortex-ui/src/index.ts"]
     },
 
     /* Linting */

@@ -11,7 +11,7 @@ interface State {
 /**
  * Catches render/lifecycle errors thrown by the admin section it wraps, so a single broken page shows a
  * recoverable fallback instead of white-screening the entire console. Kept self-contained because the admin
- * console deliberately consumes only api/types/hooks from `@cortex/ui`, not its components. The parent keys
+ * console deliberately consumes only api/types/hooks from `@abrahamferga/cortex-ui`, not its components. The parent keys
  * this boundary on the current route, so navigating to another section mounts a fresh one and clears the error.
  */
 export class AdminErrorBoundary extends Component<Props, State> {

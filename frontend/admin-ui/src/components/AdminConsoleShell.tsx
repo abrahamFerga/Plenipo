@@ -1,4 +1,4 @@
-import { ThemeToggle, useMe } from "@cortex/ui";
+import { ThemeToggle, useMe } from "@abrahamferga/cortex-ui";
 import { AdminPage } from "../admin/AdminPage";
 
 /** True if the caller holds any platform-administration permission (or the global wildcard). */

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// @cortex/ui — public library entry point
+// @abrahamferga/cortex-ui — public library entry point
 //
 // Importing from this package gives you the base platform's *domain* (end-user)
 // shell components, hooks, and API utilities. Domain-specific components

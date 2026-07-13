@@ -54,16 +54,16 @@ the default variables:
 
 ```js
 // tailwind.config.js
-import cortexPreset from "@cortex/ui/tailwind-preset";
+import cortexPreset from "@abrahamferga/cortex-ui/tailwind-preset";
 export default {
   presets: [cortexPreset],
-  content: ["./src/**/*.{ts,tsx}", "./node_modules/@cortex/ui/dist/**/*.js"],
+  content: ["./src/**/*.{ts,tsx}", "./node_modules/@abrahamferga/cortex-ui/dist/**/*.js"],
 };
 ```
 
 ```ts
 // app entry — the indigo defaults; override any --cortex-brand-* afterwards to rebrand
-import "@cortex/ui/theme.css";
+import "@abrahamferga/cortex-ui/theme.css";
 ```
 
 The product **name and logo** in the top bar are content (not CSS), set via the `branding` prop:
@@ -119,10 +119,10 @@ register falls back to `GenericTab` — so simple modules cost zero React.
 
 ```tsx
 import { createRoot } from "react-dom/client";
-import { CortexApp, defineModule, type ModuleTabProps } from "@cortex/ui";
+import { CortexApp, defineModule, type ModuleTabProps } from "@abrahamferga/cortex-ui";
 import { TransactionsBoard, BudgetPlanner } from "./finance";
 
-// Components receive { moduleId, tab } and can use everything @cortex/ui exports
+// Components receive { moduleId, tab } and can use everything @abrahamferga/cortex-ui exports
 // (api, useMe, hasPermission, …) plus your own domain APIs.
 const finance = defineModule("finance", {
   tabs: {
@@ -143,7 +143,7 @@ for code-splitting and it just works. Inside a component you get the platform's
 RBAC primitives — gate UI the same way the server does (which still enforces it):
 
 ```tsx
-import { PermissionGate, usePermission } from "@cortex/ui";
+import { PermissionGate, usePermission } from "@abrahamferga/cortex-ui";
 
 const canRecord = usePermission("tools.finance.record_transaction");
 // …or declaratively:

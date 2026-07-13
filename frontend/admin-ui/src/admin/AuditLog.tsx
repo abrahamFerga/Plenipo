@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { api, type AuthEvent } from "@cortex/ui";
+import { api, type AuthEvent } from "@abrahamferga/cortex-ui";
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleString();

@@ -174,7 +174,7 @@ Invoke-RestMethod "$b/api/admin/users/$uid/permissions" -Method Post -Headers $h
 corepack enable                                  # pnpm on PATH (frontend is a pnpm workspace)
 pnpm -C frontend install
 $env:VITE_API_BASE = "http://127.0.0.1:8094"     # point at the running API
-pnpm -C frontend dev                             # @cortex/ui on http://localhost:5173
+pnpm -C frontend dev                             # @abrahamferga/cortex-ui on http://localhost:5173
 ```
 
 The shell renders modules/tabs from `/api/platform/modules`, chats over SignalR,

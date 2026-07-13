@@ -5,7 +5,7 @@
 # platform (Cortex.slnx) and the samples (samples/Cortex.Samples.slnx — the three
 # demo verticals plus the integration tests that guard the RBAC/approval pipeline),
 # builds (does NOT push) the Docker image, scans with Trivy, verifies both the NuGet
-# packages and the @cortex/ui npm package can be produced and consumed, and lints,
+# packages and the @abrahamferga/cortex-ui npm package can be produced and consumed, and lints,
 # tests, builds, and E2E-tests (real browser, Playwright) the React frontend.
 #
 # No cloud credentials required — this workflow never touches Azure.
@@ -105,7 +105,7 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Frontend (pnpm workspace): lint + unit/component tests + build + real-browser
-  # E2E, across BOTH UI packages (@cortex/ui and @cortex/admin-ui).
+  # E2E, across BOTH UI packages (@abrahamferga/cortex-ui and @cortex/admin-ui).
   # ---------------------------------------------------------------------------
   frontend:
     name: Frontend lint, test, build & E2E
@@ -142,14 +142,14 @@ jobs:
         run: pnpm build:all
 
       - name: Install Playwright chromium
-        run: pnpm --filter @cortex/ui exec playwright install --with-deps chromium
+        run: pnpm --filter @abrahamferga/cortex-ui exec playwright install --with-deps chromium
 
-      - name: E2E — domain shell (@cortex/ui, real browser, API mocked)
-        run: pnpm --filter @cortex/ui test:e2e
+      - name: E2E — domain shell (@abrahamferga/cortex-ui, real browser, API mocked)
+        run: pnpm --filter @abrahamferga/cortex-ui test:e2e
 
       - name: E2E — admin console (@cortex/admin-ui, real browser, API mocked)
         run: pnpm --filter @cortex/admin-ui test:e2e
 
-      - name: Verify @cortex/ui is consumable (pack + type-check a fresh consumer)
+      - name: Verify @abrahamferga/cortex-ui is consumable (pack + type-check a fresh consumer)
         working-directory: ${{ github.workspace }}
         run: bash eng/verify-frontend-packaging.sh

@@ -37,7 +37,7 @@ modules. On first run it applies the database migrations and seeds a `dev` tenan
 
 ### 3. Run the UI
 
-The frontend is **two apps**: the end-user **domain UI** (`@cortex/ui`) and the **admin console**
+The frontend is **two apps**: the end-user **domain UI** (`@abrahamferga/cortex-ui`) and the **admin console**
 (`@cortex/admin-ui`). Both are Vite dev servers pointed at the API.
 
 ```bash
@@ -144,7 +144,7 @@ call, audit on every invocation, and the human-in-the-loop approval gate for sid
   module from scratch (worked example: `samples/Cortex.Modules.Tasks`). In short — implement `IModule` and
   call `builder.AddCortexModule<YourModule>()`; the dashboard, RBAC, audit, token tracking, and chat all
   apply automatically.
-- **Consume Cortex as packages** (NuGet for the backend; `@cortex/ui` for the domain UI and
+- **Consume Cortex as packages** (NuGet for the backend; `@abrahamferga/cortex-ui` for the domain UI and
   `@cortex/admin-ui` for the admin console) — see [README.md](README.md).
 - **Deploy to Azure**: Terraform (Container Apps, Postgres, Redis, Key Vault, Entra External ID) +
   GitHub Actions are in `infra/` and `.github/workflows/`.
@@ -154,7 +154,7 @@ call, audit on every invocation, and the human-in-the-loop approval gate for sid
 ```bash
 dotnet build Cortex.slnx && dotnet test Cortex.slnx
 dotnet build samples/Cortex.Samples.slnx && dotnet test samples/Cortex.Samples.slnx   # needs Docker
-cd frontend && pnpm install && pnpm -r lint && pnpm --filter @cortex/ui test && pnpm build:all
+cd frontend && pnpm install && pnpm -r lint && pnpm --filter @abrahamferga/cortex-ui test && pnpm build:all
 ```
 
 Those check throwaway instances the tests spin up themselves. To verify the instance **you** just

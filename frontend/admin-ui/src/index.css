@@ -9,7 +9,7 @@
   }
 }
 
-/* Brand accent defaults (Tailwind indigo), shared with @cortex/ui. Override --cortex-brand-* to rebrand. */
+/* Brand accent defaults (Tailwind indigo), shared with @abrahamferga/cortex-ui. Override --cortex-brand-* to rebrand. */
 :root {
   --cortex-brand-50: 238 242 255;
   --cortex-brand-100: 224 231 255;

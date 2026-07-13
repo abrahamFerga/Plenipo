@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 // Two build targets share this config:
-//  - default (`pnpm build`): the LIBRARY (@cortex/ui's npm surface — src/index.ts, peer deps external)
+//  - default (`pnpm build`): the LIBRARY (@abrahamferga/cortex-ui's npm surface — src/index.ts, peer deps external)
 //  - `pnpm build:app` (--mode app): the standalone APP SHELL (index.html entry, everything
 //    bundled) that a product host serves from wwwroot/app (see Cortex.AspNetCore's
 //    UseCortexDomainUi). Branding and API base bake in via VITE_BRAND_NAME / VITE_API_BASE.

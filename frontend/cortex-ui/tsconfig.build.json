@@ -1,5 +1,5 @@
 {
-  // Emits the public TypeScript declarations for the @cortex/ui package into dist/ (the dev/app
+  // Emits the public TypeScript declarations for the @abrahamferga/cortex-ui package into dist/ (the dev/app
   // tsconfig uses noEmit). Run after `vite build` so consumers get types alongside the JS bundles.
   "extends": "./tsconfig.app.json",
   "compilerOptions": {

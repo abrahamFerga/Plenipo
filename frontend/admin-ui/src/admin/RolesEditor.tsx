@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, ConfirmDialog, type PermissionInfo, type RoleInfo } from "@cortex/ui";
+import { api, ConfirmDialog, type PermissionInfo, type RoleInfo } from "@abrahamferga/cortex-ui";
 import { SecurityCatalogView } from "./SecurityCatalogView";
 
 // ─────────────────────────────────────────────────────────────────────────────

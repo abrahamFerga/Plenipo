@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 namespace Cortex.AspNetCore.Hosting;
 
 /// <summary>
-/// Serves the product's <b>domain UI</b> — the <c>@cortex/ui</c> SPA, built with the product's own
+/// Serves the product's <b>domain UI</b> — the <c>@abrahamferga/cortex-ui</c> SPA, built with the product's own
 /// branding — directly from the API host at <c>/</c>, exactly like <see cref="AdminConsoleExtensions"/>
 /// serves the admin console at <c>/admin</c>. This is the no-registry distribution path: a product
 /// builds the SPA once (baking in its brand name and a same-origin API base) and drops the
@@ -47,7 +47,7 @@ public static class DomainUiExtensions
             {
                 logger.LogInformation(
                     "Cortex domain UI assets not found at {Path}; the SPA will not be served from this host. " +
-                    "Build @cortex/ui with your product's branding and copy its dist/ output there to enable it.",
+                    "Build @abrahamferga/cortex-ui with your product's branding and copy its dist/ output there to enable it.",
                     root);
             }
             return app;

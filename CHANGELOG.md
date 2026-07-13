@@ -5,7 +5,7 @@ All notable changes to Cortex are recorded here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it leaves alpha.
 
 Releases are cut from a tagged GitHub Release (`v*`), which triggers the publish workflow
-(`.github/workflows/publish.yml`) to push the `Cortex.*` NuGet packages and the `@cortex/ui`
+(`.github/workflows/publish.yml`) to push the `Cortex.*` NuGet packages and the `@abrahamferga/cortex-ui`
 npm package. Until then, everything lives under **Unreleased**.
 
 ## [Unreleased] — toward 0.1.0-alpha
@@ -100,7 +100,7 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   pipeline keyless in dev/CI. Requires pgvector (dev/CI images updated). See
   [docs/PLATFORM_CONNECTORS_RAG_PLAN.md](docs/PLATFORM_CONNECTORS_RAG_PLAN.md).
 
-**Frontend (`@cortex/ui`, `@cortex/admin-ui`)**
+**Frontend (`@abrahamferga/cortex-ui`, `@cortex/admin-ui`)**
 - React 18 + Vite libraries: the chat shell (attachments, streaming, retry, approvals), module
   switcher, server-driven data tabs, and the separate admin console. Ships ESM + UMD bundles with
   bundled TypeScript declarations.

@@ -64,7 +64,7 @@ CI verifies the "base, not fork" promise itself on every run:
 
 - `eng/verify-packaging.sh` — packs the NuGet family and builds a throwaway module against the
   produced packages.
-- `eng/verify-frontend-packaging.sh` — type-checks a consumer against the built `@cortex/ui`.
+- `eng/verify-frontend-packaging.sh` — type-checks a consumer against the built `@abrahamferga/cortex-ui`.
 
 ## What a downstream vertical inherits
 

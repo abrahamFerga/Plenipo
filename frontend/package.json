@@ -5,11 +5,11 @@
   "description": "Cortex UI monorepo — base platform library and domain-specific UI packages.",
   "packageManager": "pnpm@11.9.0",
   "scripts": {
-    "dev": "pnpm --filter @cortex/ui dev",
+    "dev": "pnpm --filter @abrahamferga/cortex-ui dev",
     "dev:admin": "pnpm --filter @cortex/admin-ui dev",
-    "build": "pnpm --filter @cortex/ui build",
+    "build": "pnpm --filter @abrahamferga/cortex-ui build",
     "build:admin": "pnpm --filter @cortex/admin-ui build",
-    "build:all": "pnpm --filter @cortex/ui build && pnpm --filter @cortex/admin-ui build",
+    "build:all": "pnpm --filter @abrahamferga/cortex-ui build && pnpm --filter @cortex/admin-ui build",
     "lint": "pnpm -r lint"
   }
 }

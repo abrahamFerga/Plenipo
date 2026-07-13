@@ -10,11 +10,11 @@ export default defineConfig({
   base: "/admin/",
   resolve: {
     alias: {
-      // Resolve the platform client (api, hooks, types) straight from @cortex/ui source. This lets the
-      // console build without a prior `@cortex/ui` library build.
-      "@cortex/ui": fileURLToPath(new URL("../cortex-ui/src/index.ts", import.meta.url)),
+      // Resolve the platform client (api, hooks, types) straight from @abrahamferga/cortex-ui source. This lets the
+      // console build without a prior `@abrahamferga/cortex-ui` library build.
+      "@abrahamferga/cortex-ui": fileURLToPath(new URL("../cortex-ui/src/index.ts", import.meta.url)),
     },
-    // The aliased @cortex/ui source lives under cortex-ui/, which has its own node_modules. Under pnpm's
+    // The aliased @abrahamferga/cortex-ui source lives under cortex-ui/, which has its own node_modules. Under pnpm's
     // isolated layout that would pull a second copy of React (→ "invalid hook call"). Dedupe to one copy.
     dedupe: ["react", "react-dom", "react-router-dom", "@tanstack/react-query"],
   },

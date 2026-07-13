@@ -1,5 +1,5 @@
 packages:
-  # Base platform library (the end-user / domain shell) — publishable as @cortex/ui
+  # Base platform library (the end-user / domain shell) — publishable as @abrahamferga/cortex-ui
   - "cortex-ui"
 
   # Admin console app (security / RBAC / users / token usage / audit) — served at /admin

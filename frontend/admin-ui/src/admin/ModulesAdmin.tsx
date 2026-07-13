@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type ModuleAdmin } from "@cortex/ui";
+import { api, type ModuleAdmin } from "@abrahamferga/cortex-ui";
 
 function Toggle({ on, disabled, onChange }: { on: boolean; disabled: boolean; onChange: (next: boolean) => void }) {
   return (

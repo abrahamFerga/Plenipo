@@ -13,7 +13,7 @@ importers:
 
   admin-ui:
     dependencies:
-      '@cortex/ui':
+      '@abrahamferga/cortex-ui':
         specifier: workspace:*
         version: link:../cortex-ui
       '@tanstack/react-query':
