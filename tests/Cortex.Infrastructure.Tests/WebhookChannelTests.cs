@@ -1,8 +1,10 @@
 using System.Net;
 using Cortex.Application.Notifications;
+using Cortex.Application.Security;
 using Cortex.Infrastructure.Notifications;
 using Cortex.Infrastructure.Secrets;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.Options;
 
 namespace Cortex.Infrastructure.Tests;
 
@@ -28,7 +30,8 @@ public sealed class WebhookChannelTests
         var channel = new WebhookNotificationChannel(
             new FixedConfig(new NotificationWebhookConfig("https://hooks.example/cortex", secretRef)),
             vault,
-            new SingleClientFactory(handler));
+            new SingleClientFactory(handler),
+            PermissivePolicy());
 
         await channel.SendAsync(new Notification(Guid.NewGuid(), Guid.NewGuid(), "jobs", "Job finished", "Done."));
 
@@ -46,12 +49,31 @@ public sealed class WebhookChannelTests
         var channel = new WebhookNotificationChannel(
             new FixedConfig(null),
             new DataProtectionSecretVault(new EphemeralDataProtectionProvider()),
-            new SingleClientFactory(handler));
+            new SingleClientFactory(handler),
+            PermissivePolicy());
 
         await channel.SendAsync(new Notification(Guid.NewGuid(), Guid.NewGuid(), "jobs", "t", "b"));
 
         Assert.Null(handler.Request);
     }
+
+    [Fact]
+    public async Task Send_BlocksPrivateDestinations()
+    {
+        var handler = new CapturingHandler();
+        var channel = new WebhookNotificationChannel(
+            new FixedConfig(new NotificationWebhookConfig("http://169.254.169.254/latest/meta-data", null)),
+            new DataProtectionSecretVault(new EphemeralDataProtectionProvider()),
+            new SingleClientFactory(handler),
+            new OutboundUrlPolicy(Options.Create(new OutboundUrlOptions { AllowHttp = true })));
+
+        await Assert.ThrowsAsync<ArgumentException>(() => channel.SendAsync(
+            new Notification(Guid.NewGuid(), Guid.NewGuid(), "jobs", "t", "b")));
+        Assert.Null(handler.Request);
+    }
+
+    private static OutboundUrlPolicy PermissivePolicy() =>
+        new(Options.Create(new OutboundUrlOptions { AllowHttp = true, AllowPrivateNetworks = true }));
 
     private sealed class FixedConfig(NotificationWebhookConfig? config) : INotificationWebhookConfigReader
     {

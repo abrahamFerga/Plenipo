@@ -59,7 +59,7 @@ The deployment artifacts are already customer-agnostic:
   region, SKUs, `enable_keyvault_secret_vault`) + one Terraform
   **workspace/state** per customer.
 - **Single-box**: [deploy/compose/](../deploy/compose/) — one compose file, pinned tags, all state
-  in two named volumes + `.env`; upgrade = `docker compose pull && up -d`. Right-sized for small
+  in three named volumes + `.env`; upgrade = `docker compose pull && up -d`. Right-sized for small
   dedicated customers or on-prem.
 
 **Automation shape (next step, once the repo has a CI remote):** a `deploy-customer` GitHub

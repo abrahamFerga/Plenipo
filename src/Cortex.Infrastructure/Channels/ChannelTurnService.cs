@@ -53,6 +53,14 @@ public sealed class ChannelTurnService(
 
         if (user is null)
         {
+            if (!request.AllowUserProvisioning)
+            {
+                logger.LogWarning(
+                    "Unknown channel sender {Subject} was refused because the adapter did not allow provisioning.",
+                    subject);
+                return new(ChannelTurnStatus.IdentityRefused);
+            }
+
             // Same seat gate as interactive sign-in: a full tenant admits no new channel users.
             if (tenant.MaxSeats is { } maxSeats)
             {

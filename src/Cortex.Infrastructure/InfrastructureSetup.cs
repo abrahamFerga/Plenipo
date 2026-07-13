@@ -12,6 +12,7 @@ using Cortex.Application.Modules;
 using Cortex.Application.Notifications;
 using Cortex.Application.Rag;
 using Cortex.Application.Secrets;
+using Cortex.Application.Security;
 using Cortex.Application.Skills;
 using Cortex.Application.Usage;
 using Cortex.Core.Identity;
@@ -53,6 +54,8 @@ public static class InfrastructureSetup
         var services = builder.Services;
 
         AddRequestContext(services);
+        services.Configure<OutboundUrlOptions>(configuration.GetSection(OutboundUrlOptions.SectionName));
+        services.AddSingleton<OutboundUrlPolicy>();
         AddPersistence(builder);
         AddSecretVault(builder);
         AddSkills(builder);
@@ -83,7 +86,9 @@ public static class InfrastructureSetup
         services.AddSingleton<IJobHandler, ConnectorSyncJobHandler>();
 
         // Delegated (per-user OAuth) connectors: protected token sessions + the code exchange.
-        services.AddHttpClient(OAuthTokenClient.HttpClientName);
+        services.AddHttpClient(OAuthTokenClient.HttpClientName)
+            .ConfigurePrimaryHttpMessageHandler(sp =>
+                sp.GetRequiredService<OutboundUrlPolicy>().CreateHttpMessageHandler());
         services.AddSingleton<IOAuthTokenClient, OAuthTokenClient>();
         services.AddScoped<ConnectorUserLoginService>();
         services.AddScoped<IConnectorUserLogins>(sp => sp.GetRequiredService<ConnectorUserLoginService>());
@@ -313,7 +318,9 @@ public static class InfrastructureSetup
         // any host code that wants a bare client.
         services.AddSingleton<ITenantChatClientResolver, TenantChatClientResolver>();
         services.AddHttpClient(ProviderAiModelCatalog.HttpClientName, client =>
-            client.Timeout = TimeSpan.FromSeconds(15));
+            client.Timeout = TimeSpan.FromSeconds(15))
+            .ConfigurePrimaryHttpMessageHandler(sp =>
+                sp.GetRequiredService<OutboundUrlPolicy>().CreateHttpMessageHandler());
         services.AddSingleton<IAiModelCatalog, ProviderAiModelCatalog>();
 
         services.AddSingleton<IModuleCatalog, ModuleCatalog>();
@@ -329,7 +336,9 @@ public static class InfrastructureSetup
         services.AddSingleton<ISmtpTransport, SmtpClientTransport>();
         services.AddScoped<INotificationChannel, EmailNotificationChannel>(); // no-op until Email: is configured
         services.AddHttpClient(WebhookNotificationChannel.HttpClientName,
-            client => client.Timeout = TimeSpan.FromSeconds(10));
+            client => client.Timeout = TimeSpan.FromSeconds(10))
+            .ConfigurePrimaryHttpMessageHandler(sp =>
+                sp.GetRequiredService<OutboundUrlPolicy>().CreateHttpMessageHandler());
         services.AddScoped<IConversationStore, ConversationStore>();
         services.AddScoped<ITokenUsageReader, TokenUsageReader>();
         services.AddScoped<Usage.BudgetAlerts>();

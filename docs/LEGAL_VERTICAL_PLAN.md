@@ -60,7 +60,7 @@ Pending user decisions: **product name** (EnBanc vs AdLitem, below) and **repo e
 8. **Guided workflows: packaged multi-step tasks (NDA review, diligence checklist, timeline extraction) that gather context stepwise and emit a defined work product** _(effort: medium)_
    - Builds on: ModuleManifest.AgentInstructions + SuggestedPrompts + composition of the tools above + HITL approvals for side-effecting steps
 9. **WhatsApp client intake: a client sends a contract on WhatsApp with a caption, it lands on their matter and triggers the review workflow** _(effort: small)_
-   - Builds on: WhatsApp channel (Meta media API → IFileStore with whatsapp provenance, JIT phone-user provisioning — already end-to-end) + attach_document_to_matter; mostly prompts and per-tenant config
+   - Builds on: WhatsApp channel (Meta media API → IFileStore with whatsapp provenance, allowlisted/explicit JIT phone-user provisioning — already end-to-end) + attach_document_to_matter; mostly prompts and per-tenant config
 10. **Matter-level access control: ethical-wall enforcement that fails closed, per-matter membership, and a per-matter audit view** _(effort: medium)_
    - Builds on: The per-resource ACL seam (owner/editor/viewer) + custom IAuthorizationPolicyProvider policies + append-only audit DB filtered by matter
 

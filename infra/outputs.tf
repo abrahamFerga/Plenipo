@@ -69,6 +69,11 @@ output "postgres_audit_database" {
   value       = module.database.audit_database_name
 }
 
+output "postgres_audit_fqdn" {
+  description = "Fully-qualified domain name of the independent audit PostgreSQL server."
+  value       = module.database.audit_fqdn
+}
+
 output "redis_hostname" {
   description = "Hostname of the Azure Cache for Redis instance."
   value       = module.cache.hostname

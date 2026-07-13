@@ -1,4 +1,5 @@
 using Cortex.Connectors.Sdk;
+using Microsoft.Extensions.Options;
 
 namespace Cortex.Connectors.LocalFolder;
 
@@ -7,7 +8,9 @@ namespace Cortex.Connectors.LocalFolder;
 /// the admin-configured root, containment-checked like the tools. The content stamp is
 /// length + last-write ticks — cheap and enough for a dev/watched-folder source.
 /// </summary>
-public sealed class LocalFolderSyncSource(IConnectorSettings settings) : IConnectorSyncSource
+public sealed class LocalFolderSyncSource(
+    IConnectorSettings settings,
+    IOptions<LocalFolderOptions> options) : IConnectorSyncSource
 {
     public string ConnectorId => LocalFolderConnector.ConnectorId;
 
@@ -21,7 +24,12 @@ public sealed class LocalFolderSyncSource(IConnectorSettings settings) : IConnec
         }
 
         return new DirectoryInfo(folder)
-            .EnumerateFiles("*", SearchOption.AllDirectories)
+            .EnumerateFiles("*", new EnumerationOptions
+            {
+                RecurseSubdirectories = true,
+                AttributesToSkip = FileAttributes.ReparsePoint,
+                IgnoreInaccessible = true,
+            })
             .OrderBy(f => f.FullName, StringComparer.OrdinalIgnoreCase)
             .Take(500)
             .Select(f => new ConnectorSyncFile(
@@ -41,7 +49,8 @@ public sealed class LocalFolderSyncSource(IConnectorSettings settings) : IConnec
         }
 
         var full = Path.GetFullPath(Path.Combine(folder, fileId));
-        return full.StartsWith(folder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) && File.Exists(full)
+        return LocalFolderPathPolicy.IsContained(folder, full) &&
+               !LocalFolderPathPolicy.ContainsReparsePoint(folder, full) && File.Exists(full)
             ? File.OpenRead(full)
             : null;
     }
@@ -58,10 +67,18 @@ public sealed class LocalFolderSyncSource(IConnectorSettings settings) : IConnec
             return null;
         }
 
-        root = Path.GetFullPath(root);
+        root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+        if (!LocalFolderPathPolicy.IsAllowedRoot(root, options.Value.AllowedRoots))
+        {
+            return null;
+        }
         var folder = Path.GetFullPath(Path.Combine(root, externalRef));
-        var contained = folder.Equals(root, StringComparison.OrdinalIgnoreCase) ||
-                        folder.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
-        return contained && Directory.Exists(folder) ? folder : null;
+        var contained = folder.Equals(
+                            root,
+                            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) ||
+                        LocalFolderPathPolicy.IsContained(root, folder);
+        return contained && !LocalFolderPathPolicy.ContainsReparsePoint(root, folder) && Directory.Exists(folder)
+            ? folder
+            : null;
     }
 }

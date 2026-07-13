@@ -759,6 +759,7 @@ public sealed class ApiIntegrationTests(IntegrationFixture fixture)
             builder.UseEnvironment("Production");
             builder.UseSetting("Auth:Authority", "https://login.example.com/00000000-0000-0000-0000-000000000000/v2.0");
             builder.UseSetting("Auth:Audience", "api://cortex-tests");
+            builder.UseSetting("DataProtection:KeysPath", Path.Combine(Path.GetTempPath(), $"cortex-dp-{Guid.NewGuid():N}"));
         }
     }
 

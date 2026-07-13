@@ -25,6 +25,10 @@ public class CortexApiFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment(Environments.Development);
+        builder.UseSetting("Connectors:OperatorEnabled:local-folder", "true");
+        builder.UseSetting("Connectors:LocalFolder:AllowedRoots:0", Path.GetTempPath());
+        builder.UseSetting("Security:OutboundUrls:AllowHttp", "true");
+        builder.UseSetting("Security:OutboundUrls:AllowPrivateNetworks", "true");
 
         builder.ConfigureServices(services =>
         {

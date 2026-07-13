@@ -39,6 +39,12 @@ public sealed class WhatsAppOptions
     /// <summary>WhatsApp's per-message text limit; longer replies are split into consecutive messages.</summary>
     public int MaxMessageLength { get; set; } = 4096;
 
+    /// <summary>Allow any WhatsApp sender to create a Cortex user. Unsafe for private workspaces; off by default.</summary>
+    public bool AllowUnknownSenders { get; set; }
+
+    /// <summary>Phone numbers allowed to JIT-provision when <see cref="AllowUnknownSenders"/> is false.</summary>
+    public string[] AllowedSenders { get; set; } = [];
+
     /// <summary>Throws when the channel is enabled but missing a setting it cannot run without.</summary>
     public void ThrowIfInvalid()
     {

@@ -16,3 +16,8 @@ packages:
 # (esbuild fetches its platform binary; Vite uses it). pnpm blocks all others by default.
 allowBuilds:
   esbuild: true
+
+# Vitest supports multiple Vite majors and otherwise resolves the lowest compatible release.
+# Keep every dev-server path on the patched Vite line.
+overrides:
+  vite: 6.4.3

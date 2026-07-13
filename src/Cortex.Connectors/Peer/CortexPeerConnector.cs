@@ -1,4 +1,5 @@
 using Cortex.Application.Authorization;
+using Cortex.Application.Security;
 using Cortex.Connectors.Sdk;
 using Cortex.Modules.Sdk;
 using Microsoft.Extensions.Configuration;
@@ -83,7 +84,9 @@ public sealed class CortexPeerConnector : IConnector
 
     public void RegisterServices(IServiceCollection services, IConfiguration configuration)
     {
-        services.AddHttpClient(HttpClientName);
+        services.AddHttpClient(HttpClientName)
+            .ConfigurePrimaryHttpMessageHandler(sp =>
+                sp.GetRequiredService<OutboundUrlPolicy>().CreateHttpMessageHandler());
         services.AddScoped<CortexPeerTools>();
         services.AddSingleton<IConnectorToolSource, CortexPeerToolSource>();
     }

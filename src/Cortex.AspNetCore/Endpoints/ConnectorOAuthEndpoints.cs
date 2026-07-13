@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Cortex.Application.Connectors;
+using Cortex.Application.Security;
 using Cortex.Connectors.Sdk;
 using Cortex.Core.Identity;
 using Cortex.Infrastructure.Connectors;
@@ -84,8 +85,13 @@ public static class ConnectorOAuthEndpoints
                 string connectorId, HttpContext http,
                 IConnectorCatalog catalog, ITenantConnectorStore store,
                 ConnectorUserLoginService logins, IDataProtectionProvider dataProtection,
+                ICurrentUser current, OutboundUrlPolicy outboundUrls,
                 CancellationToken cancellationToken) =>
             {
+                if (current.UserId is not Guid userId || current.TenantId is not Guid tenantId)
+                {
+                    return Results.Unauthorized();
+                }
                 if (!catalog.TryGetManifest(connectorId, out var manifest) || manifest is null ||
                     manifest.AuthMode != ConnectorAuthMode.UserDelegated)
                 {
@@ -113,13 +119,24 @@ public static class ConnectorOAuthEndpoints
                 var challenge = Convert.ToBase64String(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)))
                     .TrimEnd('=').Replace('+', '-').Replace('/', '_');
                 var state = dataProtection.CreateProtector(StatePurpose)
-                    .Protect(JsonSerializer.Serialize(new OAuthState(connectorId, verifier)));
+                    .ToTimeLimitedDataProtector()
+                    .Protect(
+                        JsonSerializer.Serialize(new OAuthState(connectorId, verifier, tenantId, userId)),
+                        lifetime: TimeSpan.FromMinutes(10));
 
                 var redirectUri = $"{http.Request.Scheme}://{http.Request.Host}/api/connectors/{connectorId}/oauth/callback";
                 // The manifest's template decides the IdP's URL shape (Entra path, Google's fixed
                 // URL with extra params, …); we only append the standard auth-code+PKCE parameters.
                 var authorizeBase = manifest.OAuthAuthorizeUrlTemplate
                     .Replace("{authority}", authority?.TrimEnd('/'), StringComparison.Ordinal);
+                try
+                {
+                    await outboundUrls.RequireAllowedAsync(authorizeBase, cancellationToken);
+                }
+                catch (ArgumentException ex)
+                {
+                    return Results.Conflict(new { error = $"The connector authorization endpoint is not allowed: {ex.Message}" });
+                }
                 var separator = authorizeBase.Contains('?') ? '&' : '?';
                 var authorizeUrl = authorizeBase +
                     $"{separator}client_id={Uri.EscapeDataString(clientId)}" +
@@ -136,28 +153,42 @@ public static class ConnectorOAuthEndpoints
         group.MapGet("/{connectorId}/oauth/callback", async (
                 string connectorId, string code, string state, HttpContext http,
                 ConnectorUserLoginService logins, IOAuthTokenClient oauth,
-                IDataProtectionProvider dataProtection, CancellationToken cancellationToken) =>
+                IDataProtectionProvider dataProtection, ICurrentUser current, OutboundUrlPolicy outboundUrls,
+                CancellationToken cancellationToken) =>
             {
                 OAuthState? payload;
                 try
                 {
                     payload = JsonSerializer.Deserialize<OAuthState>(
-                        dataProtection.CreateProtector(StatePurpose).Unprotect(state));
+                        dataProtection.CreateProtector(StatePurpose)
+                            .ToTimeLimitedDataProtector()
+                            .Unprotect(state));
                 }
                 catch (CryptographicException)
                 {
                     return Results.BadRequest(new { error = "Invalid or expired state." });
                 }
 
-                if (payload is null || !string.Equals(payload.ConnectorId, connectorId, StringComparison.Ordinal))
+                if (payload is null ||
+                    !string.Equals(payload.ConnectorId, connectorId, StringComparison.Ordinal) ||
+                    payload.TenantId != current.TenantId || payload.UserId != current.UserId)
                 {
-                    return Results.BadRequest(new { error = "State does not match this connector." });
+                    return Results.BadRequest(new { error = "State does not match this connector or signed-in user." });
                 }
 
                 var config = await logins.ResolveOAuthConfigAsync(connectorId, cancellationToken);
                 if (config is null)
                 {
                     return Results.Conflict(new { error = "The connector is not configured for this tenant." });
+                }
+
+                try
+                {
+                    await outboundUrls.RequireAllowedAsync(config.TokenEndpoint, cancellationToken);
+                }
+                catch (ArgumentException ex)
+                {
+                    return Results.Conflict(new { error = $"The connector token endpoint is not allowed: {ex.Message}" });
                 }
 
                 var redirectUri = $"{http.Request.Scheme}://{http.Request.Host}/api/connectors/{connectorId}/oauth/callback";
@@ -169,7 +200,7 @@ public static class ConnectorOAuthEndpoints
             .WithName("Connectors_OAuthCallback");
     }
 
-    private sealed record OAuthState(string ConnectorId, string CodeVerifier);
+    private sealed record OAuthState(string ConnectorId, string CodeVerifier, Guid TenantId, Guid UserId);
 
     private sealed record UserConnectorDto(
         string Id, string DisplayName, string Description, string? Icon, bool Connected);

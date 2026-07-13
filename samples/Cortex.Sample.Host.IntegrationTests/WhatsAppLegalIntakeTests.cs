@@ -36,6 +36,7 @@ public sealed class WhatsAppLegalIntakeTests(IntegrationFixture fixture)
             builder.UseSetting("Channels:WhatsApp:PhoneNumberId", "10000000002");
             builder.UseSetting("Channels:WhatsApp:ModuleId", "legal");
             builder.UseSetting("Channels:WhatsApp:TenantSlug", "dev");
+            builder.UseSetting("Channels:WhatsApp:AllowUnknownSenders", "true");
             builder.ConfigureTestServices(services =>
             {
                 services.AddSingleton<IWhatsAppSender>(outbox);

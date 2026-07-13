@@ -51,4 +51,16 @@ public sealed class AuthSetupTests
             Config(("Auth:Authority", "https://example.ciamlogin.com/tenant/v2.0"), ("Auth:Audience", "api-id")),
             new FakeEnv("Production"));
     }
+
+    [Theory]
+    [InlineData("Auth:Authority", "https://example.ciamlogin.com/tenant/v2.0")]
+    [InlineData("Auth:Audience", "api-id")]
+    public void PartialJwtConfiguration_FailsFast(string key, string value)
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new ServiceCollection().AddCortexAuthentication(
+                Config((key, value)), new FakeEnv("Production")));
+
+        Assert.Contains("both Auth:Authority and Auth:Audience", ex.Message, StringComparison.Ordinal);
+    }
 }

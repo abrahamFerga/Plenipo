@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text;
 using System.Text.Json;
 using Cortex.Application.Authorization;
+using Cortex.Application.Security;
 using Cortex.Connectors.Sdk;
 using Cortex.Modules.Sdk;
 using Microsoft.Extensions.AI;
@@ -14,7 +15,10 @@ namespace Cortex.Connectors.Peer;
 /// /api/agui/{module}, SSE back), assembled from the TEXT_MESSAGE_CONTENT deltas. AG-UI is the
 /// same open protocol the peer's own web UI speaks — no private API between systems.
 /// </summary>
-public sealed class CortexPeerTools(IConnectorSettings settings, IHttpClientFactory httpClients)
+public sealed class CortexPeerTools(
+    IConnectorSettings settings,
+    IHttpClientFactory httpClients,
+    OutboundUrlPolicy outboundUrls)
 {
     private const string NotConfigured =
         "The Cortex peer connector is not enabled for this tenant (or is missing its base URL / module id). " +
@@ -38,9 +42,20 @@ public sealed class CortexPeerTools(IConnectorSettings settings, IHttpClientFact
             ? name
             : "the peer system";
 
+        Uri destination;
+        try
+        {
+            destination = await outboundUrls.RequireAllowedAsync(
+                $"{baseUrl.TrimEnd('/')}/api/agui/{Uri.EscapeDataString(moduleId)}", cancellationToken);
+        }
+        catch (ArgumentException ex)
+        {
+            return $"The peer destination is blocked by the deployment's outbound URL policy: {ex.Message}";
+        }
+
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
-            $"{baseUrl.TrimEnd('/')}/api/agui/{Uri.EscapeDataString(moduleId)}")
+            destination)
         {
             Content = new StringContent(
                 JsonSerializer.Serialize(new

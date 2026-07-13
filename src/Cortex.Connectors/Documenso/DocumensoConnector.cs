@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Cortex.Application.Authorization;
 using Cortex.Application.Files;
+using Cortex.Application.Security;
 using Cortex.Connectors.Sdk;
 using Cortex.Modules.Sdk;
 using Microsoft.Extensions.AI;
@@ -71,7 +72,9 @@ public sealed class DocumensoConnector : IConnector
 
     public void RegisterServices(IServiceCollection services, IConfiguration configuration)
     {
-        services.AddHttpClient(DocumensoApiClient.HttpClientName);
+        services.AddHttpClient(DocumensoApiClient.HttpClientName)
+            .ConfigurePrimaryHttpMessageHandler(sp =>
+                sp.GetRequiredService<OutboundUrlPolicy>().CreateHttpMessageHandler());
         services.AddSingleton<IDocumensoClient, DocumensoApiClient>();
         services.AddScoped<DocumensoTools>();
         services.AddSingleton<IConnectorToolSource, DocumensoToolSource>();

@@ -97,6 +97,8 @@ public sealed class WhatsAppChannelService(
             TenantSlug = options.Value.TenantSlug!,
             ModuleId = options.Value.ModuleId!,
             ExternalId = message.From,
+            AllowUserProvisioning = options.Value.AllowUnknownSenders ||
+                options.Value.AllowedSenders.Contains(message.From, StringComparer.Ordinal),
             DisplayName = value.Contacts?.FirstOrDefault(c => c.WaId == message.From)?.Profile?.Name
                 ?? $"WhatsApp +{message.From}",
             Text = text,

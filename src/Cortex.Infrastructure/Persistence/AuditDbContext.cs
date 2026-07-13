@@ -20,6 +20,20 @@ public sealed class AuditDbContext(DbContextOptions<AuditDbContext> options) : D
     public DbSet<EntityChangeAuditEntry> EntityChanges => Set<EntityChangeAuditEntry>();
     public DbSet<TokenUsageRecord> TokenUsage => Set<TokenUsageRecord>();
 
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        EnsureAppendOnly();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureAppendOnly();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema(Schema);
@@ -84,5 +98,13 @@ public sealed class AuditDbContext(DbContextOptions<AuditDbContext> options) : D
         b.HasIndex(x => new { x.TenantId, x.OccurredAt });
         b.HasIndex(x => new { x.TenantId, x.ModuleId });
         b.HasIndex(x => x.ConversationId);
+    }
+
+    private void EnsureAppendOnly()
+    {
+        if (ChangeTracker.Entries().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
+        {
+            throw new InvalidOperationException("Audit records are append-only and cannot be updated or deleted.");
+        }
     }
 }

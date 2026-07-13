@@ -1,7 +1,7 @@
 # Cortex — single-box deployment (Docker Compose)
 
-The simplest production-shaped way to run Cortex: one compose file, three containers
-(API + pgvector Postgres + Redis), all state in named volumes. Modeled on what makes
+The simplest production-shaped way to run Cortex: one compose file, four containers
+(API + independently credentialed platform and audit Postgres + Redis), all state in named volumes. Modeled on what makes
 OpenClaw-style deployments dependable — pinned versions, one state boundary, and an
 upgrade that is exactly two commands.
 
@@ -9,14 +9,14 @@ upgrade that is exactly two commands.
 
 ```bash
 cd deploy/compose
-cp .env.example .env         # then set POSTGRES_PASSWORD (only required value)
+cp .env.example .env         # set both DB passwords plus AUTH_AUTHORITY and AUTH_AUDIENCE
 docker compose up -d --build
 ```
 
-Open http://localhost:8080/alive — `200 OK` means the stack is up. The default
-configuration is the **keyless demo**: Mock AI provider, mock embeddings, dev header
-auth (`X-Dev-Subject` / `X-Dev-Tenant` / `X-Dev-Roles`), the three sample modules, RAG,
-and the `brand-voice` sample skill. Chat via AG-UI:
+Open http://localhost:8080/alive — `200 OK` means the stack is up. The default is
+production mode with JWT authority and audience validation. For a local-only keyless demo,
+explicitly set `CORTEX_ENVIRONMENT=Development`; dev header auth
+(`X-Dev-Subject` / `X-Dev-Tenant` / `X-Dev-Roles`) is never available in production. Then chat via AG-UI:
 
 ```bash
 curl -N -X POST http://localhost:8080/api/agui/finance \
@@ -43,16 +43,17 @@ volume layout is major-specific.
 
 ## State & backup
 
-Everything the deployment owns lives in two named volumes plus your `.env`:
+Everything the deployment owns lives in three named volumes plus your `.env`:
 
 | What | Where |
 |---|---|
-| Operational data, RAG index, audit | `cortex-pgdata` (databases `cortex_platform`, `cortex_audit`) |
-| Cache / SignalR backplane | `cortex-redisdata` (safe to lose) |
+| Operational data and RAG index | `cortex-pgdata` (`cortex_platform`) |
+| Append-only audit trail | `cortex-audit-pgdata` (`cortex_audit`, separate credentials) |
+| Cache, SignalR backplane, Data Protection key ring | `cortex-redisdata` (**not safe to lose**) |
 | Deployment identity & keys | `.env` (never commit it) |
 
-Backup = `docker exec cortex-postgres-1 pg_dumpall -U postgres > backup.sql` on a
-schedule, plus a copy of `.env`. Restore onto any Docker host and you have the same
+Back up both Postgres services and the Redis AOF on a schedule, plus a copy of `.env`.
+Restore all three state volumes onto any Docker host and you have the same
 system — this is the multi-cloud-friendly path: the same compose file runs on an Azure
 VM, AWS EC2, or a box under the desk. (Cloud-managed topology — Container Apps, managed
 Postgres, Key Vault — is `deploy/terraform/`.)
@@ -62,7 +63,8 @@ Postgres, Key Vault — is `deploy/terraform/`.)
 | Concern | What to change |
 |---|---|
 | AI provider | Configure each tenant's provider/model/key in Admin → AI Settings. Keys are vaulted and write-only; model choices are loaded live from providers. |
-| Authentication | `CORTEX_ENVIRONMENT=Production` + configure the external IdP (see docs — the `X-Dev-*` scheme exists only in Development) |
+| Authentication | Keep `CORTEX_ENVIRONMENT=Production` and set both `AUTH_AUTHORITY` and `AUTH_AUDIENCE` for the external IdP (the `X-Dev-*` scheme exists only in Development) |
+| Host filesystem connector | Explicitly set `Connectors__OperatorEnabled__local-folder=true` and one or more `Connectors__LocalFolder__AllowedRoots__N` values; otherwise it is not registered |
 | Connector secrets | Set in the admin UI (write-only). To store them in Azure Key Vault instead of the DB: `Secrets__Provider=AzureKeyVault` + `Secrets__KeyVaultUri=...` on the api service |
 | TLS / domain | Put a reverse proxy (Caddy, Traefik, nginx) in front of port 8080 |
 | Skills | Mount or bake a skills directory; `Skills__Path` points at it |

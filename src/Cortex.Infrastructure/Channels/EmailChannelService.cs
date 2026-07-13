@@ -80,6 +80,8 @@ public sealed class EmailChannelService(
             TenantSlug = o.TenantSlug!,
             ModuleId = o.ModuleId!,
             ExternalId = mail.FromAddress.ToLowerInvariant(),
+            AllowUserProvisioning = o.AllowUnknownSenders || o.AllowedSenders.Contains(
+                mail.FromAddress, StringComparer.OrdinalIgnoreCase),
             DisplayName = mail.FromName,
             Text = text,
             Attachments = [.. mail.Attachments.Select(a =>

@@ -27,6 +27,7 @@ public sealed class LocalFolderConnector : IConnector
         Description = "Browse, fetch, and sync files from a directory on the host (dev/test, watched folders). Only the configured root is reachable.",
         AuthMode = ConnectorAuthMode.Service,
         SupportsSync = true,
+        RequiresOperatorEnablement = true,
         Icon = "folder-open",
         Settings =
         [
@@ -58,8 +59,18 @@ public sealed class LocalFolderConnector : IConnector
 
     public void RegisterServices(IServiceCollection services, IConfiguration configuration)
     {
+        services.Configure<LocalFolderOptions>(configuration.GetSection(LocalFolderOptions.SectionName));
         services.AddScoped<LocalFolderTools>();
         services.AddSingleton<IConnectorToolSource, LocalFolderToolSource>();
         services.AddScoped<IConnectorSyncSource, LocalFolderSyncSource>();
     }
+}
+
+/// <summary>Deployment-operator allowlist for host directories tenants may connect to.</summary>
+public sealed class LocalFolderOptions
+{
+    public const string SectionName = "Connectors:LocalFolder";
+
+    /// <summary>Absolute roots beneath which tenant-selected folders may live. Empty denies all.</summary>
+    public string[] AllowedRoots { get; set; } = [];
 }

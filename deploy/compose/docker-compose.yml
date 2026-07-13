@@ -12,15 +12,18 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      audit-postgres:
+        condition: service_healthy
       redis:
         condition: service_started
     environment:
-      # Development enables the keyless demo path (Mock AI + X-Dev-* header auth).
-      # For a real deployment set CORTEX_ENVIRONMENT=Production in .env and configure
-      # authentication (external IdP) — the dev header scheme only exists in Development.
-      ASPNETCORE_ENVIRONMENT: ${CORTEX_ENVIRONMENT:-Development}
+      # Production is the safe default. Development must be selected explicitly and the published
+      # port binds to loopback by default so dev-header system-admin auth is not internet-exposed.
+      ASPNETCORE_ENVIRONMENT: ${CORTEX_ENVIRONMENT:-Production}
+      Auth__Authority: ${AUTH_AUTHORITY:-}
+      Auth__Audience: ${AUTH_AUDIENCE:-}
       ConnectionStrings__cortex-platform: Host=postgres;Port=5432;Database=cortex_platform;Username=postgres;Password=${POSTGRES_PASSWORD:?create .env from .env.example}
-      ConnectionStrings__cortex-audit: Host=postgres;Port=5432;Database=cortex_audit;Username=postgres;Password=${POSTGRES_PASSWORD}
+      ConnectionStrings__cortex-audit: Host=audit-postgres;Port=5432;Database=cortex_audit;Username=postgres;Password=${AUDIT_POSTGRES_PASSWORD:?set a distinct audit password in .env}
       ConnectionStrings__cortex-redis: redis:6379
       Ai__Provider: ${AI_PROVIDER:-Mock}
       Ai__Model: ${AI_MODEL:-gpt-4o-mini}
@@ -30,7 +33,7 @@ services:
       Skills__Enabled: "true"
       Skills__Path: skills
     ports:
-      - "${CORTEX_PORT:-8080}:8080"
+      - "${CORTEX_BIND_ADDRESS:-127.0.0.1}:${CORTEX_PORT:-8080}:8080"
     restart: unless-stopped
 
   postgres:
@@ -43,9 +46,23 @@ services:
       POSTGRES_DB: cortex_platform
     volumes:
       - cortex-pgdata:/var/lib/postgresql/data
-      - ./init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d cortex_platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  audit-postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${AUDIT_POSTGRES_PASSWORD:?set a distinct audit password in .env}
+      POSTGRES_DB: cortex_audit
+    volumes:
+      - cortex-audit-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d cortex_audit"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -62,4 +79,5 @@ services:
 # deployment is portable to any Docker host.
 volumes:
   cortex-pgdata:
+  cortex-audit-pgdata:
   cortex-redisdata:

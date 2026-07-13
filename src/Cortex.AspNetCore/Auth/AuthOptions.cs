@@ -32,5 +32,11 @@ public sealed class AuthOptions
     /// </summary>
     public string[] MfaAmrValues { get; set; } = ["mfa", "ngcmfa", "fido", "otp", "hwk"];
 
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(Authority);
+    /// <summary>JWT authentication is configured only when both issuer and resource audience are pinned.</summary>
+    public bool IsConfigured =>
+        !string.IsNullOrWhiteSpace(Authority) && !string.IsNullOrWhiteSpace(Audience);
+
+    /// <summary>True when a partial JWT configuration was supplied and must fail fast.</summary>
+    public bool IsPartiallyConfigured =>
+        !string.IsNullOrWhiteSpace(Authority) ^ !string.IsNullOrWhiteSpace(Audience);
 }

@@ -44,6 +44,15 @@ public sealed class EmailChannelOptions
     /// </summary>
     public bool ReplyEnabled { get; set; }
 
+    /// <summary>Allow any From address to create a Cortex user. Off by default.</summary>
+    public bool AllowUnknownSenders { get; set; }
+
+    /// <summary>Email addresses allowed to JIT-provision when unknown-sender access is off.</summary>
+    public string[] AllowedSenders { get; set; } = [];
+
+    /// <summary>Maximum complete MIME message size downloaded from IMAP.</summary>
+    public long MaxMessageBytes { get; set; } = 25 * 1024 * 1024;
+
     /// <summary>Throws when the channel is enabled but missing a setting it cannot run without.</summary>
     public void ThrowIfInvalid()
     {

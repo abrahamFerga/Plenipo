@@ -6,6 +6,7 @@ using Cortex.Connectors.Sdk;
 using Cortex.Modules.Sdk;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Cortex.Connectors.LocalFolder;
 
@@ -15,7 +16,10 @@ namespace Cortex.Connectors.LocalFolder;
 /// into the tenant file store, which is what makes everything downstream (attachments,
 /// read_document, matters, RAG ingestion) work on connector files with no special casing.
 /// </summary>
-public sealed class LocalFolderTools(IConnectorSettings settings, IFileStore files)
+public sealed class LocalFolderTools(
+    IConnectorSettings settings,
+    IFileStore files,
+    IOptions<LocalFolderOptions> options)
 {
     private const string NotConfigured =
         "The local-folder connector is not enabled for this tenant (or has no root path configured). " +
@@ -31,7 +35,12 @@ public sealed class LocalFolderTools(IConnectorSettings settings, IFileStore fil
         }
 
         var entries = new DirectoryInfo(root)
-            .EnumerateFiles("*", SearchOption.AllDirectories)
+            .EnumerateFiles("*", new EnumerationOptions
+            {
+                RecurseSubdirectories = true,
+                AttributesToSkip = FileAttributes.ReparsePoint,
+                IgnoreInaccessible = true,
+            })
             .OrderBy(f => f.FullName, StringComparer.OrdinalIgnoreCase)
             .Take(100)
             .ToList();
@@ -65,7 +74,9 @@ public sealed class LocalFolderTools(IConnectorSettings settings, IFileStore fil
         // Containment check: the resolved path must stay under the configured root — a traversal
         // attempt is indistinguishable from a missing file.
         var full = Path.GetFullPath(Path.Combine(root, path));
-        if (!full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) || !File.Exists(full))
+        if (!LocalFolderPathPolicy.IsContained(root, full) ||
+            LocalFolderPathPolicy.ContainsReparsePoint(root, full) ||
+            !File.Exists(full))
         {
             return $"No file named '{path}' exists in the connected folder. Use list_local_folder to see what is available.";
         }
@@ -89,7 +100,10 @@ public sealed class LocalFolderTools(IConnectorSettings settings, IFileStore fil
             return null;
         }
 
-        return Path.GetFullPath(root);
+        var normalized = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+        return LocalFolderPathPolicy.IsAllowedRoot(normalized, options.Value.AllowedRoots)
+            ? normalized
+            : null;
     }
 
     internal static string ContentTypeFor(string path) => Path.GetExtension(path).ToLowerInvariant() switch
@@ -103,6 +117,61 @@ public sealed class LocalFolderTools(IConnectorSettings settings, IFileStore fil
         ".jpg" or ".jpeg" => "image/jpeg",
         _ => "application/octet-stream",
     };
+}
+
+internal static class LocalFolderPathPolicy
+{
+    private static readonly StringComparison PathComparison =
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+    public static bool IsAllowedRoot(string candidate, IEnumerable<string> allowedRoots)
+    {
+        foreach (var configured in allowedRoots.Where(r => !string.IsNullOrWhiteSpace(r)))
+        {
+            var allowed = Path.TrimEndingDirectorySeparator(Path.GetFullPath(configured));
+            if (candidate.Equals(allowed, PathComparison) || IsContained(allowed, candidate))
+            {
+                return !ContainsReparsePoint(allowed, candidate);
+            }
+        }
+
+        return false;
+    }
+
+    public static bool IsContained(string root, string candidate) =>
+        candidate.StartsWith(
+            Path.EndsInDirectorySeparator(root) ? root : root + Path.DirectorySeparatorChar,
+            PathComparison);
+
+    public static bool ContainsReparsePoint(string root, string candidate)
+    {
+        var relative = Path.GetRelativePath(root, candidate);
+        if (relative.StartsWith("..", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var current = root;
+        foreach (var segment in relative.Split(
+                     [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+                     StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = Path.Combine(current, segment);
+            try
+            {
+                if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                {
+                    return true;
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }
 
 /// <summary>Supplies the local-folder connector's executable tools.</summary>

@@ -54,7 +54,13 @@ before deploying.
 - **Multi-tenant isolation.** Row-level isolation via EF Core global query filters on `TenantId` — a query
   cannot cross a tenant boundary by omission.
 - **Authentication.** Entra External ID (OIDC / JWT) in production; a dev-only header fallback that is
-  registered **only** in the Development environment.
+  registered **only** in the Development environment. JWT authority and audience are both mandatory,
+  and tokens are always audience-validated.
+- **Controlled outbound traffic.** Tenant-configured HTTP endpoints are restricted to HTTPS and public
+  network destinations by default; redirects are disabled on sensitive clients. Operators can explicitly
+  permit HTTP/private destinations only for an isolated self-hosted deployment.
+- **Untrusted inbound identities are denied by default.** WhatsApp and email adapters process only
+  explicitly allowlisted senders unless an operator deliberately enables unknown-sender provisioning.
 - **Secrets.** Never committed — user-secrets in development, Key Vault / managed identity in production
   (see `infra/`). Logs record metadata (tool name, permission, duration), never message contents.
 - **Dependency & image hygiene.** Dependabot keeps NuGet, npm, GitHub Actions, and Docker base images
@@ -63,8 +69,7 @@ before deploying.
 ## Hardening notes for deployment
 
 - Configure Entra External ID. The dev-auth fallback is inert outside Development, so you **must** set
-  `Auth:Authority` in production to activate the JWT scheme — without it the host has no usable
-  authentication scheme and cannot serve requests.
+  both `Auth:Authority` and `Auth:Audience` in production. A partial configuration fails startup.
 - **Multi-factor authentication** is enrolled and enforced at your IdP (Entra External ID user
   flows, Keycloak/Authentik for self-hosters) — Cortex deliberately holds no credential store.
   Set `Auth:RequireMfa` to make the platform additionally **reject any token that was not issued
@@ -73,5 +78,9 @@ before deploying.
 - `/alive` (liveness) and `/health` (readiness) are anonymous. If you add health checks that surface
   sensitive dependency detail, restrict `/health` (auth, or an internal-only port).
 - Run behind HTTPS; terminate TLS at the ingress (the Container App / reverse proxy).
+- Keep the audit connection on an independently credentialed database server. The audit context rejects
+  updates/deletes, but database-level retention and restricted administrator access remain operator duties.
+- Persist the ASP.NET Data Protection key ring in Redis or set `DataProtection:KeysPath` to shared durable
+  storage. Losing the key ring makes OAuth state and DataProtection-vaulted secrets unreadable.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for how these pieces fit together.

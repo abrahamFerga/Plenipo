@@ -9,7 +9,7 @@ Meta WhatsApp Business **Cloud API**.
 flowchart LR
     W(["WhatsApp user"]) -->|"text message"| M["Meta Cloud API"]
     M -->|"webhook POST<br/>(HMAC-signed)"| C["Cortex webhook<br/>/api/channels/whatsapp/webhook"]
-    C -->|"JIT-provision user<br/>whatsapp:{phone}"| R["Authorized<br/>agent runner"]
+    C -->|"Allowlisted identity; optional JIT user<br/>whatsapp:{phone}"| R["Authorized<br/>agent runner"]
     R --> L(["LLM"])
     R -->|"reply"| S["IWhatsAppSender"]
     S --> M --> W

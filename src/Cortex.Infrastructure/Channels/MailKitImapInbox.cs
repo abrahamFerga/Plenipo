@@ -45,10 +45,21 @@ public sealed class MailKitImapInbox(IOptions<EmailChannelOptions> options) : II
 
         var messages = new List<InboundEmail>(newUids.Count);
         var maxUid = lastUid ?? (await HighestExistingUidAsync(folder, cancellationToken));
+        var sizes = newUids.Count == 0
+            ? []
+            : await folder.FetchAsync(newUids, MessageSummaryItems.UniqueId | MessageSummaryItems.Size, cancellationToken);
+        var sizeByUid = sizes.ToDictionary(s => s.UniqueId, s => (long?)s.Size);
 
         foreach (var uid in newUids)
         {
             maxUid = Math.Max(maxUid, uid.Id);
+            // Fail closed if the server omits RFC822.SIZE: downloading first and checking later
+            // would let an untrusted sender consume unbounded memory before MIME parsing.
+            if (!sizeByUid.TryGetValue(uid, out var size) || size is null or <= 0 || size > o.MaxMessageBytes)
+            {
+                continue;
+            }
+
             var mime = await folder.GetMessageAsync(uid, cancellationToken);
             var from = mime.From.Mailboxes.FirstOrDefault();
             if (from is null)

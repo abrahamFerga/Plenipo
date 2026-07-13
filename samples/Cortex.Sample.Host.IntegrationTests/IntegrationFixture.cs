@@ -71,6 +71,7 @@ public sealed class IntegrationFixture : IAsyncLifetime
             builder.UseSetting("Channels:WhatsApp:PhoneNumberId", "10000000001");
             builder.UseSetting("Channels:WhatsApp:ModuleId", "finance");
             builder.UseSetting("Channels:WhatsApp:TenantSlug", "dev");
+            builder.UseSetting("Channels:WhatsApp:AllowUnknownSenders", "true");
             builder.ConfigureTestServices(services =>
             {
                 services.AddSingleton<IWhatsAppSender>(WhatsAppOutbox);
@@ -189,6 +190,10 @@ public sealed class IntegrationFixture : IAsyncLifetime
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Development");
+            builder.UseSetting("Connectors:OperatorEnabled:local-folder", "true");
+            builder.UseSetting("Connectors:LocalFolder:AllowedRoots:0", Path.GetTempPath());
+            builder.UseSetting("Security:OutboundUrls:AllowHttp", "true");
+            builder.UseSetting("Security:OutboundUrls:AllowPrivateNetworks", "true");
 
             // Route the cortex-peer connector's HttpClient back into this TestServer, so the
             // peer-connector tests exercise a real system-to-system AG-UI conversation (the host

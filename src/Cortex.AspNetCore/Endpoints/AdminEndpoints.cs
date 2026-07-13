@@ -3,6 +3,7 @@ using Cortex.Application.Auditing;
 using Cortex.Application.Authorization;
 using Cortex.Application.Modules;
 using Cortex.Application.Secrets;
+using Cortex.Application.Security;
 using Cortex.Application.Usage;
 using Cortex.AspNetCore.Setup;
 using Cortex.Core.Identity;
@@ -125,7 +126,8 @@ public static class AdminEndpoints
         // it (old vault entry forgotten best-effort). Clearing the URL disables webhook delivery.
         group.MapPut("/notification-settings", async (
             [FromBody] NotificationSettingsRequest body, PlatformDbContext db,
-            Cortex.Application.Secrets.ISecretVault vault, ICurrentUser current, CancellationToken ct) =>
+            Cortex.Application.Secrets.ISecretVault vault, ICurrentUser current,
+            OutboundUrlPolicy outboundUrls, CancellationToken ct) =>
         {
             if (current.TenantId is not Guid tenantId)
             {
@@ -133,9 +135,16 @@ public static class AdminEndpoints
             }
 
             var url = string.IsNullOrWhiteSpace(body.WebhookUrl) ? null : body.WebhookUrl.Trim();
-            if (url is not null && !Uri.TryCreate(url, UriKind.Absolute, out var parsed))
+            if (url is not null)
             {
-                return Results.BadRequest("webhookUrl must be an absolute URL.");
+                try
+                {
+                    await outboundUrls.RequireAllowedAsync(url, ct);
+                }
+                catch (ArgumentException ex)
+                {
+                    return Results.BadRequest($"webhookUrl is not allowed: {ex.Message}");
+                }
             }
 
             var row = await db.NotificationSettings.FirstOrDefaultAsync(ct)
@@ -345,6 +354,7 @@ public static class AdminEndpoints
             PlatformDbContext db,
             ISecretVault vault,
             IAiModelCatalog catalog,
+            OutboundUrlPolicy outboundUrls,
             CancellationToken ct) =>
         {
             var provider = body.Provider?.Trim();
@@ -356,10 +366,16 @@ public static class AdminEndpoints
             }
 
             var endpoint = string.IsNullOrWhiteSpace(body.Endpoint) ? null : body.Endpoint.Trim();
-            if (endpoint is not null &&
-                (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https")))
+            if (endpoint is not null)
             {
-                return Results.BadRequest("endpoint must be an absolute http(s) URL.");
+                try
+                {
+                    await outboundUrls.RequireAllowedAsync(endpoint, ct);
+                }
+                catch (ArgumentException ex)
+                {
+                    return Results.BadRequest($"endpoint is not allowed: {ex.Message}");
+                }
             }
 
             var apiKey = string.IsNullOrWhiteSpace(body.ApiKey) ? null : body.ApiKey.Trim();
@@ -394,7 +410,8 @@ public static class AdminEndpoints
         // keep the stored key, non-empty = replace it (vaulted, write-only), "" = clear it. The
         // agent runner applies all of this on the very next turn; the change is auto-audited.
         group.MapPut("/ai-settings", async (
-            [FromBody] AiSettingsRequest body, PlatformDbContext db, ISecretVault vault, ICurrentUser current, CancellationToken ct) =>
+            [FromBody] AiSettingsRequest body, PlatformDbContext db, ISecretVault vault,
+            ICurrentUser current, OutboundUrlPolicy outboundUrls, CancellationToken ct) =>
         {
             if (current.TenantId is not Guid tenantId)
             {
@@ -411,6 +428,18 @@ public static class AdminEndpoints
             var provider = string.IsNullOrWhiteSpace(body.Provider) ? null : body.Provider.Trim();
             var model = string.IsNullOrWhiteSpace(body.Model) ? null : body.Model.Trim();
             var endpoint = string.IsNullOrWhiteSpace(body.Endpoint) ? null : body.Endpoint.Trim();
+
+            if (endpoint is not null)
+            {
+                try
+                {
+                    await outboundUrls.RequireAllowedAsync(endpoint, ct);
+                }
+                catch (ArgumentException ex)
+                {
+                    return Results.BadRequest($"endpoint is not allowed: {ex.Message}");
+                }
+            }
 
             var row = await db.TenantAiSettings.FirstOrDefaultAsync(ct);
 

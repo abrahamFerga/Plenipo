@@ -8,6 +8,9 @@ public enum ApprovalStatus
     /// <summary>Awaiting a human decision.</summary>
     Pending = 0,
 
+    /// <summary>An approver atomically claimed this action and its tool is currently running.</summary>
+    Executing = 4,
+
     /// <summary>Approved and the tool ran successfully.</summary>
     Executed = 1,
 

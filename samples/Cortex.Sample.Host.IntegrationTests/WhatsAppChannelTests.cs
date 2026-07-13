@@ -5,6 +5,7 @@ using Cortex.Core.Platform;
 using Cortex.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.TestHost;
 
 namespace Cortex.Sample.Host.IntegrationTests;
 
@@ -69,6 +70,30 @@ public sealed class WhatsAppChannelTests(IntegrationFixture fixture)
         tampered.Headers.Add("X-Hub-Signature-256", WhatsAppSignature.Compute(Encoding.UTF8.GetBytes(body + " "), IntegrationFixture.WhatsAppAppSecret));
         var badSignature = await client.PostAsync("/api/channels/whatsapp/webhook", tampered);
         Assert.Equal(HttpStatusCode.Unauthorized, badSignature.StatusCode);
+    }
+
+    [Fact]
+    public async Task Unknown_sender_is_not_provisioned_without_operator_opt_in()
+    {
+        const string unknownPhone = "5215550666";
+        var before = fixture.WhatsAppOutbox.Sent.Count;
+        using var lockedFactory = fixture.WhatsAppFactory.WithWebHostBuilder(builder =>
+            builder.UseSetting("Channels:WhatsApp:AllowUnknownSenders", "false"));
+        using var client = lockedFactory.CreateClient();
+        var body = InboundText($"wamid.denied-{Guid.NewGuid():N}", unknownPhone, "hello");
+        using var content = new StringContent(body, Encoding.UTF8, "application/json");
+        content.Headers.Add(
+            "X-Hub-Signature-256",
+            WhatsAppSignature.Compute(Encoding.UTF8.GetBytes(body), IntegrationFixture.WhatsAppAppSecret));
+
+        var response = await client.PostAsync("/api/channels/whatsapp/webhook", content);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(before, fixture.WhatsAppOutbox.Sent.Count);
+        using var scope = lockedFactory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PlatformDbContext>();
+        Assert.False(await db.Users.IgnoreQueryFilters()
+            .AnyAsync(u => u.Subject == $"whatsapp:{unknownPhone}"));
     }
 
     [Fact]

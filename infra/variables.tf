@@ -154,7 +154,7 @@ variable "api_extra_env" {
 variable "enable_keyvault_secret_vault" {
   description = "Run the platform's secret vault in Key Vault mode: tenant AI keys, connector secrets, and per-user OAuth tokens are stored as Key Vault secrets (the DB keeps kv: pointers) instead of DataProtection ciphertext in the database. Grants the app identity secret write/delete and sets Secrets__Provider/Secrets__KeyVaultUri."
   type        = bool
-  default     = false
+  default     = true
 }
 
 # ----------------------------------------------------------------------------

@@ -4,6 +4,7 @@ using Cortex.Core.Identity;
 using Cortex.Core.Platform;
 using Cortex.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Cortex.Infrastructure.Files;
 
@@ -14,7 +15,8 @@ namespace Cortex.Infrastructure.Files;
 public sealed class FileStore(
     PlatformDbContext db,
     IFileBlobStorage blobs,
-    ICurrentUser currentUser) : IFileStore
+    ICurrentUser currentUser,
+    IOptions<FileStorageOptions> options) : IFileStore
 {
     public async Task<StoredFile> SaveAsync(
         string fileName, string contentType, Stream content, string source, CancellationToken cancellationToken = default)
@@ -24,9 +26,26 @@ public sealed class FileStore(
         var userId = currentUser.UserId
             ?? throw new InvalidOperationException("Cannot store a file without a user.");
 
-        // Buffer once to hash and measure; uploads are size-capped at the endpoint.
+        // Buffer once to hash and measure. Enforce the limit here—not only at the HTTP endpoint—
+        // because channel and connector callers also ingest untrusted content.
         using var buffer = new MemoryStream();
-        await content.CopyToAsync(buffer, cancellationToken);
+        var chunk = new byte[81920];
+        while (true)
+        {
+            var read = await content.ReadAsync(chunk, cancellationToken);
+            if (read == 0)
+            {
+                break;
+            }
+
+            if (buffer.Length + read > options.Value.MaxUploadBytes)
+            {
+                throw new InvalidDataException(
+                    $"The file exceeds the {options.Value.MaxUploadBytes / (1024 * 1024)} MB storage limit.");
+            }
+
+            await buffer.WriteAsync(chunk.AsMemory(0, read), cancellationToken);
+        }
         buffer.Position = 0;
 
         var file = new StoredFile

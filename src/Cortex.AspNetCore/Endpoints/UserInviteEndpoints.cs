@@ -1,5 +1,6 @@
 using Cortex.Application.Authorization;
 using Cortex.Application.Notifications;
+using Cortex.Core.Identity;
 using Cortex.Core.Multitenancy;
 using Cortex.Core.Platform;
 using Cortex.Infrastructure.Persistence;
@@ -36,7 +37,7 @@ public static class UserInviteEndpoints
 
         group.MapPost("/", async (
                 CreateInviteRequest body, PlatformDbContext db, ITenantContext tenant,
-                ISmtpTransport smtp, IConfiguration configuration, HttpContext http,
+                ISmtpTransport smtp, IConfiguration configuration, HttpContext http, ICurrentUser current,
                 ILoggerFactory loggerFactory, CancellationToken ct) =>
             {
                 var email = body.Email?.Trim().ToLowerInvariant();
@@ -62,6 +63,43 @@ public static class UserInviteEndpoints
                     .Where(r => r.Length > 0)
                     .Distinct(StringComparer.Ordinal)
                     .ToArray();
+
+                // Inviting with a role is an authorization mutation, exactly like assigning a role
+                // to an existing user. A user manager may still send a role-less/default-role invite,
+                // but only a role manager may choose explicit roles.
+                if (roles.Length > 0 && !current.HasPermission(Permissions.ManageRoles))
+                {
+                    return Results.Forbid();
+                }
+
+                foreach (var role in roles)
+                {
+                    if (!Roles.All.Contains(role, StringComparer.Ordinal) &&
+                        !await db.RolePermissions.AnyAsync(r => r.Role == role, ct))
+                    {
+                        return Results.BadRequest(new { error = $"Unknown role '{role}'." });
+                    }
+
+                    var grants = await db.RolePermissions
+                        .Where(r => r.Role == role)
+                        .Select(r => r.Permission)
+                        .ToListAsync(ct);
+                    if (grants.Count == 0)
+                    {
+                        grants = RolePermissions.ForRole(role).ToList();
+                    }
+
+                    var forbidden = PermissionGrantValidator.FindForbiddenGrants(
+                        grants, Permissions.OperatorOnly, current.HasPermission);
+                    if (forbidden.Count > 0)
+                    {
+                        return Results.BadRequest(new
+                        {
+                            error = $"The '{role}' role grants operator-reserved permissions and cannot be invited by this caller.",
+                        });
+                    }
+                }
+
                 var invite = new UserInvite
                 {
                     TenantId = tenant.RequireTenantId(),

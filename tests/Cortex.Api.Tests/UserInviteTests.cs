@@ -109,4 +109,28 @@ public sealed class UserInviteTests : IClassFixture<CortexApiFactory>
             new { email = "sneaky@example.com", roles = new[] { "system_admin" } });
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
+
+    [Fact]
+    public async Task TenantAdmin_cannot_invite_a_system_admin()
+    {
+        using var tenantAdmin = ClientAs("tenant_admin", "invite-tenant-admin");
+
+        var response = await tenantAdmin.PostAsJsonAsync("/api/admin/users/invites",
+            new { email = "operator-escalation@example.com", roles = new[] { "system_admin" } });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("operator-reserved", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Unknown_invite_role_is_rejected()
+    {
+        using var admin = ClientAs("system_admin", "invite-role-validator");
+
+        var response = await admin.PostAsJsonAsync("/api/admin/users/invites",
+            new { email = "unknown-role@example.com", roles = new[] { "made_up_admin" } });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("Unknown role", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
 }

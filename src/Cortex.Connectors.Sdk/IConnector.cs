@@ -62,6 +62,13 @@ public sealed record ConnectorManifest
     public IReadOnlyList<Cortex.Modules.Sdk.ToolDescriptor> Tools { get; init; } = [];
 
     /// <summary>
+    /// True when merely installing this connector crosses the host boundary (for example, local
+    /// filesystem access). Such connectors are omitted unless the deployment operator explicitly
+    /// enables <c>Connectors:OperatorEnabled:{id}=true</c>; tenant admins cannot opt themselves in.
+    /// </summary>
+    public bool RequiresOperatorEnablement { get; init; }
+
+    /// <summary>
     /// Delegated connectors: the IdP's authorize-URL template. <c>{authority}</c> (if present) is
     /// replaced with the tenant's configured Authority setting; a template WITHOUT the placeholder
     /// (e.g. Google's fixed URL) makes the Authority setting optional. May carry fixed query

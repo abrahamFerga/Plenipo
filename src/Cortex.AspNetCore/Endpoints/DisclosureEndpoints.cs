@@ -61,7 +61,7 @@ public static class DisclosureEndpoints
             // they live on the approvals queue, not in the disclosure. The decision instant
             // (ResolvedAt) is the record's "when"; CreatedAt only backstops legacy rows.
             var decided = await db.PendingApprovals
-                .Where(p => p.Status != ApprovalStatus.Pending)
+                .Where(p => p.Status != ApprovalStatus.Pending && p.Status != ApprovalStatus.Executing)
                 .Where(p => before == null || (p.ResolvedAt ?? p.CreatedAt) < before)
                 .OrderByDescending(p => p.ResolvedAt ?? p.CreatedAt)
                 .Take(limit)

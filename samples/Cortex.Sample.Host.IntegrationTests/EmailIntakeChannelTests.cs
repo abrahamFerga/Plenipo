@@ -61,6 +61,7 @@ public sealed class EmailIntakeChannelTests : IDisposable
             builder.UseSetting("Channels:Email:ModuleId", "finance");
             builder.UseSetting("Channels:Email:TenantSlug", "dev");
             builder.UseSetting("Channels:Email:ReplyEnabled", "true");
+            builder.UseSetting("Channels:Email:AllowUnknownSenders", "true");
             builder.UseSetting("Channels:Email:PollSeconds", "3600"); // the poller stays out of the way; tests drive polls
             builder.ConfigureTestServices(services =>
             {

@@ -8,6 +8,8 @@ using Cortex.Connectors.Sdk;
 using Cortex.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Cortex.Connectors;
 
 namespace Cortex.Sample.Host.IntegrationTests;
 
@@ -24,6 +26,38 @@ public sealed class ConnectorTests(IntegrationFixture fixture) : IDisposable
     private readonly string _root = Directory.CreateTempSubdirectory("cortex-connector-test").FullName;
 
     public void Dispose() => Directory.Delete(_root, recursive: true);
+
+    [Fact]
+    public void HostFilesystemConnector_requires_deployment_operator_enablement()
+    {
+        var builder = Microsoft.Extensions.Hosting.Host.CreateApplicationBuilder();
+        builder.AddCortexConnectors();
+        using var services = builder.Services.BuildServiceProvider();
+
+        Assert.DoesNotContain(
+            services.GetServices<IConnector>(),
+            connector => connector.Manifest.Id == LocalFolderConnector.ConnectorId);
+    }
+
+    [Fact]
+    public async Task LocalFolder_refuses_a_tenant_root_outside_the_operator_allowlist()
+    {
+        using var admin = fixture.ClientFor("system_admin");
+        (await admin.PutAsJsonAsync("/api/admin/connectors/local-folder/settings",
+            new { values = new Dictionary<string, string?> { ["RootPath"] = AppContext.BaseDirectory } }))
+            .EnsureSuccessStatusCode();
+        (await admin.PostAsync("/api/admin/connectors/local-folder/enable", null)).EnsureSuccessStatusCode();
+
+        try
+        {
+            using var scope = await UserScopeAsync("it-local-root-guard");
+            Assert.Contains("not enabled", await Tools(scope).ListLocalFolder());
+        }
+        finally
+        {
+            await admin.PostAsync("/api/admin/connectors/local-folder/disable", null);
+        }
+    }
 
     [Fact]
     public async Task Admin_enables_local_folder_and_agent_tools_fetch_into_the_file_store()

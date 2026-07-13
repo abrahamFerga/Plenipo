@@ -48,6 +48,17 @@ public sealed class ConnectedAccountsTests(IntegrationFixture fixture)
             var start = await user.GetFromJsonAsync<JsonElement>("/api/connectors/msgraph/oauth/start");
             var authorizeUrl = start.GetProperty("authorizeUrl").GetString()!;
             var state = HttpUtility.ParseQueryString(new Uri(authorizeUrl).Query)["state"]!;
+
+            // OAuth state is bound to the initiating Cortex user. A colleague cannot be tricked
+            // into consuming it and linking the initiator's provider account to their session.
+            using var stateThief = fixture.Factory.CreateClient();
+            stateThief.DefaultRequestHeaders.Add("X-Dev-Subject", "it-oauth-state-thief");
+            stateThief.DefaultRequestHeaders.Add("X-Dev-Tenant", "dev");
+            stateThief.DefaultRequestHeaders.Add("X-Dev-Roles", "user");
+            var stolen = await stateThief.GetAsync(
+                $"/api/connectors/msgraph/oauth/callback?code=stolen&state={Uri.EscapeDataString(state)}");
+            Assert.Equal(HttpStatusCode.BadRequest, stolen.StatusCode);
+
             (await user.GetAsync(
                 $"/api/connectors/msgraph/oauth/callback?code=abc123&state={Uri.EscapeDataString(state)}"))
                 .EnsureSuccessStatusCode();

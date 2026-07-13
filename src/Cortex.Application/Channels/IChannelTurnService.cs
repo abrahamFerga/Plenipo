@@ -34,6 +34,12 @@ public sealed record ChannelTurnRequest
     public string Text { get; init; } = "";
 
     public IReadOnlyList<InboundAttachment> Attachments { get; init; } = [];
+
+    /// <summary>
+    /// Whether this verified channel delivery may create a new platform user. Adapters set this
+    /// only after applying their operator-configured sender allowlist; existing users are unaffected.
+    /// </summary>
+    public bool AllowUserProvisioning { get; init; }
 }
 
 public enum ChannelTurnStatus
@@ -44,7 +50,7 @@ public enum ChannelTurnStatus
     /// <summary>The bound tenant is missing or deactivated — nothing to say, drop the message.</summary>
     TenantUnavailable,
 
-    /// <summary>The sender is refused: a deactivated user, or the tenant's seat limit is reached.</summary>
+    /// <summary>The sender is refused: not allowlisted, deactivated, or the tenant's seat limit is reached.</summary>
     IdentityRefused,
 
     /// <summary>The sender exists but lacks chat access — the channel should say so in its own voice.</summary>

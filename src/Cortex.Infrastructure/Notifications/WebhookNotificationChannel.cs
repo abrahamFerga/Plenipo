@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Cortex.Application.Notifications;
 using Cortex.Application.Secrets;
+using Cortex.Application.Security;
 
 namespace Cortex.Infrastructure.Notifications;
 
@@ -14,7 +15,8 @@ namespace Cortex.Infrastructure.Notifications;
 public sealed class WebhookNotificationChannel(
     INotificationWebhookConfigReader configs,
     ISecretVault vault,
-    IHttpClientFactory httpClientFactory) : INotificationChannel
+    IHttpClientFactory httpClientFactory,
+    OutboundUrlPolicy outboundUrls) : INotificationChannel
 {
     public const string HttpClientName = "cortex-notification-webhook";
 
@@ -41,7 +43,8 @@ public sealed class WebhookNotificationChannel(
             sentAt = DateTimeOffset.UtcNow,
         }, Json);
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, config.Url)
+        var destination = await outboundUrls.RequireAllowedAsync(config.Url, cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Post, destination)
         {
             Content = new StringContent(payload, Encoding.UTF8, "application/json"),
         };

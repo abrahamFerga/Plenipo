@@ -9,7 +9,7 @@ is prefixed `cortex` and scoped per environment (`dev`, `staging`, `prod`).
 | -------------- | ------------------------------------------------ |
 | API compute    | Azure Container Apps (`Cortex.Api`, scale-to-0)  |
 | Registry       | Azure Container Registry (managed-identity pull) |
-| Database       | PostgreSQL Flexible Server v17 — `cortex_platform` + `cortex_audit` |
+| Database       | Two independently credentialed PostgreSQL Flexible Servers v17 — `cortex_platform` + `cortex_audit` |
 | Cache/backplane| Azure Cache for Redis                            |
 | Secrets        | Azure Key Vault (RBAC authorization)             |
 | App identity   | User-assigned Managed Identity (KV + ACR roles)  |
@@ -136,7 +136,7 @@ to header-based dev auth (`X-Dev-Subject`, `X-Dev-Tenant`, `X-Dev-Roles`).
 
 ## Secrets
 
-- No secrets are hardcoded. The DB admin password is generated
+- No secrets are hardcoded. Independent platform and audit DB admin passwords are generated
   (`random_password`) and stored in Key Vault.
 - Tenant chat-provider keys are entered in Admin → AI Settings and stored through the configured
   secret vault; Terraform does not seed or inject chat-provider credentials.
@@ -150,8 +150,8 @@ to header-based dev auth (`X-Dev-Subject`, `X-Dev-Tenant`, `X-Dev-Roles`).
   `ConnectionStrings__cortex-*` env vars the app binds.
 - The app reads all secrets at runtime via its **managed identity** (Key Vault
   Secrets User), never via stored connection strings in config.
-- **Admin-entered secrets in Key Vault** (optional): set
-  `enable_keyvault_secret_vault = true` to run the platform's secret vault in
+- **Admin-entered secrets in Key Vault** (enabled by default): set
+  `enable_keyvault_secret_vault = false` only when intentionally choosing Data Protection storage. In the default mode the platform's secret vault runs in
   Key Vault mode — tenant AI keys, connector keys, and per-user OAuth tokens that admins enter
   in the UI are then stored as Key Vault secrets (the DB keeps `kv:` pointers).
   This grants the app identity **Secrets Officer** (it creates/deletes secrets

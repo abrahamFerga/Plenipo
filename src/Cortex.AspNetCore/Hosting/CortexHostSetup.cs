@@ -12,6 +12,8 @@ using Cortex.AspNetCore.Setup;
 using Cortex.Infrastructure;
 using Cortex.Infrastructure.Channels;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.DataProtection;
+using StackExchange.Redis;
 
 namespace Cortex.AspNetCore.Hosting;
 
@@ -62,6 +64,31 @@ public static class CortexHostSetup
         builder.Services.AddProblemDetails();
         builder.Services.AddOpenApi();
 
+        // OAuth state and the default secret vault both depend on Data Protection. In a replicated
+        // or replaceable production container the key ring must be shared, otherwise callbacks and
+        // stored secrets become undecryptable when traffic lands on another instance. Redis is
+        // already the platform's shared runtime dependency and is persisted in the Compose profile.
+        // A filesystem key ring is also supported for production hosts that mount shared durable storage.
+        var dataProtection = builder.Services.AddDataProtection().SetApplicationName("Cortex");
+        var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
+        var redisConnection = builder.Configuration.GetConnectionString(RealtimeSetup.RedisConnectionName);
+        if (!string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+        {
+            var keysDirectory = Directory.CreateDirectory(dataProtectionKeysPath);
+            dataProtection.PersistKeysToFileSystem(keysDirectory);
+        }
+        else if (!string.IsNullOrWhiteSpace(redisConnection))
+        {
+            var multiplexer = ConnectionMultiplexer.Connect(redisConnection);
+            builder.Services.AddSingleton<IConnectionMultiplexer>(multiplexer);
+            dataProtection.PersistKeysToStackExchangeRedis(multiplexer, "cortex:data-protection-keys");
+        }
+        else if (!builder.Environment.IsDevelopment())
+        {
+            throw new InvalidOperationException(
+                $"ConnectionStrings:{RealtimeSetup.RedisConnectionName} or DataProtection:KeysPath is required outside Development so the Data Protection key ring is shared and persistent.");
+        }
+
         builder.AddCortexInfrastructure();
 
         builder.Services.AddCortexAuthentication(builder.Configuration, builder.Environment);
@@ -102,6 +129,20 @@ public static class CortexHostSetup
     {
         app.UseExceptionHandler();
         app.UseStatusCodePages();
+
+        app.Use(async (context, next) =>
+        {
+            context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+            context.Response.Headers["X-Frame-Options"] = "DENY";
+            context.Response.Headers["Referrer-Policy"] = "no-referrer";
+            context.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+            if (!app.Environment.IsDevelopment())
+            {
+                context.Response.Headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
+            }
+
+            await next();
+        });
 
         if (app.Environment.IsDevelopment())
         {

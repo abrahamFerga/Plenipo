@@ -19,6 +19,8 @@ public static class ConnectorRegistration
     /// </summary>
     public const string ExcludeKey = "Connectors:Exclude";
 
+    public const string OperatorEnabledKey = "Connectors:OperatorEnabled";
+
     /// <summary>
     /// Registers every <see cref="IConnector"/> with a public parameterless constructor found in
     /// <paramref name="assemblies"/>, skipping ids listed under <c>Connectors:Exclude</c>.
@@ -53,6 +55,12 @@ public static class ConnectorRegistration
         this IHostApplicationBuilder builder, IConnector connector)
     {
         if (IsExcluded(builder.Configuration, connector.Manifest.Id))
+        {
+            return builder;
+        }
+
+        if (connector.Manifest.RequiresOperatorEnablement &&
+            !builder.Configuration.GetValue<bool>($"{OperatorEnabledKey}:{connector.Manifest.Id}"))
         {
             return builder;
         }

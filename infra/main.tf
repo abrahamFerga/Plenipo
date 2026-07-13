@@ -99,7 +99,7 @@ module "keyvault" {
   # Composed Npgsql connection strings — stored whole so the container app maps
   # them 1:1 onto ConnectionStrings__cortex-platform / __cortex-audit.
   platform_connection_string = "Host=${module.database.fqdn};Port=5432;Database=${module.database.platform_database_name};Username=${module.database.admin_username};Password=${module.database.admin_password};Ssl Mode=Require"
-  audit_connection_string    = "Host=${module.database.fqdn};Port=5432;Database=${module.database.audit_database_name};Username=${module.database.admin_username};Password=${module.database.admin_password};Ssl Mode=Require"
+  audit_connection_string    = "Host=${module.database.audit_fqdn};Port=5432;Database=${module.database.audit_database_name};Username=${module.database.audit_admin_username};Password=${module.database.audit_admin_password};Ssl Mode=Require"
 }
 
 # -----------------------------------------------------------------------------

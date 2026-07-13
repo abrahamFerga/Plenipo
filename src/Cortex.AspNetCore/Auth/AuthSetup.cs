@@ -14,6 +14,13 @@ public static class AuthSetup
         var auth = configuration.GetSection(AuthOptions.SectionName).Get<AuthOptions>() ?? new AuthOptions();
         services.Configure<AuthOptions>(configuration.GetSection(AuthOptions.SectionName));
 
+        if (auth.IsPartiallyConfigured)
+        {
+            throw new InvalidOperationException(
+                "Cortex authentication is partially configured: both Auth:Authority and Auth:Audience are required. " +
+                "Audience validation cannot be disabled for a configured JWT authority.");
+        }
+
         var authBuilder = services.AddAuthentication(options =>
         {
             var scheme = auth.IsConfigured ? JwtBearerDefaults.AuthenticationScheme : DevAuthenticationHandler.SchemeName;
@@ -32,7 +39,7 @@ public static class AuthSetup
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
-                    ValidateAudience = !string.IsNullOrWhiteSpace(auth.Audience),
+                    ValidateAudience = true,
                     ValidateLifetime = true,
                     NameClaimType = "name",
                     RoleClaimType = "roles",

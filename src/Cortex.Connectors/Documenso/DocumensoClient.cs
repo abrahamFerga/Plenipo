@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Cortex.Application.Security;
 
 namespace Cortex.Connectors.Documenso;
 
@@ -41,14 +42,16 @@ public interface IDocumensoClient
 /// URL → send; status by GET; completed download via the returned URL. The API token goes in
 /// the Authorization header as Documenso issues it.
 /// </summary>
-public sealed class DocumensoApiClient(IHttpClientFactory httpClientFactory) : IDocumensoClient
+public sealed class DocumensoApiClient(
+    IHttpClientFactory httpClientFactory,
+    OutboundUrlPolicy outboundUrls) : IDocumensoClient
 {
     public const string HttpClientName = "documenso";
 
     public async Task<string> SendForSignatureAsync(
         DocumensoConnection connection, SignatureRequest request, CancellationToken cancellationToken = default)
     {
-        var http = CreateClient(connection);
+        var http = await CreateClientAsync(connection, cancellationToken);
 
         var created = await http.PostAsJsonAsync("api/v1/documents", new
         {
@@ -64,7 +67,8 @@ public sealed class DocumensoApiClient(IHttpClientFactory httpClientFactory) : I
         using var uploadContent = new ByteArrayContent(request.Content);
         uploadContent.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
         using var plain = httpClientFactory.CreateClient(HttpClientName);
-        (await plain.PutAsync(uploadUrl, uploadContent, cancellationToken)).EnsureSuccessStatusCode();
+        var uploadDestination = await outboundUrls.RequireAllowedAsync(uploadUrl, cancellationToken);
+        (await plain.PutAsync(uploadDestination, uploadContent, cancellationToken)).EnsureSuccessStatusCode();
 
         (await http.PostAsync($"api/v1/documents/{documentId}/send", content: null, cancellationToken))
             .EnsureSuccessStatusCode();
@@ -75,7 +79,7 @@ public sealed class DocumensoApiClient(IHttpClientFactory httpClientFactory) : I
     public async Task<SignatureStatus?> GetStatusAsync(
         DocumensoConnection connection, string documentId, CancellationToken cancellationToken = default)
     {
-        var http = CreateClient(connection);
+        var http = await CreateClientAsync(connection, cancellationToken);
         var response = await http.GetAsync($"api/v1/documents/{documentId}", cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
@@ -95,7 +99,7 @@ public sealed class DocumensoApiClient(IHttpClientFactory httpClientFactory) : I
     public async Task<SignedDocument?> DownloadSignedAsync(
         DocumensoConnection connection, string documentId, CancellationToken cancellationToken = default)
     {
-        var http = CreateClient(connection);
+        var http = await CreateClientAsync(connection, cancellationToken);
         var response = await http.GetAsync($"api/v1/documents/{documentId}/download", cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
@@ -109,7 +113,8 @@ public sealed class DocumensoApiClient(IHttpClientFactory httpClientFactory) : I
         }
 
         using var plain = httpClientFactory.CreateClient(HttpClientName);
-        var file = await plain.GetAsync(downloadUrl, cancellationToken);
+        var downloadDestination = await outboundUrls.RequireAllowedAsync(downloadUrl, cancellationToken);
+        var file = await plain.GetAsync(downloadDestination, cancellationToken);
         if (!file.IsSuccessStatusCode)
         {
             return null;
@@ -119,10 +124,12 @@ public sealed class DocumensoApiClient(IHttpClientFactory httpClientFactory) : I
         return new SignedDocument(buffer, $"signed-{documentId}.pdf");
     }
 
-    private HttpClient CreateClient(DocumensoConnection connection)
+    private async Task<HttpClient> CreateClientAsync(
+        DocumensoConnection connection, CancellationToken cancellationToken)
     {
         var http = httpClientFactory.CreateClient(HttpClientName);
-        http.BaseAddress = new Uri(connection.BaseUrl.TrimEnd('/') + "/");
+        http.BaseAddress = await outboundUrls.RequireAllowedAsync(
+            connection.BaseUrl.TrimEnd('/') + "/", cancellationToken);
         // Documenso v1 API tokens are sent as the raw Authorization header value.
         http.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", connection.ApiToken);
         return http;

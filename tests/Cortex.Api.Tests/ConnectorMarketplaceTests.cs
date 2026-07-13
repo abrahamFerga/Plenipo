@@ -23,6 +23,10 @@ public sealed class ConnectorMarketplaceTests
     public void AddCortexConnectors_registers_every_bundled_connector()
     {
         var builder = Host.CreateEmptyApplicationBuilder(new HostApplicationBuilderSettings());
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Connectors:OperatorEnabled:local-folder"] = "true",
+        });
 
         builder.AddCortexConnectors();
 
@@ -38,6 +42,7 @@ public sealed class ConnectorMarketplaceTests
         {
             ["Connectors:Exclude:0"] = "s3",
             ["Connectors:Exclude:1"] = "Documenso", // case-insensitive on purpose
+            ["Connectors:OperatorEnabled:local-folder"] = "true",
         });
 
         builder.AddCortexConnectors();

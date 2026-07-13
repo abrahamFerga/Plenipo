@@ -87,14 +87,17 @@ and change without a deploy.
 | `Documents` | `Enabled` | Platform PDF/document tools |
 | `Ocr` | `Provider` (None/AzureDocumentIntelligence), `Endpoint`, `ApiKey` | Scanned-PDF/image OCR. Off by default; configuring it lights up the `ocr_document` tool and scanned-statement extraction everywhere the `IOcrEngine` seam is consumed. Key via user-secrets/env (`Ocr__ApiKey`) |
 | `Files` | `Provider` (Local/AzureBlob) + provider settings | |
-| `Channels:WhatsApp` | `Enabled` + Meta Cloud API secrets | Secrets via user-secrets/env |
-| `Channels:Email` | `Enabled`, `Host`/`Port`/`UseSsl`, `Username`, `Password`, `Folder`, `ModuleId`, `TenantSlug`, `PollSeconds`, `ReplyEnabled` | IMAP intake mailbox polled into agent turns (docs/INBOUND_CHANNELS.md); password via user-secrets/env; replies off by default |
+| `Channels:WhatsApp` | `Enabled`, Meta Cloud API secrets, `AllowedSenders`, `AllowUnknownSenders` | Secrets via user-secrets/env; unknown senders denied by default |
+| `Channels:Email` | `Enabled`, `Host`/`Port`/`UseSsl`, `Username`, `Password`, `Folder`, `ModuleId`, `TenantSlug`, `PollSeconds`, `ReplyEnabled`, `AllowedSenders`, `AllowUnknownSenders`, `MaxMessageBytes` | IMAP intake mailbox polled into agent turns (docs/INBOUND_CHANNELS.md); password via user-secrets/env; replies and unknown senders off by default |
 | `Email` | Outbound SMTP: `Enabled`, `Host`/`Port`/`UseStartTls`, `Username`, `Password`, `FromAddress`, `FromName` | Powers the email notification channel AND user invites; password via user-secrets/env. Unconfigured, invites still work (share the link manually) |
 | `Auth` | `Authority`, `Audience`, `PermissionSource` (Database/Token) | Empty = dev-auth in Development only |
 | `Secrets` | `Provider` (DataProtection/AzureKeyVault), `KeyVaultUri` | Where runtime-entered secrets rest |
+| `DataProtection:KeysPath` | Shared durable directory for the Data Protection key ring | Optional alternative to `cortex-redis`; required outside Development when Redis is absent |
+| `Security:OutboundUrls` | `AllowHttp`, `AllowPrivateNetworks` | Both false by default; applies to tenant-configured webhooks, AI endpoints, OAuth and connector URLs |
 | `Cors:Origins` | Allowed SPA origins | Aspire injects these automatically in dev |
 | `ConnectionStrings` | `cortex-platform`, `cortex-audit`, `cortex-redis` | Env vars in containers |
 | `Connectors:Exclude` | Connector ids to suppress deployment-wide, e.g. `["s3","documenso"]` | Removes a compiled-in connector without recompiling; see below |
+| `Connectors:OperatorEnabled` | Map of restricted connector ids to explicit operator approval | The `local-folder` connector is absent unless `Connectors:OperatorEnabled:local-folder=true`; also set `Connectors:LocalFolder:AllowedRoots` |
 | `Modules:Exclude` | Module ids to suppress deployment-wide | Unlike the per-tenant toggle, exclusion removes endpoints/tools/catalog entry entirely |
 
 ### Wiring MCP tool servers
@@ -127,6 +130,11 @@ page — enabling a connector there is what makes its tools exist for that tenan
 RBAC-gated and audited. The Integrations page also lists first-party connectors the deployment
 did NOT install (with the package + registration call), so discovering an integration never
 requires reading platform source. `Modules:Exclude` works the same way for domain modules.
+
+The host-filesystem `local-folder` connector has an additional deployment boundary because tenant paths
+must never grant arbitrary server reads. It is not registered until the operator enables it, and every
+tenant-selected root must be contained by one of the operator-owned `AllowedRoots`. Reparse points and
+symlinks are refused while walking the tree.
 
 ### Product identity (Branding)
 

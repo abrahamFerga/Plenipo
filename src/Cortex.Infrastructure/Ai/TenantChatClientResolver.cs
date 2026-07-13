@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Cortex.Application.Ai;
 using Cortex.Application.Secrets;
+using Cortex.Application.Security;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 
@@ -15,12 +16,13 @@ namespace Cortex.Infrastructure.Ai;
 /// </summary>
 public sealed class TenantChatClientResolver(
     IOptions<AiOptions> aiOptions,
-    ISecretVault vault) : ITenantChatClientResolver
+    ISecretVault vault,
+    OutboundUrlPolicy outboundUrls) : ITenantChatClientResolver
 {
     /// <summary>Vault scope for tenant-entered AI API keys (write-only through the admin API).</summary>
     public const string ApiKeyScope = "Cortex.Ai.ApiKey";
 
-    private readonly ConcurrentDictionary<string, IChatClient> _clients = new();
+    private readonly ConcurrentDictionary<string, Lazy<IChatClient>> _clients = new();
 
     public async Task<IChatClient?> ResolveAsync(
         EffectiveAiSettings settings, string? modelOverride, CancellationToken cancellationToken = default)
@@ -32,10 +34,14 @@ public sealed class TenantChatClientResolver(
         }
 
         var model = string.IsNullOrWhiteSpace(modelOverride) ? settings.Model : modelOverride;
+        if (!string.IsNullOrWhiteSpace(settings.Endpoint))
+        {
+            await outboundUrls.RequireAllowedAsync(settings.Endpoint, cancellationToken);
+        }
         var cacheKey = $"{settings.Provider}|{model}|{settings.Endpoint}|{settings.ApiKeySecretRef ?? "(keyless)"}";
         if (_clients.TryGetValue(cacheKey, out var cached))
         {
-            return cached;
+            return cached.Value;
         }
 
         var defaults = aiOptions.Value;
@@ -51,7 +57,10 @@ public sealed class TenantChatClientResolver(
             MaxOutputTokens = defaults.MaxOutputTokens,
         };
 
-        // GetOrAdd would race the async reveal above; a duplicate build is harmless and transient.
-        return _clients.GetOrAdd(cacheKey, _ => ChatClientFactory.Create(options, apiKey));
+        // Lazy prevents concurrent requests for the same connection from creating duplicate HTTP
+        // handlers while the async vault reveal remains outside the dictionary factory.
+        return _clients.GetOrAdd(cacheKey, _ => new Lazy<IChatClient>(
+            () => ChatClientFactory.Create(options, apiKey, outboundUrls),
+            LazyThreadSafetyMode.ExecutionAndPublication)).Value;
     }
 }

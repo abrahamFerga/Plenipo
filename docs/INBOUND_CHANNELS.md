@@ -13,7 +13,7 @@ of a special case.
 | Channel-specific (stays in the adapter) | Generic (extracts into the SDK) |
 |---|---|
 | Meta webhook GET verification + `X-Hub-Signature-256` HMAC | Tenant resolution by configured slug + deactivated-tenant refusal |
-| `WhatsAppWebhookPayload` parsing | JIT user provisioning by external identity (`whatsapp:{phone}`) incl. the **seat gate** |
+| `WhatsAppWebhookPayload` parsing | Allowlisted external identity (`whatsapp:{phone}`); optional operator-enabled JIT provisioning incl. the **seat gate** |
 | Media download via the Graph media API | Attachment → tenant file store → `[Attached files]` block convention |
 | Reply via `IWhatsAppSender` | The agent turn: stable per-identity conversation, module binding, `AgentRunRequest`, reply text collection |
 
@@ -31,7 +31,7 @@ public sealed record InboundMessage(
 public sealed record InboundAttachment(string FileName, string ContentType, Stream Content);
 
 // The generic core, extracted from WhatsAppChannelService — ONE implementation for all channels:
-// resolve tenant → refuse deactivated → JIT-provision identity (seat gate applies) → store
+// resolve tenant → refuse deactivated/unknown sender → optionally JIT-provision identity (seat gate applies) → store
 // attachments → run the module-bound agent turn → return the reply text.
 public interface IChannelTurnService
 {
@@ -85,7 +85,7 @@ land as an agent turn ("client intake" with documents filed), optionally answere
 - **Settings** (tenant-level service auth — the intake mailbox belongs to the firm):
   host, port, username, **password (secret, write-only)**, folder (default INBOX), and the
   bound module. Per-user OAuth mailboxes are explicitly out of scope: intake is an org mailbox.
-- **Identity**: `email:{from-address}` — each correspondent JIT-provisions like a WhatsApp
+- **Identity**: `email:{from-address}` — allowlisted correspondents are accepted; an operator may explicitly enable JIT provisioning
   number does, seat gate included; `*@…` display name from the From header.
 - **Attachments**: MIME parts → tenant file store → the standard `[Attached files]` block, so
   document tools/matters/RAG work unchanged.
@@ -117,6 +117,6 @@ land as an agent turn ("client intake" with documents filed), optionally answere
 
 Connectors answer "reach data the tenant already has" (pull, on demand or synced); channels
 answer "people talk to the product from outside" (conversations, identities, seats, replies).
-Email intake is conversational — it JIT-provisions people and runs agent turns — so it belongs
+Email intake is conversational — it can provision operator-approved people and runs agent turns — so it belongs
 to the channel lane. An IMAP *connector* ("index this mailbox folder into knowledge") remains
 possible later on the connector SDK; different job, different seam.

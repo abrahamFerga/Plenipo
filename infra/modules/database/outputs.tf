@@ -28,3 +28,19 @@ output "audit_database_name" {
   description = "Name of the append-only audit database."
   value       = azurerm_postgresql_flexible_server_database.audit.name
 }
+
+output "audit_fqdn" {
+  description = "Fully-qualified domain name of the independent audit PostgreSQL server."
+  value       = azurerm_postgresql_flexible_server.audit.fqdn
+}
+
+output "audit_admin_username" {
+  description = "Administrator login for the independent audit server."
+  value       = azurerm_postgresql_flexible_server.audit.administrator_login
+}
+
+output "audit_admin_password" {
+  description = "Generated password for the independent audit server."
+  value       = random_password.audit_admin.result
+  sensitive   = true
+}
