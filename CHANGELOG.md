@@ -55,7 +55,11 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   over SignalR (Redis backplane) and the open **AG-UI** protocol.
 - **Tool security before the model call** — the agent runner filters tools by the caller's permissions
   before building the request, so the LLM never sees a tool the user may not call.
-- **Human-in-the-loop approvals** — side-effecting tools are blocked pending explicit approval.
+- **Human-in-the-loop approvals** — side-effecting tools are blocked pending explicit approval, and
+  each decision (approved + result, failed, or rejected) is reported back into the originating
+  conversation's next turn — the assistant answers from the outcome instead of forever repeating
+  "still pending" (the approval happens outside the chat, so without this hand-back the model
+  never learns it was decided).
 - **Layered RBAC** (system roles → dotted permissions with wildcards → per-resource ACLs), an
   append-only **audit log**, and per-turn **token-usage** tracking.
 - **Multi-tenant by default** — row-level isolation via EF Core global query filters on `TenantId`.

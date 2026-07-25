@@ -248,6 +248,19 @@ public sealed class AuthorizedAgentRunner(
             }
         }
 
+        // Approvals are decided OUTSIDE the chat (ApprovalEndpoints), and this conversation's record
+        // still holds the "blocked, NOT executed" tool result from the turn that queued them — left
+        // alone, the model keeps telling the user the action is pending no matter what a human
+        // decided. Prepend every not-yet-surfaced outcome to this turn's model input; the transcript
+        // persists what the user actually typed (request.Message), the same convention as the slash
+        // rewrite above. Outcomes are marked surfaced only after the turn completes, so a failed
+        // turn re-delivers them instead of losing them.
+        var resolvedApprovals = await approvalStore.ListResolvedUnsurfacedAsync(conversation.Id, cancellationToken);
+        if (resolvedApprovals.Count > 0)
+        {
+            message = $"{Approvals.ApprovalOutcomeDigest.Compose(resolvedApprovals)}\n\n{message}";
+        }
+
         // Tools marked side-effecting are blocked pending human approval — both the module
         // manifest's declarations and per-tool flags on platform/connector tools (connector fetch
         // tools and skill scripts carry the flag on the ModuleTool itself, not in a manifest).
@@ -316,6 +329,12 @@ public sealed class AuthorizedAgentRunner(
 
         var sessionState = await SerializeSessionAsync(agent, session.Session, cancellationToken);
         await conversations.AppendTurnAsync(conversation.Id, request.Message, assistant.ToString(), sessionState, instructionsHash, cancellationToken);
+        if (resolvedApprovals.Count > 0)
+        {
+            // The turn that carried the outcomes has been persisted — they are now part of the
+            // conversation the model resumes, so never repeat them.
+            await approvalStore.MarkSurfacedAsync(resolvedApprovals.Select(a => a.Id).ToList(), cancellationToken);
+        }
         await RecordUsageAsync(request.ModuleId, conversation.Id, usage,
             aiSettings.Provider, profile?.Model is { Length: > 0 } m ? m : aiSettings.Model, cancellationToken);
 

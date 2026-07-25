@@ -109,6 +109,39 @@ public sealed class ApprovalStore(PlatformDbContext db) : IApprovalStore
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<PendingApproval>> ListResolvedUnsurfacedAsync(
+        Guid conversationId, CancellationToken cancellationToken = default) =>
+        await db.PendingApprovals
+            .Where(p => p.ConversationId == conversationId
+                        && p.SurfacedToModelAt == null
+                        && (p.Status == ApprovalStatus.Executed
+                            || p.Status == ApprovalStatus.Failed
+                            || p.Status == ApprovalStatus.Rejected))
+            .OrderBy(p => p.ResolvedAt)
+            .ToListAsync(cancellationToken);
+
+    public async Task MarkSurfacedAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken = default)
+    {
+        if (ids.Count == 0)
+        {
+            return;
+        }
+
+        // A plain tracked update on purpose: surfacing is idempotent-adjacent (a double mark is
+        // harmless, a race merely repeats information to the model), so ExecuteUpdate's atomicity
+        // buys nothing and the tracked path works on every provider the tests run against.
+        var approvals = await db.PendingApprovals
+            .Where(p => ids.Contains(p.Id) && p.SurfacedToModelAt == null)
+            .ToListAsync(cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        foreach (var approval in approvals)
+        {
+            approval.SurfacedToModelAt = now;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     private static void MarkExecuting(PendingApproval approval, Guid? userId, string? display)
     {
         approval.Status = ApprovalStatus.Executing;
