@@ -27,4 +27,15 @@ public interface IApprovalStore
     public Task CompleteExecutionAsync(
         Guid id, ApprovalStatus status, string? result, string? error,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// This conversation's resolved approvals (executed, failed, or rejected) whose outcome has not
+    /// yet been reported back into the conversation, oldest resolution first. The runner prepends
+    /// these to the next turn's model input and then calls <see cref="MarkSurfacedAsync"/>.
+    /// </summary>
+    public Task<IReadOnlyList<PendingApproval>> ListResolvedUnsurfacedAsync(
+        Guid conversationId, CancellationToken cancellationToken = default);
+
+    /// <summary>Marks outcomes as reported to the model, so a later turn does not repeat them.</summary>
+    public Task MarkSurfacedAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken = default);
 }

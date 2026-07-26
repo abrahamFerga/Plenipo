@@ -56,7 +56,9 @@ public sealed class ToolInvocationMiddleware(
                 error: ApprovalBlockedError, durationMs: 0, cancellationToken);
 
             return $"The action '{name}' requires human approval before it can run, so it was NOT executed. " +
-                   "Tell the user this action is pending their approval and do not claim it was completed.";
+                   "Tell the user this action is pending their approval and do not claim it was completed. " +
+                   "When a human approves or rejects it, the outcome will arrive in a later turn as an " +
+                   "'[Approval outcomes]' note — that note supersedes this message.";
         }
 
         var stopwatch = Stopwatch.StartNew();

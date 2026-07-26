@@ -60,4 +60,13 @@ public sealed class PendingApproval : TenantEntityBase
 
     /// <summary>The error message when execution failed.</summary>
     public string? Error { get; set; }
+
+    /// <summary>
+    /// When this resolution was reported back into the originating conversation's model input (see
+    /// <c>AuthorizedAgentRunner</c>). Approvals are decided OUTSIDE the chat, and the conversation's
+    /// own record still holds the "blocked, not executed" tool result from the turn that queued the
+    /// action — without this hand-back the model keeps telling the user the action is pending
+    /// forever. Null until a completed turn has carried the outcome.
+    /// </summary>
+    public DateTimeOffset? SurfacedToModelAt { get; set; }
 }
