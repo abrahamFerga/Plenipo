@@ -694,6 +694,18 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
+/**
+ * The server's answer to an approve/reject click: the approve endpoint EXECUTES the tool inline
+ * and returns its result, so the shell can echo what actually happened at the click site.
+ */
+export interface ApprovalResolution {
+  id: string;
+  status: "Executed" | "Rejected";
+  result?: string | null;
+  /** Server-composed outcome line ("✅ Approved by … — 'tool' ran. …") — the transcript's wording. */
+  note?: string | null;
+}
+
 /** A file stored in the platform file store (chat attachments, agent-generated documents). */
 export interface StoredFileInfo {
   id: string;
@@ -759,8 +771,8 @@ export const api = {
   // Human-in-the-loop: side-effecting tool calls the agent was blocked from auto-running.
   approvals: {
     list: () => apiGet<PendingApproval[]>("/api/chat/approvals"),
-    approve: (id: string) => apiSend(`/api/chat/approvals/${id}/approve`, "POST"),
-    reject: (id: string) => apiSend(`/api/chat/approvals/${id}/reject`, "POST"),
+    approve: (id: string) => apiPost<ApprovalResolution>(`/api/chat/approvals/${id}/approve`, undefined),
+    reject: (id: string) => apiPost<ApprovalResolution>(`/api/chat/approvals/${id}/reject`, undefined),
   },
 
   // ADMT transparency: the tenant's AI-decision history in disclosure form, recent-first.

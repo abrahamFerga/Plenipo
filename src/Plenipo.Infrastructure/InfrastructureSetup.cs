@@ -348,6 +348,7 @@ public static class InfrastructureSetup
         services.AddSingleton<IPlatformToolSource, Handoff.HandoffToolSource>();
         services.AddScoped<IApprovalStore, ApprovalStore>();
         services.AddScoped<ApprovalNotifier>();
+        services.AddScoped<ApprovalResolutionAnnouncer>();
         services.AddScoped<ApprovalExecutor>();
         services.AddScoped<IAuthorizedAgentRunner, AuthorizedAgentRunner>();
 

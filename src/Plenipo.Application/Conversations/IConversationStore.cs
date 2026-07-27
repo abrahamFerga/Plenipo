@@ -31,4 +31,12 @@ public interface IConversationStore
         string? sessionState,
         string? instructionsHash = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Append a single platform-authored assistant message outside a model turn — e.g. the outcome
+    /// of an approval resolved on the approvals surface, written back so the transcript itself says
+    /// what happened. Does NOT touch the serialized session: the model learns outcomes through its
+    /// own channel (the runner's approval-outcome digest), this is for the human reading the thread.
+    /// </summary>
+    public Task AppendAssistantNoteAsync(Guid conversationId, string content, CancellationToken cancellationToken = default);
 }

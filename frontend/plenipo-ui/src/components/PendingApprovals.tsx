@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type PendingApproval } from "../lib/api";
 import { useMe } from "../hooks/useMe";
@@ -49,8 +50,19 @@ const formatRest = (rest: [string, unknown][]) => rest.map(([k, v]) => `${k}: ${
  * ceremony trains reviewers to rubber-stamp, so routine low-risk calls collapse to a one-tap
  * confirm row while consequential ones keep the full card, with the agent's stated reasoning and
  * a before/after diff whenever the call carries them. Renders nothing when there's nothing pending.
+ *
+ * A resolution is never silent: while the server executes, the acting button says so, and the
+ * outcome (the server-composed note — or a composed failure line when execution throws) is handed
+ * to {@link PendingApprovalsProps.onResolved} so the host surface can show it where the user is
+ * looking. ChatPanel appends it to the transcript, matching the note the server persisted.
  */
-export function PendingApprovals({ moduleId }: { moduleId: string }) {
+export interface PendingApprovalsProps {
+  moduleId: string;
+  /** Called with a display-ready outcome line whenever an approval finishes resolving. */
+  onResolved?: (note: string) => void;
+}
+
+export function PendingApprovals({ moduleId, onResolved }: PendingApprovalsProps) {
   const qc = useQueryClient();
   const { data: me } = useMe();
   const canManage = hasPermission(me?.permissions ?? [], "chat.approvals.manage");
@@ -60,9 +72,36 @@ export function PendingApprovals({ moduleId }: { moduleId: string }) {
     enabled: canManage, // only users who can approve fetch the list (the API enforces this too)
   });
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["approvals"] });
-  const approve = useMutation({ mutationFn: (id: string) => api.approvals.approve(id), onSuccess: invalidate });
-  const reject = useMutation({ mutationFn: (id: string) => api.approvals.reject(id), onSuccess: invalidate });
+  // The row whose button was clicked — its label becomes the progress indicator ("Running…").
+  const [actingId, setActingId] = useState<string | null>(null);
+
+  const settle = () => {
+    setActingId(null);
+    void qc.invalidateQueries({ queryKey: ["approvals"] });
+  };
+  const approve = useMutation({
+    mutationFn: (a: PendingApproval) => api.approvals.approve(a.id),
+    onMutate: (a) => setActingId(a.id),
+    onSuccess: (resolution, a) => {
+      settle();
+      onResolved?.(resolution?.note ?? `✅ Approved — '${a.toolName}' ran.`);
+    },
+    onError: (e, a) => {
+      // A 422 means the human approved but the tool THREW — the queue row is gone (status
+      // Failed), so the outcome must surface here or the click ends in silence.
+      settle();
+      onResolved?.(`⚠️ Approved, but '${a.toolName}' failed: ${e instanceof Error ? e.message : String(e)}`);
+    },
+  });
+  const reject = useMutation({
+    mutationFn: (a: PendingApproval) => api.approvals.reject(a.id),
+    onMutate: (a) => setActingId(a.id),
+    onSuccess: (resolution, a) => {
+      settle();
+      onResolved?.(resolution?.note ?? `🚫 Rejected — '${a.toolName}' will not run.`);
+    },
+    onError: () => settle(),
+  });
 
   const pending = (data ?? []).filter((a: PendingApproval) => a.moduleId === moduleId);
   if (pending.length === 0) {
@@ -95,19 +134,19 @@ export function PendingApprovals({ moduleId }: { moduleId: string }) {
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => approve.mutate(a.id)}
+                onClick={() => approve.mutate(a)}
                 className="focus-ring shrink-0 rounded-md bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
               >
-                Approve
+                {actingId === a.id && approve.isPending ? "Running…" : "Approve"}
               </button>
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => reject.mutate(a.id)}
+                onClick={() => reject.mutate(a)}
                 aria-label={`Reject ${title}`}
                 className="focus-ring shrink-0 rounded-md px-1.5 py-1 text-xs text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
               >
-                ✕
+                {actingId === a.id && reject.isPending ? "…" : "✕"}
               </button>
             </div>
           );
@@ -151,18 +190,18 @@ export function PendingApprovals({ moduleId }: { moduleId: string }) {
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => approve.mutate(a.id)}
+                  onClick={() => approve.mutate(a)}
                   className="focus-ring rounded-md bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
                 >
-                  Approve
+                  {actingId === a.id && approve.isPending ? "Running…" : "Approve"}
                 </button>
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => reject.mutate(a.id)}
+                  onClick={() => reject.mutate(a)}
                   className="focus-ring rounded-md border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
                 >
-                  Reject
+                  {actingId === a.id && reject.isPending ? "Rejecting…" : "Reject"}
                 </button>
               </div>
             </div>
