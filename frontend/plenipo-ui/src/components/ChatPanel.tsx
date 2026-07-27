@@ -691,7 +691,14 @@ export function ChatPanel({
       )}
 
       <div className="mt-3">
-        <PendingApprovals moduleId={moduleId} />
+        <PendingApprovals
+          moduleId={moduleId}
+          // An approval resolving is a conversation event: show the outcome IN the transcript the
+          // moment the click lands (the server persists the same note, so reloads agree).
+          onResolved={(note) =>
+            setMessages((prev) => [...prev, { id: newId(), role: "assistant", text: note, tools: [] }])
+          }
+        />
       </div>
 
       {attachments.length > 0 && (

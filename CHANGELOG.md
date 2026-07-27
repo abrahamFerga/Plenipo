@@ -59,7 +59,10 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   each decision (approved + result, failed, or rejected) is reported back into the originating
   conversation's next turn — the assistant answers from the outcome instead of forever repeating
   "still pending" (the approval happens outside the chat, so without this hand-back the model
-  never learns it was decided).
+  never learns it was decided). Resolving is never silent for the humans either: the acting button
+  shows the execution in progress, the outcome lands in the transcript the moment the click
+  resolves (persisted server-side, so reloads agree), and the requester gets an inbox ping when
+  someone else decided.
 - **Layered RBAC** (system roles → dotted permissions with wildcards → per-resource ACLs), an
   append-only **audit log**, and per-turn **token-usage** tracking.
 - **Multi-tenant by default** — row-level isolation via EF Core global query filters on `TenantId`.

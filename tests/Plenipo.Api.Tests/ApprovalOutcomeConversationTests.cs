@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using Plenipo.Application.Ai;
 using Plenipo.Infrastructure.Ai;
 using Microsoft.AspNetCore.Hosting;
@@ -47,6 +48,18 @@ public sealed class ApprovalOutcomeConversationTests : IClassFixture<ApprovalOut
         var approve = await client.PostAsync($"/api/chat/approvals/{approval}/approve", null);
         approve.EnsureSuccessStatusCode();
 
+        // The click is not silent: the response echoes the outcome note, and the SAME note is now
+        // a persisted assistant message in the transcript — the user sees what happened without
+        // having to ask, and a reload agrees with what the click showed.
+        var resolution = await approve.Content.ReadFromJsonAsync<JsonElement>();
+        var note = resolution.GetProperty("note").GetString();
+        Assert.Contains("✅ Approved by", note);
+        Assert.Contains("recorded: ledger-entry", note);
+        var transcript = await client.GetFromJsonAsync<List<JsonElement>>($"/api/chat/conversations/{conversationId}/messages");
+        var lastMessage = transcript!.Last();
+        Assert.Equal("Assistant", lastMessage.GetProperty("role").GetString());
+        Assert.Equal(note, lastMessage.GetProperty("content").GetString());
+
         // Turn 2: the model's NEW input must carry the outcome — tool name, decision, and actual
         // result — superseding the stale "NOT executed" tool result from turn 1.
         await RunTurnAsync(client, conversationId, "did that go through?");
@@ -73,10 +86,39 @@ public sealed class ApprovalOutcomeConversationTests : IClassFixture<ApprovalOut
         var reject = await client.PostAsync($"/api/chat/approvals/{approval}/reject", null);
         reject.EnsureSuccessStatusCode();
 
+        // The rejection is written into the transcript too — declining is also an answer.
+        var transcript = await client.GetFromJsonAsync<List<JsonElement>>($"/api/chat/conversations/{conversationId}/messages");
+        Assert.Contains("🚫 Rejected by", transcript!.Last().GetProperty("content").GetString());
+
         await RunTurnAsync(client, conversationId, "so, what happened?");
         var seen = NewestUserMessage(capture);
         Assert.Contains("'record': REJECTED", seen);
         Assert.Contains("Do not retry", seen);
+    }
+
+    [Fact]
+    public async Task The_requester_is_notified_when_someone_else_decides()
+    {
+        using var requester = ClientAs("outcome-requester");
+        using var resolver = ClientAs("outcome-third-party");
+        (await resolver.GetAsync("/api/platform/me")).EnsureSuccessStatusCode(); // JIT-provision
+
+        var conversationId = await RunTurnAsync(requester, null, "please use the record tool with 'team-entry'");
+        var approval = await FindApprovalAsync(requester, conversationId);
+
+        var approve = await resolver.PostAsync($"/api/chat/approvals/{approval}/approve", null);
+        approve.EnsureSuccessStatusCode();
+
+        // The requester — who did NOT click — gets one inbox ping with the outcome; the resolver
+        // watched it happen and gets none (self-echo would be noise).
+        var inbox = await requester.GetFromJsonAsync<List<JsonElement>>("/api/notifications");
+        var ping = Assert.Single(inbox!.Where(n =>
+            n.GetProperty("category").GetString() == "test.approvals"
+            && n.GetProperty("title").GetString() == "Approved and ran: record"));
+        Assert.Contains("✅ Approved by", ping.GetProperty("body").GetString());
+
+        var resolverInbox = await resolver.GetFromJsonAsync<List<JsonElement>>("/api/notifications");
+        Assert.DoesNotContain(resolverInbox!, n => n.GetProperty("title").GetString() == "Approved and ran: record");
     }
 
     /// <summary>Runs one chat turn and returns the conversation id from the Completed event.</summary>

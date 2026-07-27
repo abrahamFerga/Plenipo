@@ -157,6 +157,110 @@ describe("PendingApprovals (human-in-the-loop gate)", () => {
     expect(screen.getByText(/budgetId: b-1/)).toBeTruthy();
   });
 
+  it("approving shows progress on the acting button and reports the server's outcome note", async () => {
+    let finishApprove: () => void = () => {};
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/me")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({ userId: "u1", displayName: "Dev", tenantId: "t1", permissions: ["chat.approvals.manage"] }),
+        } as unknown as Response);
+      }
+      if (url.endsWith("/api/chat/approvals")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              { id: "ap6", conversationId: "c1", moduleId: "finance", toolName: "record", createdAt: "2026-07-26", risk: "high" },
+            ]),
+        } as unknown as Response);
+      }
+      if (url.includes("/api/chat/approvals/ap6/approve")) {
+        // The server executes the tool during this request — the button must say so meanwhile.
+        return new Promise<Response>((resolve) => {
+          finishApprove = () =>
+            resolve({
+              ok: true,
+              json: () =>
+                Promise.resolve({
+                  id: "ap6",
+                  status: "Executed",
+                  result: "recorded: x",
+                  note: "✅ Approved by Dev — 'record' ran. recorded: x",
+                }),
+            } as unknown as Response);
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(null) } as unknown as Response);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const onResolved = vi.fn();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <PendingApprovals moduleId="finance" onResolved={onResolved} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Approve" }));
+
+    // While the server runs the tool, the click site says so — no silent gap.
+    expect(await screen.findByRole("button", { name: "Running…" })).toBeTruthy();
+
+    finishApprove();
+
+    // The outcome reaches the host surface verbatim — ChatPanel appends it to the transcript.
+    await waitFor(() => expect(onResolved).toHaveBeenCalledWith("✅ Approved by Dev — 'record' ran. recorded: x"));
+  });
+
+  it("rejecting reports the outcome note too — declining is also an answer", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/me")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({ userId: "u1", displayName: "Dev", tenantId: "t1", permissions: ["chat.approvals.manage"] }),
+        } as unknown as Response);
+      }
+      if (url.endsWith("/api/chat/approvals")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              { id: "ap7", conversationId: "c1", moduleId: "finance", toolName: "record", createdAt: "2026-07-26", risk: "high" },
+            ]),
+        } as unknown as Response);
+      }
+      if (url.includes("/api/chat/approvals/ap7/reject")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({ id: "ap7", status: "Rejected", note: "🚫 Rejected by Dev — 'record' will not run." }),
+        } as unknown as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(null) } as unknown as Response);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const onResolved = vi.fn();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <PendingApprovals moduleId="finance" onResolved={onResolved} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Reject" }));
+
+    await waitFor(() =>
+      expect(onResolved).toHaveBeenCalledWith("🚫 Rejected by Dev — 'record' will not run."),
+    );
+  });
+
   it("an item without a risk tier fails safe to the full card", async () => {
     stubApiWith([
       {

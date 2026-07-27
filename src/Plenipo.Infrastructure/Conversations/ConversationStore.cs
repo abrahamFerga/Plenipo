@@ -84,4 +84,20 @@ public sealed class ConversationStore(PlatformDbContext db, ICurrentUser current
 
         await db.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task AppendAssistantNoteAsync(Guid conversationId, string content, CancellationToken cancellationToken = default)
+    {
+        var conversation = await db.Conversations.FirstOrDefaultAsync(c => c.Id == conversationId, cancellationToken)
+            ?? throw new InvalidOperationException($"Conversation {conversationId} was not found.");
+
+        db.ConversationMessages.Add(new ConversationMessage
+        {
+            TenantId = conversation.TenantId,
+            ConversationId = conversationId,
+            Role = MessageRole.Assistant,
+            Content = content,
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
 }

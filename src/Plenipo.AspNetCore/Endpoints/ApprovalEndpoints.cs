@@ -54,8 +54,8 @@ public static class ApprovalEndpoints
             .WithName("Approvals_ListPending");
 
         group.MapPost("/{id:guid}/approve", async (
-                Guid id, IApprovalStore store, ApprovalExecutor executor, ICurrentUser current,
-                IServiceProvider services, CancellationToken ct) =>
+                Guid id, IApprovalStore store, ApprovalExecutor executor, ApprovalResolutionAnnouncer announcer,
+                ICurrentUser current, IServiceProvider services, CancellationToken ct) =>
             {
                 var pending = await store.TryBeginExecutionAsync(
                     id, current.UserId, current.DisplayName, ct);
@@ -67,29 +67,44 @@ public static class ApprovalEndpoints
                 var outcome = await executor.ExecuteAsync(pending, services, ct);
                 // The resolver's identity is part of the oversight record — "approved by whom" is
                 // exactly what the ADMT disclosure view (DisclosureEndpoints) has to answer.
-                await store.CompleteExecutionAsync(
-                    id,
-                    outcome.Success ? ApprovalStatus.Executed : ApprovalStatus.Failed,
-                    outcome.Result,
-                    outcome.Error,
-                    ct);
+                var status = outcome.Success ? ApprovalStatus.Executed : ApprovalStatus.Failed;
+                await store.CompleteExecutionAsync(id, status, outcome.Result, outcome.Error, ct);
+
+                // The requester must not have to ask whether their click did anything: write the
+                // outcome into the conversation and ping them (best-effort; never fails the approve).
+                // The composed note comes back so the shell can echo the SAME wording at the click site.
+                var note = await announcer.AnnounceAsync(
+                    pending, status, outcome.Result, outcome.Error, current.UserId, current.DisplayName, ct);
 
                 return outcome.Success
-                    ? Results.Ok(new { id, status = nameof(ApprovalStatus.Executed), result = outcome.Result })
+                    ? Results.Ok(new { id, status = nameof(ApprovalStatus.Executed), result = outcome.Result, note })
                     : Results.Problem(detail: outcome.Error, statusCode: 422);
             })
             .RequireAuthorization(PermissionRequirement.PolicyName(Permissions.ManageApprovals))
             .WithName("Approvals_Approve");
 
-        group.MapPost("/{id:guid}/reject", async (Guid id, IApprovalStore store, ICurrentUser current, CancellationToken ct) =>
+        group.MapPost("/{id:guid}/reject", async (
+                Guid id, IApprovalStore store, ApprovalResolutionAnnouncer announcer,
+                ICurrentUser current, CancellationToken ct) =>
             {
+                // Fetched before the atomic reject so the announcement has the tool/conversation
+                // context; the reject itself still decides who won a race.
+                var pending = await store.GetAsync(id, ct);
                 var rejected = await store.TryRejectAsync(id, current.UserId, current.DisplayName, ct);
                 if (!rejected)
                 {
                     return Results.NotFound();
                 }
 
-                return Results.Ok(new { id, status = nameof(ApprovalStatus.Rejected) });
+                string? note = null;
+                if (pending is not null)
+                {
+                    note = await announcer.AnnounceAsync(
+                        pending, ApprovalStatus.Rejected, result: null, error: null,
+                        current.UserId, current.DisplayName, ct);
+                }
+
+                return Results.Ok(new { id, status = nameof(ApprovalStatus.Rejected), note });
             })
             .RequireAuthorization(PermissionRequirement.PolicyName(Permissions.ManageApprovals))
             .WithName("Approvals_Reject");
