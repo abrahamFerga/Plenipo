@@ -7,6 +7,7 @@ import {
   type ModuleTab,
   type TabAction,
   type TabColumn,
+  type TabDetailAction,
   type TabDetailDocument,
   type TabEditor,
   type TabEditorField,
@@ -55,6 +56,95 @@ function CellValue({ column, row }: { column: TabColumn; row: Record<string, unk
   );
 }
 
+/**
+ * Commands on the RECORD a detail document describes ("Approve", "Discard", …). The server
+ * sends only actions that are applicable and permitted; running one refreshes the document and
+ * the tab data behind it. The response renders as a visible banner — an action that refuses
+ * ("needs an account first") must never look like nothing happened.
+ */
+function DetailActions({ actions }: { actions: TabDetailAction[] }) {
+  const qc = useQueryClient();
+  const [message, setMessage] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<TabDetailAction | null>(null);
+  const [values, setValues] = useState<Record<string, string>>({});
+
+  const run = useMutation({
+    mutationFn: (action: TabDetailAction) =>
+      apiAction(action.endpoint, action.field ? { [action.field.field]: values[action.id] ?? "" } : undefined),
+    onSuccess: (result) => {
+      setMessage(result ?? "Done.");
+      void qc.invalidateQueries({ queryKey: ["tab-detail"] });
+      void qc.invalidateQueries({ queryKey: ["tab-data"] });
+    },
+    onError: (error) => setMessage((error as Error).message),
+  });
+
+  // Rendered even with zero actions so the LAST message survives the refetch that empties the
+  // list — approving is exactly the action whose success leaves nothing else to do, and
+  // "Posted 12 transaction(s)…" disappearing with the buttons would un-say what just happened.
+  if (actions.length === 0 && message === null) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {actions.map((action) => (
+          <div key={action.id} className="flex items-center gap-2">
+            {action.field && (
+              <div className="w-56">
+                <label htmlFor={`detail-action-${action.id}`} className="sr-only">
+                  {action.field.label}
+                </label>
+                <FieldInput
+                  id={`detail-action-${action.id}`}
+                  field={action.field}
+                  value={values[action.id] ?? ""}
+                  disabled={run.isPending}
+                  onChange={(value) => setValues((v) => ({ ...v, [action.id]: value }))}
+                />
+              </div>
+            )}
+            <button
+              type="button"
+              disabled={run.isPending || (action.field != null && (values[action.id] ?? "").trim() === "")}
+              onClick={() => (action.confirm ? setConfirming(action) : run.mutate(action))}
+              className="focus-ring rounded bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-40"
+            >
+              {run.isPending ? "Working…" : action.label}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {message && (
+        <p
+          data-testid="detail-action-message"
+          className={`rounded border px-3 py-2 text-sm ${
+            run.isError
+              ? "border-red-300 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+              : "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200"
+          }`}
+        >
+          {message}
+        </p>
+      )}
+
+      <ConfirmDialog
+        open={confirming !== null}
+        title={confirming?.label ?? ""}
+        body={confirming?.confirm ?? ""}
+        confirmLabel={confirming?.label ?? "Confirm"}
+        onConfirm={() => {
+          if (confirming) run.mutate(confirming);
+          setConfirming(null);
+        }}
+        onCancel={() => setConfirming(null)}
+      />
+    </div>
+  );
+}
+
 /** The generic drill-down: a detail document rendered as prose and sub-tables, with a way back. */
 function DetailView({ endpoint, onBack }: { endpoint: string; onBack: () => void }) {
   const { data, isLoading, isError, error } = useQuery({
@@ -62,27 +152,45 @@ function DetailView({ endpoint, onBack }: { endpoint: string; onBack: () => void
     queryFn: () => apiGet<TabDetailDocument>(endpoint),
   });
 
+  // The Back button renders in EVERY state: after an action removes the record (discard), the
+  // refetch legitimately 404s — an error page without a way back would strand the user.
+  const back = (
+    <button
+      type="button"
+      onClick={onBack}
+      className="focus-ring mb-2 rounded border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 dark:border-slate-600 dark:text-slate-300"
+    >
+      ← Back
+    </button>
+  );
+
   if (isLoading) {
-    return <p className="text-sm text-slate-500">Loading…</p>;
+    return (
+      <div>
+        {back}
+        <p className="text-sm text-slate-500">Loading…</p>
+      </div>
+    );
   }
   if (isError) {
-    return <p className="text-sm text-red-600">{(error as Error).message}</p>;
+    return (
+      <div>
+        {back}
+        <p className="text-sm text-red-600">{(error as Error).message}</p>
+      </div>
+    );
   }
 
   const doc = data!;
   return (
     <div className="space-y-5">
       <div>
-        <button
-          type="button"
-          onClick={onBack}
-          className="focus-ring mb-2 rounded border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 dark:border-slate-600 dark:text-slate-300"
-        >
-          ← Back
-        </button>
+        {back}
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{doc.title}</h2>
         {doc.subtitle && <p className="text-sm text-slate-500 dark:text-slate-400">{doc.subtitle}</p>}
       </div>
+
+      <DetailActions actions={doc.actions ?? []} />
 
       {doc.sections.map((section) => (
         <section key={section.heading} className="space-y-2">

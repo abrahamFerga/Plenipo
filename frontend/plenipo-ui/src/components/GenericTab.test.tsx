@@ -216,6 +216,192 @@ describe("GenericTab (server-driven table)", () => {
     expect(await screen.findByRole("button", { name: "View" })).toBeTruthy(); // the table is back
   });
 
+  const batchesTab: ModuleTab = {
+    id: "review",
+    label: "Review",
+    route: "/finance/review",
+    dataEndpoint: "/api/finance/imports/batches",
+    columns: [{ field: "fileName", header: "Statement" }],
+    detailEndpoint: "/api/finance/imports/{id}/detail",
+  };
+
+  it("detail actions: the button POSTs (after confirm), surfaces the message visibly, and refreshes the document", async () => {
+    let approved = false;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if ((init?.method ?? "GET") === "POST") {
+        approved = true;
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ message: "Posted 12 transaction(s) from 'may.pdf'." }),
+        } as unknown as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve(
+            url.includes("/detail")
+              ? {
+                  title: "may.pdf",
+                  subtitle: approved ? "approved · 12 line(s)" : "parsed · 12 line(s)",
+                  sections: [],
+                  // Approval leaves nothing else to do — the refreshed document has NO actions,
+                  // and the success message must survive that (the vanishing-banner regression).
+                  actions: approved
+                    ? []
+                    : [
+                        {
+                          id: "approve",
+                          label: "Approve",
+                          endpoint: "/api/finance/imports/b-1/approve",
+                          confirm: "Post this batch's lines?",
+                        },
+                      ],
+                }
+              : [{ id: "b-1", fileName: "may.pdf" }],
+          ),
+      } as unknown as Response);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <GenericTab tab={batchesTab} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "View" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Approve" }));
+    // The confirm dialog interposes; its confirm button carries the action label.
+    expect(screen.getByText("Post this batch's lines?")).toBeTruthy();
+    const dialogButtons = screen.getAllByRole("button", { name: "Approve" });
+    fireEvent.click(dialogButtons[dialogButtons.length - 1]);
+
+    expect((await screen.findByTestId("detail-action-message")).textContent).toContain(
+      "Posted 12 transaction(s) from 'may.pdf'.",
+    );
+    expect(
+      fetchMock.mock.calls.some(
+        (c) => String(c[0]).endsWith("/api/finance/imports/b-1/approve") && (c[1] as RequestInit)?.method === "POST",
+      ),
+    ).toBe(true);
+    // The document refetched after the action: the subtitle now reflects the new status, the
+    // approve button is gone (no actions remain) — and the message banner is STILL shown.
+    expect(await screen.findByText("approved · 12 line(s)")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+    expect(screen.getByTestId("detail-action-message").textContent).toContain("Posted 12 transaction(s)");
+  });
+
+  it("detail actions: a field-carrying action stays disabled until chosen, then POSTs the value as its body", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if ((init?.method ?? "GET") === "POST") {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ message: "Assigned to 'Checking'." }),
+        } as unknown as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve(
+            url.includes("/detail")
+              ? {
+                  title: "may.pdf",
+                  subtitle: "needs-account",
+                  sections: [],
+                  actions: [
+                    {
+                      id: "assign",
+                      label: "Assign",
+                      endpoint: "/api/finance/imports/b-1/assign-account",
+                      field: { field: "accountName", label: "Account", options: [{ value: "Checking", label: "Checking" }] },
+                    },
+                  ],
+                }
+              : [{ id: "b-1", fileName: "may.pdf" }],
+          ),
+      } as unknown as Response);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <GenericTab tab={batchesTab} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "View" }));
+
+    const assign = await screen.findByRole("button", { name: "Assign" });
+    expect((assign as HTMLButtonElement).disabled).toBe(true); // no account picked yet
+
+    fireEvent.change(screen.getByLabelText("Account"), { target: { value: "Checking" } });
+    expect((assign as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(assign);
+
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => (c[1] as RequestInit)?.method === "POST");
+      expect(post).toBeTruthy();
+      expect(String(post![0])).toContain("/api/finance/imports/b-1/assign-account");
+      expect(JSON.parse(String((post![1] as RequestInit).body))).toEqual({ accountName: "Checking" });
+    });
+    expect((await screen.findByTestId("detail-action-message")).textContent).toContain("Assigned to 'Checking'.");
+  });
+
+  it("detail actions: a refusing endpoint (409) renders the reason as an error banner, and Back survives a vanished record", async () => {
+    let discarded = false;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if ((init?.method ?? "GET") === "POST") {
+        discarded = true;
+        return Promise.resolve({
+          ok: false,
+          status: 409,
+          statusText: "Conflict",
+          text: () => Promise.resolve(JSON.stringify({ message: "'may.pdf' has no account yet." })),
+        } as unknown as Response);
+      }
+      if (url.includes("/detail") && discarded) {
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          statusText: "Not Found",
+          text: () => Promise.resolve(""),
+        } as unknown as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve(
+            url.includes("/detail")
+              ? {
+                  title: "may.pdf",
+                  subtitle: "needs-account",
+                  sections: [],
+                  actions: [{ id: "approve", label: "Approve", endpoint: "/api/finance/imports/b-1/approve" }],
+                }
+              : [{ id: "b-1", fileName: "may.pdf" }],
+          ),
+      } as unknown as Response);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <GenericTab tab={batchesTab} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "View" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Approve" })); // no confirm declared — runs directly
+
+    const banner = await screen.findByTestId("detail-action-message");
+    expect(banner.textContent).toContain("'may.pdf' has no account yet.");
+    // The refetch 404s (record gone in this contrived flow) — the Back button must still render.
+    expect(await screen.findByRole("button", { name: "← Back" })).toBeTruthy();
+  });
+
   it("row actions: the button POSTs the {field}-resolved URL (after confirm) and surfaces the message", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       void input;
