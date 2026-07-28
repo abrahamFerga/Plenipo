@@ -57,10 +57,10 @@ function CellValue({ column, row }: { column: TabColumn; row: Record<string, unk
 }
 
 /**
- * Commands on the RECORD a detail document describes ("Approve", "Discard", …). The server
- * sends only actions that are applicable and permitted; running one refreshes the document and
- * the tab data behind it. The response renders as a visible banner — an action that refuses
- * ("needs an account first") must never look like nothing happened.
+ * Commands on the RECORD a detail document describes ("Approve", "Close", "Archive", …). The
+ * server sends only actions that are applicable and permitted; running one refreshes the
+ * document and the tab data behind it. The response renders as a visible banner — an action
+ * that refuses must never look like nothing happened.
  */
 function DetailActions({ actions }: { actions: TabDetailAction[] }) {
   const qc = useQueryClient();
@@ -80,8 +80,9 @@ function DetailActions({ actions }: { actions: TabDetailAction[] }) {
   });
 
   // Rendered even with zero actions so the LAST message survives the refetch that empties the
-  // list — approving is exactly the action whose success leaves nothing else to do, and
-  // "Posted 12 transaction(s)…" disappearing with the buttons would un-say what just happened.
+  // list — a record lifecycle's terminal action (approve, close, archive) succeeds into
+  // "nothing left to do", and its success message disappearing with the buttons would un-say
+  // what just happened.
   if (actions.length === 0 && message === null) {
     return null;
   }

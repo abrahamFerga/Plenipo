@@ -147,7 +147,8 @@ export interface TabDetailSection {
  * `endpoint`, show the response message, refresh the document. The server composes the list
  * per caller and per record state — an action that isn't applicable simply isn't sent — and
  * the endpoints stay authorization-gated regardless. An action may declare one input `field`
- * (e.g. picking an account by name); its value posts as `{ [field.field]: value }`.
+ * (a select drawing live options from an endpoint, say); its value posts as
+ * `{ [field.field]: value }`.
  */
 export interface TabDetailAction {
   id: string;

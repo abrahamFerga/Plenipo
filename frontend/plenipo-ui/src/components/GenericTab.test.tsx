@@ -216,24 +216,27 @@ describe("GenericTab (server-driven table)", () => {
     expect(await screen.findByRole("button", { name: "View" })).toBeTruthy(); // the table is back
   });
 
-  const batchesTab: ModuleTab = {
-    id: "review",
-    label: "Review",
-    route: "/finance/review",
-    dataEndpoint: "/api/finance/imports/batches",
-    columns: [{ field: "fileName", header: "Statement" }],
-    detailEndpoint: "/api/finance/imports/{id}/detail",
+  // Detail actions are a VERTICAL-NEUTRAL surface (any record's drill-down: a legal matter, a
+  // shipment, an import batch). These tests deliberately use the legal flavor — the row-actions
+  // test below already covers finance — so no one mistakes the contract for a finance feature.
+  const mattersDetailTab: ModuleTab = {
+    id: "matters",
+    label: "Matters",
+    route: "/legal/matters",
+    dataEndpoint: "/api/legal/matters",
+    columns: [{ field: "name", header: "Matter" }],
+    detailEndpoint: "/api/legal/matters/{id}/detail",
   };
 
   it("detail actions: the button POSTs (after confirm), surfaces the message visibly, and refreshes the document", async () => {
-    let approved = false;
+    let closed = false;
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if ((init?.method ?? "GET") === "POST") {
-        approved = true;
+        closed = true;
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ message: "Posted 12 transaction(s) from 'may.pdf'." }),
+          json: () => Promise.resolve({ message: "Closed 'Vandelay acquisition' — 2 open tasks archived." }),
         } as unknown as Response);
       }
       return Promise.resolve({
@@ -242,23 +245,23 @@ describe("GenericTab (server-driven table)", () => {
           Promise.resolve(
             url.includes("/detail")
               ? {
-                  title: "may.pdf",
-                  subtitle: approved ? "approved · 12 line(s)" : "parsed · 12 line(s)",
+                  title: "Vandelay acquisition",
+                  subtitle: closed ? "Closed · Client: Vandelay" : "Open · Client: Vandelay",
                   sections: [],
-                  // Approval leaves nothing else to do — the refreshed document has NO actions,
+                  // Closing leaves nothing else to do — the refreshed document has NO actions,
                   // and the success message must survive that (the vanishing-banner regression).
-                  actions: approved
+                  actions: closed
                     ? []
                     : [
                         {
-                          id: "approve",
-                          label: "Approve",
-                          endpoint: "/api/finance/imports/b-1/approve",
-                          confirm: "Post this batch's lines?",
+                          id: "close",
+                          label: "Close matter",
+                          endpoint: "/api/legal/matters/m-1/close",
+                          confirm: "Close this matter?",
                         },
                       ],
                 }
-              : [{ id: "b-1", fileName: "may.pdf" }],
+              : [{ id: "m-1", name: "Vandelay acquisition" }],
           ),
       } as unknown as Response);
     });
@@ -266,30 +269,30 @@ describe("GenericTab (server-driven table)", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <GenericTab tab={batchesTab} />
+        <GenericTab tab={mattersDetailTab} />
       </QueryClientProvider>,
     );
 
     fireEvent.click(await screen.findByRole("button", { name: "View" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Approve" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Close matter" }));
     // The confirm dialog interposes; its confirm button carries the action label.
-    expect(screen.getByText("Post this batch's lines?")).toBeTruthy();
-    const dialogButtons = screen.getAllByRole("button", { name: "Approve" });
+    expect(screen.getByText("Close this matter?")).toBeTruthy();
+    const dialogButtons = screen.getAllByRole("button", { name: "Close matter" });
     fireEvent.click(dialogButtons[dialogButtons.length - 1]);
 
     expect((await screen.findByTestId("detail-action-message")).textContent).toContain(
-      "Posted 12 transaction(s) from 'may.pdf'.",
+      "Closed 'Vandelay acquisition' — 2 open tasks archived.",
     );
     expect(
       fetchMock.mock.calls.some(
-        (c) => String(c[0]).endsWith("/api/finance/imports/b-1/approve") && (c[1] as RequestInit)?.method === "POST",
+        (c) => String(c[0]).endsWith("/api/legal/matters/m-1/close") && (c[1] as RequestInit)?.method === "POST",
       ),
     ).toBe(true);
     // The document refetched after the action: the subtitle now reflects the new status, the
-    // approve button is gone (no actions remain) — and the message banner is STILL shown.
-    expect(await screen.findByText("approved · 12 line(s)")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
-    expect(screen.getByTestId("detail-action-message").textContent).toContain("Posted 12 transaction(s)");
+    // close button is gone (no actions remain) — and the message banner is STILL shown.
+    expect(await screen.findByText("Closed · Client: Vandelay")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Close matter" })).toBeNull();
+    expect(screen.getByTestId("detail-action-message").textContent).toContain("Closed 'Vandelay acquisition'");
   });
 
   it("detail actions: a field-carrying action stays disabled until chosen, then POSTs the value as its body", async () => {
@@ -298,7 +301,7 @@ describe("GenericTab (server-driven table)", () => {
       if ((init?.method ?? "GET") === "POST") {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ message: "Assigned to 'Checking'." }),
+          json: () => Promise.resolve({ message: "Reassigned to Kruger." }),
         } as unknown as Response);
       }
       return Promise.resolve({
@@ -307,19 +310,20 @@ describe("GenericTab (server-driven table)", () => {
           Promise.resolve(
             url.includes("/detail")
               ? {
-                  title: "may.pdf",
-                  subtitle: "needs-account",
+                  title: "Vandelay acquisition",
+                  subtitle: "Open · Client: Vandelay",
                   sections: [],
                   actions: [
                     {
-                      id: "assign",
-                      label: "Assign",
-                      endpoint: "/api/finance/imports/b-1/assign-account",
-                      field: { field: "accountName", label: "Account", options: [{ value: "Checking", label: "Checking" }] },
+                      id: "reassign",
+                      label: "Reassign",
+                      endpoint: "/api/legal/matters/m-1/reassign",
+                      // Declared vocabulary with value≠label: the endpoint gets the identifier.
+                      field: { field: "lawyerId", label: "Lawyer", options: [{ value: "l-7", label: "Kruger" }] },
                     },
                   ],
                 }
-              : [{ id: "b-1", fileName: "may.pdf" }],
+              : [{ id: "m-1", name: "Vandelay acquisition" }],
           ),
       } as unknown as Response);
     });
@@ -327,42 +331,42 @@ describe("GenericTab (server-driven table)", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <GenericTab tab={batchesTab} />
+        <GenericTab tab={mattersDetailTab} />
       </QueryClientProvider>,
     );
 
     fireEvent.click(await screen.findByRole("button", { name: "View" }));
 
-    const assign = await screen.findByRole("button", { name: "Assign" });
-    expect((assign as HTMLButtonElement).disabled).toBe(true); // no account picked yet
+    const reassign = await screen.findByRole("button", { name: "Reassign" });
+    expect((reassign as HTMLButtonElement).disabled).toBe(true); // no lawyer picked yet
 
-    fireEvent.change(screen.getByLabelText("Account"), { target: { value: "Checking" } });
-    expect((assign as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(assign);
+    fireEvent.change(screen.getByLabelText("Lawyer"), { target: { value: "l-7" } });
+    expect((reassign as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(reassign);
 
     await waitFor(() => {
       const post = fetchMock.mock.calls.find((c) => (c[1] as RequestInit)?.method === "POST");
       expect(post).toBeTruthy();
-      expect(String(post![0])).toContain("/api/finance/imports/b-1/assign-account");
-      expect(JSON.parse(String((post![1] as RequestInit).body))).toEqual({ accountName: "Checking" });
+      expect(String(post![0])).toContain("/api/legal/matters/m-1/reassign");
+      expect(JSON.parse(String((post![1] as RequestInit).body))).toEqual({ lawyerId: "l-7" });
     });
-    expect((await screen.findByTestId("detail-action-message")).textContent).toContain("Assigned to 'Checking'.");
+    expect((await screen.findByTestId("detail-action-message")).textContent).toContain("Reassigned to Kruger.");
   });
 
   it("detail actions: a refusing endpoint (409) renders the reason as an error banner, and Back survives a vanished record", async () => {
-    let discarded = false;
+    let archived = false;
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if ((init?.method ?? "GET") === "POST") {
-        discarded = true;
+        archived = true;
         return Promise.resolve({
           ok: false,
           status: 409,
           statusText: "Conflict",
-          text: () => Promise.resolve(JSON.stringify({ message: "'may.pdf' has no account yet." })),
+          text: () => Promise.resolve(JSON.stringify({ message: "'Vandelay acquisition' still has open tasks." })),
         } as unknown as Response);
       }
-      if (url.includes("/detail") && discarded) {
+      if (url.includes("/detail") && archived) {
         return Promise.resolve({
           ok: false,
           status: 404,
@@ -376,12 +380,12 @@ describe("GenericTab (server-driven table)", () => {
           Promise.resolve(
             url.includes("/detail")
               ? {
-                  title: "may.pdf",
-                  subtitle: "needs-account",
+                  title: "Vandelay acquisition",
+                  subtitle: "Open · Client: Vandelay",
                   sections: [],
-                  actions: [{ id: "approve", label: "Approve", endpoint: "/api/finance/imports/b-1/approve" }],
+                  actions: [{ id: "archive", label: "Archive", endpoint: "/api/legal/matters/m-1/archive" }],
                 }
-              : [{ id: "b-1", fileName: "may.pdf" }],
+              : [{ id: "m-1", name: "Vandelay acquisition" }],
           ),
       } as unknown as Response);
     });
@@ -389,15 +393,15 @@ describe("GenericTab (server-driven table)", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <GenericTab tab={batchesTab} />
+        <GenericTab tab={mattersDetailTab} />
       </QueryClientProvider>,
     );
 
     fireEvent.click(await screen.findByRole("button", { name: "View" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Approve" })); // no confirm declared — runs directly
+    fireEvent.click(await screen.findByRole("button", { name: "Archive" })); // no confirm declared — runs directly
 
     const banner = await screen.findByTestId("detail-action-message");
-    expect(banner.textContent).toContain("'may.pdf' has no account yet.");
+    expect(banner.textContent).toContain("'Vandelay acquisition' still has open tasks.");
     // The refetch 404s (record gone in this contrived flow) — the Back button must still render.
     expect(await screen.findByRole("button", { name: "← Back" })).toBeTruthy();
   });

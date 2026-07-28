@@ -48,9 +48,9 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   endpoint contract is unchanged — it still returns a one-element array.
 
 - **Detail documents can carry actions** (`TabDetailDocument.actions`) — the drill-down a
-  `DetailEndpoint` returns may now include commands on the record it describes ("Approve",
-  "Discard", an assign picker), and the generic detail view renders them beside the content the
-  user is looking at. Each action POSTs to its endpoint, gets a confirm dialog when it declares
+  `DetailEndpoint` returns may now include commands on the record it describes (close a matter,
+  mark a shipment delivered, approve an import batch), and the generic detail view renders them
+  beside the content the user is looking at. Each action POSTs to its endpoint, gets a confirm dialog when it declares
   `confirm`, and may declare one input `field` (a `TabEditorField`, so a select can draw live
   options from an endpoint — the button stays disabled until a value is chosen). The response
   message renders as a visible banner, error-styled on a non-2xx answer, and the banner outlives
