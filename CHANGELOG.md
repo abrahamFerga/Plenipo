@@ -47,6 +47,20 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   form under headings. Callers without the editor's permission see the values read-only. The
   endpoint contract is unchanged — it still returns a one-element array.
 
+- **Detail documents can carry actions** (`TabDetailDocument.actions`) — the drill-down a
+  `DetailEndpoint` returns may now include commands on the record it describes (close a matter,
+  mark a shipment delivered, approve an import batch), and the generic detail view renders them
+  beside the content the user is looking at. Each action POSTs to its endpoint, gets a confirm dialog when it declares
+  `confirm`, and may declare one input `field` (a `TabEditorField`, so a select can draw live
+  options from an endpoint — the button stays disabled until a value is chosen). The response
+  message renders as a visible banner, error-styled on a non-2xx answer, and the banner outlives
+  the refetch — approving is exactly the action whose success leaves nothing else to do, and
+  "Posted 12 transaction(s)…" must not vanish with the buttons. The document and the tab data
+  behind it refresh after every run, and the Back button now renders in loading/error states too,
+  so an action that removes the record (discard) can't strand the viewer. The server composes the
+  list per caller and per record state; the field is additive, so existing detail payloads render
+  unchanged.
+
 **Platform (backend NuGet packages)**
 - **Module SDK** — a vertical implements `IModule` and declares a `ModuleManifest` (tools, tabs,
   roles, agent instructions); the host discovers and installs it with `AddPlenipoModule<T>()`.

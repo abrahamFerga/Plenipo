@@ -216,6 +216,196 @@ describe("GenericTab (server-driven table)", () => {
     expect(await screen.findByRole("button", { name: "View" })).toBeTruthy(); // the table is back
   });
 
+  // Detail actions are a VERTICAL-NEUTRAL surface (any record's drill-down: a legal matter, a
+  // shipment, an import batch). These tests deliberately use the legal flavor — the row-actions
+  // test below already covers finance — so no one mistakes the contract for a finance feature.
+  const mattersDetailTab: ModuleTab = {
+    id: "matters",
+    label: "Matters",
+    route: "/legal/matters",
+    dataEndpoint: "/api/legal/matters",
+    columns: [{ field: "name", header: "Matter" }],
+    detailEndpoint: "/api/legal/matters/{id}/detail",
+  };
+
+  it("detail actions: the button POSTs (after confirm), surfaces the message visibly, and refreshes the document", async () => {
+    let closed = false;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if ((init?.method ?? "GET") === "POST") {
+        closed = true;
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ message: "Closed 'Vandelay acquisition' — 2 open tasks archived." }),
+        } as unknown as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve(
+            url.includes("/detail")
+              ? {
+                  title: "Vandelay acquisition",
+                  subtitle: closed ? "Closed · Client: Vandelay" : "Open · Client: Vandelay",
+                  sections: [],
+                  // Closing leaves nothing else to do — the refreshed document has NO actions,
+                  // and the success message must survive that (the vanishing-banner regression).
+                  actions: closed
+                    ? []
+                    : [
+                        {
+                          id: "close",
+                          label: "Close matter",
+                          endpoint: "/api/legal/matters/m-1/close",
+                          confirm: "Close this matter?",
+                        },
+                      ],
+                }
+              : [{ id: "m-1", name: "Vandelay acquisition" }],
+          ),
+      } as unknown as Response);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <GenericTab tab={mattersDetailTab} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "View" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Close matter" }));
+    // The confirm dialog interposes; its confirm button carries the action label.
+    expect(screen.getByText("Close this matter?")).toBeTruthy();
+    const dialogButtons = screen.getAllByRole("button", { name: "Close matter" });
+    fireEvent.click(dialogButtons[dialogButtons.length - 1]);
+
+    expect((await screen.findByTestId("detail-action-message")).textContent).toContain(
+      "Closed 'Vandelay acquisition' — 2 open tasks archived.",
+    );
+    expect(
+      fetchMock.mock.calls.some(
+        (c) => String(c[0]).endsWith("/api/legal/matters/m-1/close") && (c[1] as RequestInit)?.method === "POST",
+      ),
+    ).toBe(true);
+    // The document refetched after the action: the subtitle now reflects the new status, the
+    // close button is gone (no actions remain) — and the message banner is STILL shown.
+    expect(await screen.findByText("Closed · Client: Vandelay")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Close matter" })).toBeNull();
+    expect(screen.getByTestId("detail-action-message").textContent).toContain("Closed 'Vandelay acquisition'");
+  });
+
+  it("detail actions: a field-carrying action stays disabled until chosen, then POSTs the value as its body", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if ((init?.method ?? "GET") === "POST") {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ message: "Reassigned to Kruger." }),
+        } as unknown as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve(
+            url.includes("/detail")
+              ? {
+                  title: "Vandelay acquisition",
+                  subtitle: "Open · Client: Vandelay",
+                  sections: [],
+                  actions: [
+                    {
+                      id: "reassign",
+                      label: "Reassign",
+                      endpoint: "/api/legal/matters/m-1/reassign",
+                      // Declared vocabulary with value≠label: the endpoint gets the identifier.
+                      field: { field: "lawyerId", label: "Lawyer", options: [{ value: "l-7", label: "Kruger" }] },
+                    },
+                  ],
+                }
+              : [{ id: "m-1", name: "Vandelay acquisition" }],
+          ),
+      } as unknown as Response);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <GenericTab tab={mattersDetailTab} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "View" }));
+
+    const reassign = await screen.findByRole("button", { name: "Reassign" });
+    expect((reassign as HTMLButtonElement).disabled).toBe(true); // no lawyer picked yet
+
+    fireEvent.change(screen.getByLabelText("Lawyer"), { target: { value: "l-7" } });
+    expect((reassign as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(reassign);
+
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => (c[1] as RequestInit)?.method === "POST");
+      expect(post).toBeTruthy();
+      expect(String(post![0])).toContain("/api/legal/matters/m-1/reassign");
+      expect(JSON.parse(String((post![1] as RequestInit).body))).toEqual({ lawyerId: "l-7" });
+    });
+    expect((await screen.findByTestId("detail-action-message")).textContent).toContain("Reassigned to Kruger.");
+  });
+
+  it("detail actions: a refusing endpoint (409) renders the reason as an error banner, and Back survives a vanished record", async () => {
+    let archived = false;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if ((init?.method ?? "GET") === "POST") {
+        archived = true;
+        return Promise.resolve({
+          ok: false,
+          status: 409,
+          statusText: "Conflict",
+          text: () => Promise.resolve(JSON.stringify({ message: "'Vandelay acquisition' still has open tasks." })),
+        } as unknown as Response);
+      }
+      if (url.includes("/detail") && archived) {
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          statusText: "Not Found",
+          text: () => Promise.resolve(""),
+        } as unknown as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve(
+            url.includes("/detail")
+              ? {
+                  title: "Vandelay acquisition",
+                  subtitle: "Open · Client: Vandelay",
+                  sections: [],
+                  actions: [{ id: "archive", label: "Archive", endpoint: "/api/legal/matters/m-1/archive" }],
+                }
+              : [{ id: "m-1", name: "Vandelay acquisition" }],
+          ),
+      } as unknown as Response);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <GenericTab tab={mattersDetailTab} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "View" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Archive" })); // no confirm declared — runs directly
+
+    const banner = await screen.findByTestId("detail-action-message");
+    expect(banner.textContent).toContain("'Vandelay acquisition' still has open tasks.");
+    // The refetch 404s (record gone in this contrived flow) — the Back button must still render.
+    expect(await screen.findByRole("button", { name: "← Back" })).toBeTruthy();
+  });
+
   it("row actions: the button POSTs the {field}-resolved URL (after confirm) and surfaces the message", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       void input;

@@ -142,11 +142,31 @@ export interface TabDetailSection {
   rows?: Record<string, unknown>[];
 }
 
+/**
+ * A command on the RECORD a detail document describes ("Approve", "Discard", …): POST to
+ * `endpoint`, show the response message, refresh the document. The server composes the list
+ * per caller and per record state — an action that isn't applicable simply isn't sent — and
+ * the endpoints stay authorization-gated regardless. An action may declare one input `field`
+ * (a select drawing live options from an endpoint, say); its value posts as
+ * `{ [field.field]: value }`.
+ */
+export interface TabDetailAction {
+  id: string;
+  label: string;
+  endpoint: string;
+  /** Confirmation prompt shown before the POST, for consequential actions. */
+  confirm?: string | null;
+  /** Single input rendered beside the button; required — the button stays disabled until set. */
+  field?: TabEditorField | null;
+}
+
 /** The generic drill-down document a tab's `detailEndpoint` returns. */
 export interface TabDetailDocument {
   title: string;
   subtitle?: string;
   sections: TabDetailSection[];
+  /** Commands on this record; present only for callers allowed to invoke them. */
+  actions?: TabDetailAction[];
 }
 
 /** An entry in the chat's agent picker: a tenant profile or a module-shipped agent. */
@@ -633,14 +653,20 @@ export async function apiGet<T>(path: string): Promise<T> {
 }
 
 /**
- * POST for a tab-level action button (empty body). Returns the endpoint's `message` when the
- * response carries one — actions answer with what happened ("Posted 3 transaction(s)…"), and
- * the shell surfaces that instead of a mute refresh.
+ * POST for an action button (tab-level or detail-level; body only when the action carries an
+ * input). Returns the endpoint's `message` when the response carries one — actions answer with
+ * what happened ("Posted 3 transaction(s)…"), and the shell surfaces that instead of a mute
+ * refresh.
  */
-export async function apiAction(path: string): Promise<string | undefined> {
+export async function apiAction(path: string, body?: unknown): Promise<string | undefined> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
-    headers: { Accept: "application/json", ...devAuthHeaders },
+    headers: {
+      Accept: "application/json",
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+      ...devAuthHeaders,
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
     throw await toApiError("POST", path, res);
