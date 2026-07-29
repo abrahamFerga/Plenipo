@@ -2,7 +2,7 @@
 on:
   issues:
     types: [opened, reopened, labeled]
-engine: codex
+engine: copilot
 timeout-minutes: 12
 max-ai-credits: 120K
 permissions:
@@ -16,7 +16,6 @@ tools:
 network:
   allowed:
     - github
-    - api.openai.com
 safe-outputs:
   add-labels:
     allowed:

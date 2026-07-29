@@ -8,7 +8,7 @@ on:
         description: Published Plenipo release tag to assess.
         required: true
         type: string
-engine: codex
+engine: copilot
 timeout-minutes: 15
 max-ai-credits: 160K
 permissions:
@@ -21,7 +21,6 @@ tools:
 network:
   allowed:
     - github
-    - api.openai.com
 safe-outputs:
   allowed-github-references: [abrahamFerga/networthy]
   github-app:

@@ -2,7 +2,7 @@
 on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
-engine: codex
+engine: copilot
 timeout-minutes: 18
 max-ai-credits: 240K
 permissions:
@@ -17,7 +17,6 @@ tools:
 network:
   allowed:
     - github
-    - api.openai.com
 safe-outputs:
   create-pull-request-review-comment:
     max: 8
