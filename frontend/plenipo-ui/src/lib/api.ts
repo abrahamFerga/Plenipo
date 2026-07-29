@@ -429,15 +429,15 @@ export interface AiSettings {
   defaultProvider: string;
   defaultModel: string;
   agentSecurityModeOverride?: "Disabled" | "Audit" | "Enforce" | null;
-  promptShieldEnabledOverride?: boolean | null;
+  promptAttackDetectionEnabledOverride?: boolean | null;
   contentSafetyEnabledOverride?: boolean | null;
   sensitiveDataHandlingOverride?: "Disabled" | "Redact" | "Block" | null;
   defaultAgentSecurityMode: "Disabled" | "Audit" | "Enforce";
-  defaultPromptShieldEnabled: boolean;
+  defaultPromptAttackDetectionEnabled: boolean;
   defaultContentSafetyEnabled: boolean;
   defaultSensitiveDataHandling: "Disabled" | "Redact" | "Block";
   /** Whether the deployment has an Azure AI Content Safety connection available. */
-  externalSecurityDetectorsConfigured: boolean;
+  harmfulContentDetectionConfigured: boolean;
 }
 
 /** A live model catalog fetched from the selected provider. */
@@ -894,7 +894,7 @@ export const api = {
       /** Write-only: undefined/null = keep the stored key, non-empty = replace, "" = clear. */
       apiKey?: string | null;
       agentSecurityMode?: "Disabled" | "Audit" | "Enforce" | null;
-      promptShieldEnabled?: boolean | null;
+      promptAttackDetectionEnabled?: boolean | null;
       contentSafetyEnabled?: boolean | null;
       sensitiveDataHandling?: "Disabled" | "Redact" | "Block" | null;
     }) => apiSend("/api/admin/ai-settings", "PUT", settings),

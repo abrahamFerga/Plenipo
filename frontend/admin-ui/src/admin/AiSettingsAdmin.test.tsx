@@ -18,14 +18,14 @@ const SETTINGS = {
   defaultProvider: "Mock",
   defaultModel: "gpt-4o-mini",
   agentSecurityModeOverride: null,
-  promptShieldEnabledOverride: null,
+  promptAttackDetectionEnabledOverride: null,
   contentSafetyEnabledOverride: null,
   sensitiveDataHandlingOverride: null,
   defaultAgentSecurityMode: "Disabled",
-  defaultPromptShieldEnabled: false,
+  defaultPromptAttackDetectionEnabled: false,
   defaultContentSafetyEnabled: false,
   defaultSensitiveDataHandling: "Disabled",
-  externalSecurityDetectorsConfigured: true,
+  harmfulContentDetectionConfigured: true,
 };
 
 function stubApi() {
@@ -92,7 +92,7 @@ describe("AiSettingsAdmin", () => {
         endpoint: null,
         apiKey: null,
         agentSecurityMode: null,
-        promptShieldEnabled: null,
+        promptAttackDetectionEnabled: null,
         contentSafetyEnabled: null,
         sensitiveDataHandling: null,
       });
@@ -105,7 +105,7 @@ describe("AiSettingsAdmin", () => {
 
     await screen.findByLabelText("Security enforcement");
     fireEvent.change(screen.getByLabelText("Security enforcement"), { target: { value: "Enforce" } });
-    fireEvent.change(screen.getByLabelText("Prompt Shield"), { target: { value: "true" } });
+    fireEvent.change(screen.getByLabelText("Prompt-attack detection"), { target: { value: "true" } });
     fireEvent.change(screen.getByLabelText("Harmful-content screening"), { target: { value: "true" } });
     fireEvent.change(screen.getByLabelText("Sensitive data"), { target: { value: "Redact" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -117,7 +117,7 @@ describe("AiSettingsAdmin", () => {
       const body = JSON.parse((put![1] as RequestInit).body as string);
       expect(body).toMatchObject({
         agentSecurityMode: "Enforce",
-        promptShieldEnabled: true,
+        promptAttackDetectionEnabled: true,
         contentSafetyEnabled: true,
         sensitiveDataHandling: "Redact",
       });

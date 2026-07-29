@@ -16,7 +16,7 @@ interface FormState {
   clearKey: boolean;
   /** Empty strings inherit the deployment policy. */
   securityMode: string;
-  promptShield: string;
+  promptAttackDetection: string;
   contentSafety: string;
   sensitiveDataHandling: string;
 }
@@ -31,7 +31,7 @@ const blankForm: FormState = {
   apiKey: "",
   clearKey: false,
   securityMode: "",
-  promptShield: "",
+  promptAttackDetection: "",
   contentSafety: "",
   sensitiveDataHandling: "",
 };
@@ -67,10 +67,10 @@ export function AiSettingsAdmin() {
         apiKey: "",
         clearKey: false,
         securityMode: settings.data.agentSecurityModeOverride ?? "",
-        promptShield:
-          settings.data.promptShieldEnabledOverride == null
+        promptAttackDetection:
+          settings.data.promptAttackDetectionEnabledOverride == null
             ? ""
-            : String(settings.data.promptShieldEnabledOverride),
+            : String(settings.data.promptAttackDetectionEnabledOverride),
         contentSafety:
           settings.data.contentSafetyEnabledOverride == null
             ? ""
@@ -93,7 +93,8 @@ export function AiSettingsAdmin() {
         apiKey: next.clearKey ? "" : next.apiKey.trim() || null,
         agentSecurityMode:
           (next.securityMode || null) as "Disabled" | "Audit" | "Enforce" | null,
-        promptShieldEnabled: next.promptShield === "" ? null : next.promptShield === "true",
+        promptAttackDetectionEnabled:
+          next.promptAttackDetection === "" ? null : next.promptAttackDetection === "true",
         contentSafetyEnabled: next.contentSafety === "" ? null : next.contentSafety === "true",
         sensitiveDataHandling:
           (next.sensitiveDataHandling || null) as "Disabled" | "Redact" | "Block" | null,
@@ -133,7 +134,7 @@ export function AiSettingsAdmin() {
     apiKey,
     clearKey,
     securityMode,
-    promptShield,
+    promptAttackDetection,
     contentSafety,
     sensitiveDataHandling,
   } = form;
@@ -362,17 +363,17 @@ export function AiSettingsAdmin() {
               </select>
             </div>
             <div className="space-y-1">
-              <label htmlFor="prompt-shield" className="block text-sm font-medium text-slate-700 dark:text-slate-200">
-                Prompt Shield
+              <label htmlFor="prompt-attack-detection" className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                Prompt-attack detection
               </label>
               <select
-                id="prompt-shield"
-                value={promptShield}
-                onChange={(e) => set({ promptShield: e.target.value })}
+                id="prompt-attack-detection"
+                value={promptAttackDetection}
+                onChange={(e) => set({ promptAttackDetection: e.target.value })}
                 className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
               >
-                <option value="">Deployment default ({data.defaultPromptShieldEnabled ? "enabled" : "disabled"})</option>
-                <option value="true" disabled={!data.externalSecurityDetectorsConfigured}>Enabled</option>
+                <option value="">Deployment default ({data.defaultPromptAttackDetectionEnabled ? "enabled" : "disabled"})</option>
+                <option value="true">Enabled</option>
                 <option value="false">Disabled</option>
               </select>
             </div>
@@ -387,15 +388,15 @@ export function AiSettingsAdmin() {
                 className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
               >
                 <option value="">Deployment default ({data.defaultContentSafetyEnabled ? "enabled" : "disabled"})</option>
-                <option value="true" disabled={!data.externalSecurityDetectorsConfigured}>Enabled</option>
+                <option value="true" disabled={!data.harmfulContentDetectionConfigured}>Enabled</option>
                 <option value="false">Disabled</option>
               </select>
             </div>
           </div>
-          {!data.externalSecurityDetectorsConfigured && (
+          {!data.harmfulContentDetectionConfigured && (
             <p className="text-xs text-amber-700 dark:text-amber-400">
-              Prompt Shield and harmful-content screening need the platform operator to configure Azure AI
-              Content Safety. Deterministic sensitive-data redaction and blocking are available now.
+              Harmful-content screening needs the platform operator to configure Azure AI Content Safety.
+              Plenipo prompt-attack detection and deterministic sensitive-data controls are available locally.
             </p>
           )}
           <p className="text-xs text-slate-400">
@@ -476,7 +477,7 @@ export function AiSettingsAdmin() {
                 model === "" &&
                 !data.hasApiKey &&
                 securityMode === "" &&
-                promptShield === "" &&
+                promptAttackDetection === "" &&
                 contentSafety === "" &&
                 sensitiveDataHandling === "")
             }

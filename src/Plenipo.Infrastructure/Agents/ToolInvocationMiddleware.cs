@@ -122,8 +122,8 @@ public sealed class ToolInvocationMiddleware(
                 return result;
             }
 
-            // Tool responses are untrusted retrieved content. Prompt Shields treats them as documents so
-            // indirect instructions are detected before they enter the model's next context.
+            // Tool responses are untrusted retrieved content. Plenipo inspects them locally; when Azure
+            // augmentation is configured, Prompt Shields also treats them as document content.
             var inspection = await agentSecurity.InspectAsync(
                 serializedResult,
                 AgentSecurityStage.ToolOutput,

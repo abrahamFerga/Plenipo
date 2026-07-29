@@ -840,7 +840,7 @@ namespace Plenipo.Infrastructure.Persistence.Migrations.Platform
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<bool?>("PromptShieldEnabled")
+                    b.Property<bool?>("PromptAttackDetectionEnabled")
                         .HasColumnType("boolean");
 
                     b.Property<string>("Provider")

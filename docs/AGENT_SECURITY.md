@@ -34,9 +34,11 @@ Primary sources:
 - [OpenAI Guardrails built-in checks](https://openai.github.io/openai-guardrails-python/)
 - [LangChain guardrails](https://docs.langchain.com/oss/python/langchain/guardrails)
 - [NVIDIA NeMo Guardrails architecture](https://docs.nvidia.com/nemo/guardrails/about-nemo-guardrails-library/how-it-works)
+- [NVIDIA NeMo self-check rails and their limitations](https://docs.nvidia.com/nemo/guardrails/configure-guardrails/guardrail-catalog/self-check)
 - [Anthropic prompt-injection defenses](https://www.anthropic.com/research/prompt-injection-defenses)
 - [Anthropic trustworthy agents](https://www.anthropic.com/research/trustworthy-agents)
 - [OWASP AI Agent Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/AI_Agent_Security_Cheat_Sheet.html)
+- [OWASP Prompt Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html)
 
 ## Cross-framework findings
 
@@ -60,10 +62,40 @@ Primary sources:
    Human approvals, scoped credentials, egress control, tenant isolation, immutable audit, budgets, and loop
    bounds contain the blast radius when a classifier or model fails.
 
+## Open and self-hosted options
+
+Plenipo does not need to make Azure the security boundary. The maintained open ecosystem has useful
+components, but they solve different slices of the problem:
+
+| Project/model | Best use | License/operations | Decision for Plenipo |
+|---|---|---|---|
+| Plenipo prompt guard | Fast first pass for explicit instruction override, role spoofing, authority bypass, prompt extraction, exfiltration, hidden characters, and encoded attacks | In-process .NET; no model, network, or additional license | Built in and always available when prompt-attack detection is enabled |
+| [Llama Prompt Guard 2](https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-22M/blob/main/README.md) | Purpose-trained prompt-injection/jailbreak classification; 22M and multilingual 86M variants | Open weights under the Llama Community license rather than a permissive OSI software license; 512-token context requires chunking | Good optional self-hosted classifier once Plenipo has a generic classifier adapter |
+| [Presidio](https://github.com/data-privacy-stack/presidio) | Semantic PII detection/anonymization with NLP and custom recognizers | MIT; actively maintained by the Data Privacy Stack; normally a Python service/container | Preferred next provider for broad self-hosted PII |
+| [NeMo Guardrails](https://docs.nvidia.com/nemo/guardrails/about-nemo-guardrails-library/overview) | Programmable input/retrieval/tool/output rails and integration with multiple safety models | Apache 2.0 Python framework; substantial parallel orchestration overlap with Plenipo/MAF | Reuse its patterns and models, not a second orchestration runtime |
+| [Granite Guardian](https://github.com/ibm-granite/granite-guardian) | Harm, jailbreak, RAG groundedness, and function-call risk through a dedicated local guardian model | Apache 2.0; heavier 5B/8B models; can be served locally through vLLM, Ollama, or compatible runtimes | Strong candidate for an optional local guard-model provider |
+| [ShieldGemma](https://ai.google.dev/responsible/docs/safeguards/shieldgemma) | Policy-driven input/output content safety | Open weights; model runtime required | Optional content-safety provider, especially when multimodal inspection is added |
+| LLM Guard | Broad scanner catalog | MIT, but the upstream repository is archived and explicitly unmaintained | Do not adopt as a new dependency |
+
+### Why not rely on a security prompt?
+
+A separate self-check prompt is useful as an optional semantic detector, especially when it runs on a
+dedicated local guardian model. It is not a deterministic security boundary:
+
+- The evaluator receives the same adversarial language it is being asked to classify and can itself be injected.
+- Quality depends on the evaluator model and prompt. NeMo explicitly recommends a purpose-built safety model
+  when the LLM does not reliably follow the self-check prompt.
+- A self-check adds inference latency and cost at every inspected boundary.
+- The model still cannot enforce RBAC, approval, confidentiality flow, or safe tool parameters.
+
+Plenipo therefore owns the staged enforcement pipeline and deterministic controls. Prompt/model classifiers
+are replaceable evidence providers inside that pipeline, never the authority that grants a tool permission.
+
 ## Plenipo implementation
 
 Plenipo now has a provider-neutral `IAgentSecurityService` policy pipeline. Tenant overrides live with
-`TenantAiSettings`; the operator owns the external detector connection.
+`TenantAiSettings`. The local prompt and sensitive-data detectors require no external service; the operator
+may add Azure AI Content Safety as defense in depth.
 
 ```mermaid
 flowchart LR
@@ -81,8 +113,13 @@ flowchart LR
 Implemented controls:
 
 - `Disabled`, `Audit`, and `Enforce` modes.
-- Per-tenant Prompt Shield and harmful-content toggles.
-- Azure AI Content Safety integration:
+- Per-tenant prompt-attack and harmful-content toggles.
+- Plenipo prompt-attack detection:
+  - Normalizes HTML entities, compatibility Unicode, whitespace, and invisible control characters.
+  - Scores explicit instruction override, role impersonation, prompt extraction, authority bypass,
+    data-exfiltration, compact/fragmented phrases, and bounded base64-encoded instructions.
+  - Runs on user input, proposed tool arguments, and tool responses without a network or model call.
+- Optional Azure AI Content Safety augmentation:
   - `text:shieldPrompt` for direct user/tool-call attacks and document-style indirect tool-output attacks.
   - `text:analyze` for hate, self-harm, sexual, and violence categories at configurable severity.
   - Managed identity by default; an API key is an optional deployment secret.
@@ -105,11 +142,10 @@ Implemented controls:
 ```json
 {
   "AgentSecurity": {
-    "Provider": "AzureContentSafety",
-    "Endpoint": "https://your-safety-resource.cognitiveservices.azure.com",
+    "Provider": "None",
     "DefaultMode": "Audit",
-    "PromptShieldEnabledByDefault": true,
-    "ContentSafetyEnabledByDefault": true,
+    "PromptAttackDetectionEnabledByDefault": true,
+    "ContentSafetyEnabledByDefault": false,
     "SensitiveDataHandlingByDefault": "Redact",
     "HarmSeverityThreshold": 4,
     "FailClosed": true,
@@ -118,13 +154,15 @@ Implemented controls:
 }
 ```
 
-Use `AgentSecurity__ApiKey` only from user-secrets, environment configuration, or a secret manager.
-On Azure, omit it and grant the workload identity access to the Content Safety resource. The runtime requests
-the `https://cognitiveservices.azure.com/.default` scope.
+This configuration is entirely local. To augment it with Azure Prompt Shields and harmful-content categories,
+set `Provider` to `AzureContentSafety` and set `Endpoint` to the resource URL. Use
+`AgentSecurity__ApiKey` only from user-secrets, environment configuration, or a secret manager. On Azure,
+omit it and grant the workload identity access to the Content Safety resource. The runtime requests the
+`https://cognitiveservices.azure.com/.default` scope.
 
-Tenant admins then choose nullable overrides in **Admin → AI Settings → Agent security**. They cannot enable
-external controls unless the operator connection is configured. Sensitive-data redact/block remains available
-without an external service.
+Tenant admins choose nullable overrides in **Admin → AI Settings → Agent security**. Prompt-attack detection
+and sensitive-data redact/block work without an external service. Harmful-content categories currently require
+the optional Azure connection.
 
 ### Semantics
 
@@ -138,9 +176,11 @@ without an external service.
 
 The current release establishes the enforcement architecture, but it is not the end state:
 
-- The local sensitive-data detector is deliberately deterministic and narrow. Add Azure Language PII,
-  Google Sensitive Data Protection, Presidio, or another semantic DLP provider for names, addresses,
+- The local sensitive-data detector is deliberately deterministic and narrow. Add Presidio, Azure Language
+  PII, Google Sensitive Data Protection, or another semantic DLP provider for names, addresses,
   medical identifiers, locale-specific identity numbers, and custom tenant entity types.
+- Add a generic self-hosted classifier adapter so operators can select Llama Prompt Guard 2 for prompt
+  attacks and Granite Guardian or ShieldGemma for safety categories without changing the policy pipeline.
 - Scan and label content at ingestion time (files, emails, RAG chunks, and MCP metadata), not only when a tool
   returns it. Runtime tool-output shielding prevents execution but does not remove poisoned stored content.
 - Add protected-material text/code detection, groundedness for RAG answers, custom categories/denied topics,
@@ -155,11 +195,12 @@ The current release establishes the enforcement architecture, but it is not the 
 
 ## Recommended rollout
 
-1. Configure Azure AI Content Safety using managed identity and start tenant policy in `Audit`.
+1. Enable Plenipo prompt-attack detection and sensitive-data handling in `Audit`; no external provider is required.
 2. Run representative benign traffic and an adversarial corpus; measure findings, latency, false positives,
    classifier outages, and how often output buffering changes perceived latency.
-3. Tune harm severity and explicitly document accepted content for each product/module.
-4. Move Prompt Shield and sensitive-data controls to `Enforce`; keep high-impact tools RBAC-scoped and
+3. Optionally configure Azure augmentation or a future self-hosted classifier; tune harm thresholds and
+   explicitly document accepted content for each product/module.
+4. Move prompt-attack and sensitive-data controls to `Enforce`; keep high-impact tools RBAC-scoped and
    approval-gated regardless of classifier results.
 5. Add semantic PII and ingestion-time scanning before claiming broad regulatory PII/DLP coverage.
 6. Re-run adversarial tests after any prompt, model, tool, connector, RAG, memory, or provider change.

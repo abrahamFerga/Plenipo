@@ -40,7 +40,10 @@ public sealed class AgentSecurityOptions
 {
     public const string SectionName = "AgentSecurity";
 
-    /// <summary>None or AzureContentSafety.</summary>
+    /// <summary>
+    /// Optional semantic detector augmentation: None or AzureContentSafety. Plenipo's deterministic
+    /// prompt-attack and sensitive-data detectors do not require an external provider.
+    /// </summary>
     public string Provider { get; set; } = "None";
 
     /// <summary>Azure AI Content Safety resource endpoint.</summary>
@@ -53,7 +56,7 @@ public sealed class AgentSecurityOptions
     public string? ApiKey { get; set; }
 
     public AgentSecurityMode DefaultMode { get; set; } = AgentSecurityMode.Disabled;
-    public bool PromptShieldEnabledByDefault { get; set; }
+    public bool PromptAttackDetectionEnabledByDefault { get; set; }
     public bool ContentSafetyEnabledByDefault { get; set; }
     public SensitiveDataHandling SensitiveDataHandlingByDefault { get; set; } = SensitiveDataHandling.Disabled;
 
@@ -76,7 +79,7 @@ public sealed class AgentSecurityOptions
 /// <summary>The tenant's effective policy after deployment defaults and nullable overrides are merged.</summary>
 public sealed record EffectiveAgentSecurityPolicy(
     AgentSecurityMode Mode,
-    bool PromptShieldEnabled,
+    bool PromptAttackDetectionEnabled,
     bool ContentSafetyEnabled,
     SensitiveDataHandling SensitiveDataHandling,
     bool FailClosed,
@@ -85,7 +88,7 @@ public sealed record EffectiveAgentSecurityPolicy(
 {
     public static EffectiveAgentSecurityPolicy Disabled { get; } = new(
         AgentSecurityMode.Disabled,
-        PromptShieldEnabled: false,
+        PromptAttackDetectionEnabled: false,
         ContentSafetyEnabled: false,
         SensitiveDataHandling.Disabled,
         FailClosed: true,
@@ -93,7 +96,8 @@ public sealed record EffectiveAgentSecurityPolicy(
         MaxInspectionCharacters: 100_000);
 
     public bool IsEnabled => Mode != AgentSecurityMode.Disabled &&
-        (PromptShieldEnabled || ContentSafetyEnabled || SensitiveDataHandling != SensitiveDataHandling.Disabled);
+        (PromptAttackDetectionEnabled || ContentSafetyEnabled ||
+         SensitiveDataHandling != SensitiveDataHandling.Disabled);
 
     /// <summary>
     /// Enforced output checks need the complete answer before any token is released; audit-only checks do not.
@@ -110,7 +114,7 @@ public sealed record EffectiveAgentSecurityPolicy(
 
         return new(
             mode,
-            row?.PromptShieldEnabled ?? defaults.PromptShieldEnabledByDefault,
+            row?.PromptAttackDetectionEnabled ?? defaults.PromptAttackDetectionEnabledByDefault,
             row?.ContentSafetyEnabled ?? defaults.ContentSafetyEnabledByDefault,
             sensitiveData,
             defaults.FailClosed,
@@ -141,7 +145,7 @@ public sealed record AgentSecurityInspection
 /// <summary>Provider-neutral runtime contract used at user, tool, retrieval, and model-output boundaries.</summary>
 public interface IAgentSecurityService
 {
-    public bool ExternalDetectorsConfigured { get; }
+    public bool HarmfulContentDetectionConfigured { get; }
 
     public Task<AgentSecurityInspection> InspectAsync(
         string text,
@@ -169,10 +173,9 @@ public static class AgentSecuritySettingsValidator
             errors.Add("AgentSecurity:Endpoint must be an absolute HTTPS URL when Provider is AzureContentSafety.");
         }
 
-        if ((options.PromptShieldEnabledByDefault || options.ContentSafetyEnabledByDefault) &&
-            !options.IsAzureContentSafetyConfigured)
+        if (options.ContentSafetyEnabledByDefault && !options.IsAzureContentSafetyConfigured)
         {
-            errors.Add("Default Prompt Shield or content-safety controls require a configured AzureContentSafety provider.");
+            errors.Add("Default content-safety screening requires a configured AzureContentSafety provider.");
         }
 
         if (options.HarmSeverityThreshold is not (2 or 4 or 6))
@@ -191,7 +194,6 @@ public static class AgentSecuritySettingsValidator
     public static string? ValidateTenantOverrides(
         string? mode,
         string? sensitiveDataHandling,
-        bool? promptShieldEnabled,
         bool? contentSafetyEnabled,
         bool externalDetectorsConfigured)
     {
@@ -206,9 +208,9 @@ public static class AgentSecuritySettingsValidator
             return $"sensitiveDataHandling must be one of: {string.Join(", ", Enum.GetNames<SensitiveDataHandling>())}.";
         }
 
-        if ((promptShieldEnabled == true || contentSafetyEnabled == true) && !externalDetectorsConfigured)
+        if (contentSafetyEnabled == true && !externalDetectorsConfigured)
         {
-            return "Prompt Shield and harmful-content screening require a configured Azure AI Content Safety deployment.";
+            return "Harmful-content screening requires a configured Azure AI Content Safety deployment.";
         }
 
         return null;
