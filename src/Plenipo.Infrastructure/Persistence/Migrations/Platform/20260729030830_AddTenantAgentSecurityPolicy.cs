@@ -26,7 +26,7 @@ namespace Plenipo.Infrastructure.Persistence.Migrations.Platform
                 nullable: true);
 
             migrationBuilder.AddColumn<bool>(
-                name: "PromptShieldEnabled",
+                name: "PromptAttackDetectionEnabled",
                 schema: "platform",
                 table: "tenant_ai_settings",
                 type: "boolean",
@@ -55,7 +55,7 @@ namespace Plenipo.Infrastructure.Persistence.Migrations.Platform
                 table: "tenant_ai_settings");
 
             migrationBuilder.DropColumn(
-                name: "PromptShieldEnabled",
+                name: "PromptAttackDetectionEnabled",
                 schema: "platform",
                 table: "tenant_ai_settings");
 

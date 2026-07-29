@@ -347,10 +347,10 @@ public static class AdminEndpoints
                 row?.Provider, row?.Model, row?.Endpoint, row?.ApiKeySecretRef is not null,
                 defaults.SystemPrompt, defaults.MaxConversationTokens, defaults.MaxMonthlyTokens,
                 defaults.Provider, defaults.Model,
-                row?.AgentSecurityMode, row?.PromptShieldEnabled, row?.ContentSafetyEnabled,
+                row?.AgentSecurityMode, row?.PromptAttackDetectionEnabled, row?.ContentSafetyEnabled,
                 row?.SensitiveDataHandling,
                 securityDefaults.DefaultMode.ToString(),
-                securityDefaults.PromptShieldEnabledByDefault,
+                securityDefaults.PromptAttackDetectionEnabledByDefault,
                 securityDefaults.ContentSafetyEnabledByDefault,
                 securityDefaults.SensitiveDataHandlingByDefault.ToString(),
                 securityDefaults.IsAzureContentSafetyConfigured));
@@ -452,7 +452,6 @@ public static class AdminEndpoints
             if (AgentSecuritySettingsValidator.ValidateTenantOverrides(
                     securityMode,
                     sensitiveDataHandling,
-                    body.PromptShieldEnabled,
                     body.ContentSafetyEnabled,
                     agentSecurity.Value.IsAzureContentSafetyConfigured) is { } securityError)
             {
@@ -502,7 +501,7 @@ public static class AdminEndpoints
             row.Model = model;
             row.Endpoint = endpoint;
             row.AgentSecurityMode = securityMode;
-            row.PromptShieldEnabled = body.PromptShieldEnabled;
+            row.PromptAttackDetectionEnabled = body.PromptAttackDetectionEnabled;
             row.ContentSafetyEnabled = body.ContentSafetyEnabled;
             row.SensitiveDataHandling = sensitiveDataHandling;
 
@@ -1338,16 +1337,16 @@ public static class AdminEndpoints
         string? ProviderOverride, string? ModelOverride, string? EndpointOverride, bool HasApiKey,
         string DefaultSystemPrompt, int DefaultMaxConversationTokens, long DefaultMaxMonthlyTokens,
         string DefaultProvider, string DefaultModel,
-        string? AgentSecurityModeOverride, bool? PromptShieldEnabledOverride, bool? ContentSafetyEnabledOverride,
+        string? AgentSecurityModeOverride, bool? PromptAttackDetectionEnabledOverride, bool? ContentSafetyEnabledOverride,
         string? SensitiveDataHandlingOverride,
-        string DefaultAgentSecurityMode, bool DefaultPromptShieldEnabled, bool DefaultContentSafetyEnabled,
-        string DefaultSensitiveDataHandling, bool ExternalSecurityDetectorsConfigured);
+        string DefaultAgentSecurityMode, bool DefaultPromptAttackDetectionEnabled, bool DefaultContentSafetyEnabled,
+        string DefaultSensitiveDataHandling, bool HarmfulContentDetectionConfigured);
 
     /// <summary>ApiKey is write-only: null = keep the stored key, non-empty = replace, "" = clear.</summary>
     private sealed record AiSettingsRequest(
         string? SystemPrompt, int? MaxConversationTokens, long? MaxMonthlyTokens,
         string? Provider, string? Model, string? Endpoint, string? ApiKey,
-        string? AgentSecurityMode, bool? PromptShieldEnabled, bool? ContentSafetyEnabled,
+        string? AgentSecurityMode, bool? PromptAttackDetectionEnabled, bool? ContentSafetyEnabled,
         string? SensitiveDataHandling);
 
     private sealed record AiModelCatalogRequest(string? Provider, string? Endpoint, string? ApiKey);

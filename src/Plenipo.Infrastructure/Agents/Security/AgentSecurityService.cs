@@ -6,15 +6,15 @@ using Plenipo.Application.Ai;
 namespace Plenipo.Infrastructure.Agents.Security;
 
 /// <summary>
-/// Provider-neutral policy engine. Deterministic sensitive-data handling runs before any external call so
-/// detected values are never sent to the safety classifier. Azure provides semantic prompt-attack and harm
-/// classification when configured.
+/// Provider-neutral policy engine. Plenipo's deterministic sensitive-data and prompt-attack checks run
+/// locally before any external call. Azure optionally adds a separately trained prompt-attack classifier
+/// and harmful-content categories when configured.
 /// </summary>
 internal sealed class AgentSecurityService(
     AzureContentSafetyClient azure,
     ILogger<AgentSecurityService> logger) : IAgentSecurityService
 {
-    public bool ExternalDetectorsConfigured => azure.IsConfigured;
+    public bool HarmfulContentDetectionConfigured => azure.IsConfigured;
 
     public async Task<AgentSecurityInspection> InspectAsync(
         string text,
@@ -78,8 +78,28 @@ internal sealed class AgentSecurityService(
 
         // Even in audit mode, keep locally recognized sensitive values out of the external classifier.
         var externalText = sensitive.HasMatches ? sensitive.RedactedText : text;
-        var externalControlEnabled = policy.PromptShieldEnabled || policy.ContentSafetyEnabled;
-        if (externalControlEnabled && !azure.IsConfigured)
+        var inspectPromptAttack = ShouldInspectPromptAttack(policy, stage);
+        if (inspectPromptAttack)
+        {
+            var promptAttack = PlenipoPromptAttackDetector.Detect(externalText);
+            findings.AddRange(promptAttack.Categories.Select(category =>
+                new AgentSecurityFinding("PlenipoPromptGuard", category)));
+            if (promptAttack.AttackDetected && policy.Mode == AgentSecurityMode.Enforce)
+            {
+                return new AgentSecurityInspection
+                {
+                    Text = protectedText,
+                    Modified = !string.Equals(text, protectedText, StringComparison.Ordinal),
+                    Blocked = true,
+                    Findings = findings,
+                };
+            }
+        }
+
+        // Plenipo prompt-attack detection is always available in-process. Azure is required only for
+        // harmful-content categories; when configured, its Prompt Shields classifier also runs as an
+        // optional second opinion for prompt attacks.
+        if (policy.ContentSafetyEnabled && !azure.IsConfigured)
         {
             findings.Add(new AgentSecurityFinding("AzureContentSafety", "Unavailable"));
             var failClosed = policy.Mode == AgentSecurityMode.Enforce && policy.FailClosed;
@@ -93,16 +113,17 @@ internal sealed class AgentSecurityService(
             };
         }
 
+        var azureControlEnabled = policy.ContentSafetyEnabled || (inspectPromptAttack && azure.IsConfigured);
         try
         {
-            var shieldTask = ShouldRunPromptShield(policy, stage)
+            var shieldTask = azureControlEnabled && inspectPromptAttack
                 ? azure.DetectPromptAttackAsync(
                     externalText,
                     treatAsDocument: stage == AgentSecurityStage.ToolOutput,
                     cancellationToken)
                 : Task.FromResult(false);
 
-            var harmTask = policy.ContentSafetyEnabled
+            var harmTask = azureControlEnabled && policy.ContentSafetyEnabled
                 ? azure.AnalyzeHarmAsync(externalText, policy.HarmSeverityThreshold, cancellationToken)
                 : Task.FromResult<IReadOnlyList<string>>([]);
 
@@ -149,7 +170,7 @@ internal sealed class AgentSecurityService(
         };
     }
 
-    private static bool ShouldRunPromptShield(EffectiveAgentSecurityPolicy policy, AgentSecurityStage stage) =>
-        policy.PromptShieldEnabled &&
+    private static bool ShouldInspectPromptAttack(EffectiveAgentSecurityPolicy policy, AgentSecurityStage stage) =>
+        policy.PromptAttackDetectionEnabled &&
         stage is AgentSecurityStage.UserInput or AgentSecurityStage.ToolInput or AgentSecurityStage.ToolOutput;
 }

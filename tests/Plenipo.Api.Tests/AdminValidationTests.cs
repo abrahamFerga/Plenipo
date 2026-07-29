@@ -89,13 +89,25 @@ public sealed class AdminValidationTests : IClassFixture<PlenipoApiFactory>
     }
 
     [Fact]
-    public async Task AiSettings_rejects_prompt_shields_when_the_external_service_is_not_configured()
+    public async Task AiSettings_accepts_local_prompt_attack_detection_without_an_external_service()
     {
         var client = Operator("val-security-unavailable");
 
         var response = await client.PutAsJsonAsync(
             "/api/admin/ai-settings",
-            new { agentSecurityMode = "Enforce", promptShieldEnabled = true });
+            new { agentSecurityMode = "Enforce", promptAttackDetectionEnabled = true });
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AiSettings_rejects_content_safety_when_the_external_service_is_not_configured()
+    {
+        var client = Operator("val-content-safety-unavailable");
+
+        var response = await client.PutAsJsonAsync(
+            "/api/admin/ai-settings",
+            new { agentSecurityMode = "Enforce", contentSafetyEnabled = true });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Contains("Content Safety", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);

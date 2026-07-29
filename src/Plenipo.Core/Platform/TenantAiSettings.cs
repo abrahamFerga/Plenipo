@@ -44,7 +44,7 @@ public sealed class TenantAiSettings : EntityBase, ITenantOwned
     public string? AgentSecurityMode { get; set; }
 
     /// <summary>Enable direct and indirect prompt-attack detection. Null = deployment default.</summary>
-    public bool? PromptShieldEnabled { get; set; }
+    public bool? PromptAttackDetectionEnabled { get; set; }
 
     /// <summary>Enable harmful-content classification on agent boundaries. Null = deployment default.</summary>
     public bool? ContentSafetyEnabled { get; set; }

@@ -82,7 +82,7 @@ and change without a deploy.
 | Section | Purpose | Notes |
 |---------|---------|-------|
 | `Ai` | The keyless DEPLOYMENT-DEFAULT chat provider: `Provider` (Mock/AzureOpenAI with managed identity/Ollama/None), `Model`, `Endpoint`, `Temperature`, `MaxOutputTokens`, `MaxConversationTokens`, `MaxMonthlyTokens` | `Mock` exercises the full pipeline. Commercial provider/model/key connections are configured per tenant in Admin → AI Settings; model catalogs are provider-discovered and keys are vaulted write-only. Agent profiles can pin a model. See [SAAS_OPERATIONS.md](SAAS_OPERATIONS.md). |
-| `AgentSecurity` | Provider-neutral agent guardrail defaults plus the operator-owned Azure AI Content Safety connection | `Provider=None/AzureContentSafety`, `Endpoint`, optional `ApiKey`, `DefaultMode=Disabled/Audit/Enforce`, Prompt Shield/content-safety defaults, sensitive-data handling, severity threshold, fail-closed behavior. Tenant admins choose nullable overrides in Admin → AI Settings. See [AGENT_SECURITY.md](AGENT_SECURITY.md). |
+| `AgentSecurity` | Plenipo-owned agent guardrails plus optional operator-owned Azure AI Content Safety augmentation | `Provider=None/AzureContentSafety`, `Endpoint`, optional `ApiKey`, `DefaultMode=Disabled/Audit/Enforce`, local prompt-attack detection, optional Azure harmful-content screening, sensitive-data handling, severity threshold, fail-closed behavior. Tenant admins choose nullable overrides in Admin → AI Settings. See [AGENT_SECURITY.md](AGENT_SECURITY.md). |
 | `Rag` | `Enabled`, `EmbeddingProvider`, `EmbeddingModel` | Mock embedder is deterministic and keyless |
 | `Skills` | `Enabled`, `Path` | Deploy-time SKILL.md bundles shipped with the host — never tenant uploads |
 | `Mcp` | `Servers` — external MCP tool servers (name, transport, command/url, approval) | Deploy-time, like skills; each discovered tool is RBAC-gated as `tools.mcp.*` |
@@ -197,7 +197,8 @@ Everything below is stored in the database, editable at `/admin` without a deplo
   (append/replace), which is default, which tools the agent may use, and its own model.
 - **AI Settings** — the tenant's provider connection (switch provider/model at runtime; API key
   vaulted write-only), tenant system prompt, per-conversation and monthly token budgets, and agent
-  security policy (audit/enforce, Prompt Shield, harmful-content screening, sensitive-data redact/block).
+  security policy (audit/enforce, local prompt-attack detection, optional harmful-content screening,
+  sensitive-data redact/block).
 - **Integrations** — connector enablement + credentials (vault-protected, write-only).
 - **Roles / Users / Security** — the runtime-editable RBAC baselines and the live permission map.
 - **Notifications** — webhook delivery + signing secret.

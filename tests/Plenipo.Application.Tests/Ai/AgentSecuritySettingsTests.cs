@@ -11,14 +11,14 @@ public sealed class AgentSecuritySettingsTests
         var defaults = new AgentSecurityOptions
         {
             DefaultMode = AgentSecurityMode.Audit,
-            PromptShieldEnabledByDefault = true,
+            PromptAttackDetectionEnabledByDefault = true,
             ContentSafetyEnabledByDefault = false,
             SensitiveDataHandlingByDefault = SensitiveDataHandling.Redact,
         };
         var tenant = new TenantAiSettings
         {
             AgentSecurityMode = "Enforce",
-            PromptShieldEnabled = false,
+            PromptAttackDetectionEnabled = false,
             ContentSafetyEnabled = true,
             SensitiveDataHandling = "Block",
         };
@@ -26,24 +26,35 @@ public sealed class AgentSecuritySettingsTests
         var policy = EffectiveAgentSecurityPolicy.Merge(tenant, defaults);
 
         Assert.Equal(AgentSecurityMode.Enforce, policy.Mode);
-        Assert.False(policy.PromptShieldEnabled);
+        Assert.False(policy.PromptAttackDetectionEnabled);
         Assert.True(policy.ContentSafetyEnabled);
         Assert.Equal(SensitiveDataHandling.Block, policy.SensitiveDataHandling);
         Assert.True(policy.RequiresOutputBuffering);
     }
 
     [Fact]
-    public void EnablingExternalControlsWithoutAConfiguredService_IsRejected()
+    public void EnablingContentSafetyWithoutAConfiguredService_IsRejected()
     {
         var error = AgentSecuritySettingsValidator.ValidateTenantOverrides(
             mode: "Enforce",
             sensitiveDataHandling: "Redact",
-            promptShieldEnabled: true,
-            contentSafetyEnabled: false,
+            contentSafetyEnabled: true,
             externalDetectorsConfigured: false);
 
         Assert.NotNull(error);
         Assert.Contains("Azure AI Content Safety", error);
+    }
+
+    [Fact]
+    public void EnablingPromptAttackDetectionWithoutAConfiguredService_IsAllowed()
+    {
+        var error = AgentSecuritySettingsValidator.ValidateTenantOverrides(
+            mode: "Enforce",
+            sensitiveDataHandling: "Redact",
+            contentSafetyEnabled: false,
+            externalDetectorsConfigured: false);
+
+        Assert.Null(error);
     }
 
     [Theory]
@@ -54,7 +65,6 @@ public sealed class AgentSecuritySettingsTests
         var error = AgentSecuritySettingsValidator.ValidateTenantOverrides(
             mode,
             sensitive,
-            promptShieldEnabled: null,
             contentSafetyEnabled: null,
             externalDetectorsConfigured: false);
 
