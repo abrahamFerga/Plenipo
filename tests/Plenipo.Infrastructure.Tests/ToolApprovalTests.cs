@@ -141,7 +141,7 @@ public sealed class ToolApprovalTests
 
     private sealed class RedactingSecurityService : IAgentSecurityService
     {
-        public bool ExternalDetectorsConfigured => false;
+        public bool HarmfulContentDetectionConfigured => false;
 
         public Task<AgentSecurityInspection> InspectAsync(
             string text,
