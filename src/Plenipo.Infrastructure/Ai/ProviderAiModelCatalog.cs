@@ -4,7 +4,12 @@ using Plenipo.Application.Ai;
 
 namespace Plenipo.Infrastructure.Ai;
 
-/// <summary>Fetches provider-owned model catalogs; no model ids are compiled into Plenipo.</summary>
+/// <summary>
+/// Fetches provider-owned model catalogs. Plenipo carries no hardcoded model LIST that could drift
+/// behind a provider — the ids always come from the provider. The one piece of compiled-in knowledge
+/// is <see cref="OpenAiChatModelFilter"/>, which narrows OpenAI's multi-modal catalog to the models a
+/// chat assistant can actually use; see that type for why name patterns are the only signal available.
+/// </summary>
 public sealed class ProviderAiModelCatalog(IHttpClientFactory clients) : IAiModelCatalog
 {
     public const string HttpClientName = "Plenipo.Ai.ModelCatalog";
@@ -17,11 +22,15 @@ public sealed class ProviderAiModelCatalog(IHttpClientFactory clients) : IAiMode
     {
         return provider switch
         {
+            // Only OpenAI is filtered: its catalog is the one that spans every modality. Ollama
+            // shares this helper and must stay unfiltered — its ids are arbitrary local names that
+            // the chat-family gate would reject wholesale.
             "OpenAI" => await GetOpenAiCompatibleAsync(
-                new Uri("https://api.openai.com/v1/models"), apiKey, cancellationToken),
+                new Uri("https://api.openai.com/v1/models"), apiKey,
+                OpenAiChatModelFilter.IsChatCompletionModel, cancellationToken),
             "Anthropic" => await GetAnthropicAsync(apiKey, cancellationToken),
             "Ollama" => await GetOpenAiCompatibleAsync(
-                ModelsUri(RequireEndpoint(endpoint, provider)), null, cancellationToken),
+                ModelsUri(RequireEndpoint(endpoint, provider)), null, keep: null, cancellationToken),
             "AzureOpenAI" => new([], false,
                 "Azure OpenAI uses deployment names. Enter the deployment name configured in your Azure resource."),
             "Mock" => new([], false, "The Mock provider does not expose a model catalog."),
@@ -31,7 +40,7 @@ public sealed class ProviderAiModelCatalog(IHttpClientFactory clients) : IAiMode
     }
 
     private async Task<AiModelCatalogResult> GetOpenAiCompatibleAsync(
-        Uri uri, string? apiKey, CancellationToken cancellationToken)
+        Uri uri, string? apiKey, Func<string, bool>? keep, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, uri);
         if (!string.IsNullOrWhiteSpace(apiKey))
@@ -43,7 +52,22 @@ public sealed class ProviderAiModelCatalog(IHttpClientFactory clients) : IAiMode
         await EnsureSuccessAsync(response, cancellationToken);
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-        return new(ReadIds(document.RootElement));
+
+        var all = ReadIds(document.RootElement, keep: null);
+        if (keep is null)
+        {
+            return new(all);
+        }
+
+        // Say what was hidden. A narrowed list with no note reads as "this is everything the provider
+        // has", and the admin never learns that typing an id by hand is still available to them.
+        var models = ReadIds(document.RootElement, keep);
+        var hidden = all.Length - models.Length;
+        return new(models, true, hidden == 0
+            ? null
+            : $"Showing {models.Length} chat-capable model(s); {hidden} non-chat model(s) " +
+              "(image, audio, embedding, moderation, legacy completions) were hidden. You can still " +
+              "enter a model id by hand.");
     }
 
     private async Task<AiModelCatalogResult> GetAnthropicAsync(string? apiKey, CancellationToken cancellationToken)
@@ -56,10 +80,15 @@ public sealed class ProviderAiModelCatalog(IHttpClientFactory clients) : IAiMode
         await EnsureSuccessAsync(response, cancellationToken);
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-        return new(ReadIds(document.RootElement));
+        return new(ReadIds(document.RootElement, keep: null));
     }
 
-    private static string[] ReadIds(JsonElement root)
+    /// <summary>
+    /// The provider's ids, deduped and sorted. <paramref name="keep"/> is applied BEFORE the 1000-id
+    /// cap on purpose: filtering after truncation would drop chat models that fell past the
+    /// alphabetical cut on an account with a very large catalog.
+    /// </summary>
+    private static string[] ReadIds(JsonElement root, Func<string, bool>? keep)
     {
         if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
         {
@@ -70,6 +99,7 @@ public sealed class ProviderAiModelCatalog(IHttpClientFactory clients) : IAiMode
             .Select(item => item.TryGetProperty("id", out var id) ? id.GetString() : null)
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Select(id => id!)
+            .Where(id => keep is null || keep(id))
             .Distinct(StringComparer.Ordinal)
             .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
             .Take(1000)

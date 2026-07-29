@@ -3,6 +3,8 @@ using Plenipo.Application.Files;
 using Plenipo.Application.Modules;
 using Plenipo.Application.Skills;
 using Plenipo.Core.Identity;
+using Plenipo.Core.Multitenancy;
+using Plenipo.Core.Platform;
 using Plenipo.Modules.Sdk;
 using Microsoft.Extensions.Options;
 
@@ -54,19 +56,36 @@ public static class PlatformEndpoints
             .AllowAnonymous()
             .WithName("Platform_Branding");
 
-        // Deployment-level facts the shell uses to set expectations (e.g. a "demo mode" banner when the
-        // chat assistant is running on the dependency-free Mock provider rather than a real LLM).
-        group.MapGet("/info", (IOptions<AiOptions> ai, IOptions<FileStorageOptions> files) =>
+        // Facts the shell uses to set expectations (e.g. a "demo mode" banner when the chat assistant
+        // is running on the dependency-free Mock provider rather than a real LLM).
+        //
+        // chatEnabled and demoMode are TENANT-EFFECTIVE, not deployment-level. They were written when
+        // AI configuration was deployment-only; runtime per-tenant provider switching landed days
+        // later and this endpoint never caught up. Reading the deployment defaults meant a tenant that
+        // configured a real provider kept seeing the demo banner, and — worse — a tenant that set
+        // Provider = "None" still got a Chat tab that only admitted the truth mid-turn.
+        group.MapGet("/info", async (
+            ITenantAiSettings aiSettings, IOptions<AiOptions> ai, IOptions<FileStorageOptions> files,
+            ITenantContext tenant, CancellationToken ct) =>
         {
-            var options = ai.Value;
+            // A resolved tenant is the normal case. Authenticated-without-tenant can still reach here
+            // (the endpoint needs no permission), and resolving then would query for a row that cannot
+            // exist — so answer from the deployment defaults explicitly rather than leaning on how EF
+            // translates a null tenant filter.
+            // The cast disambiguates Merge's overloads — the other takes three nullable overrides.
+            var effective = tenant.TenantId is null
+                ? EffectiveAiSettings.Merge((TenantAiSettings?)null, ai.Value)
+                : await aiSettings.ResolveAsync(ct);
+
             return Results.Ok(new PlatformInfoDto(
-                ChatEnabled: options.IsEnabled,
-                DemoMode: string.Equals(options.Provider, AiProviders.Mock, StringComparison.OrdinalIgnoreCase),
+                ChatEnabled: effective.IsEnabled,
+                DemoMode: string.Equals(effective.Provider, AiProviders.Mock, StringComparison.OrdinalIgnoreCase),
                 // Published so the composer can refuse an oversized attachment BEFORE uploading —
                 // the same limit FileEndpoints enforces with a 413.
                 MaxUploadBytes: files.Value.MaxUploadBytes,
-                // The chat's model picker choices; the runner enforces the same list per turn.
-                AvailableModels: options.AvailableModels.ToArray()));
+                // The chat's model picker choices; the runner enforces the same list per turn. Still
+                // deployment-level by design — Merge copies it from the defaults with no tenant override.
+                AvailableModels: effective.AvailableModels.ToArray()));
         })
         .WithName("Platform_GetInfo");
     }

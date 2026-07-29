@@ -49,7 +49,7 @@ public static class AdminEndpoints
         // aggregation over tenant-scoped tables — one call for the whole picture.
         group.MapGet("/ops", async (
             PlatformDbContext db, ITokenUsageReader usage, ITenantAiSettings aiSettings,
-            IOptions<AiOptions> ai, CancellationToken ct) =>
+            CancellationToken ct) =>
         {
             var now = DateTimeOffset.UtcNow;
             var dayAgo = now.AddHours(-24);
@@ -94,7 +94,13 @@ public static class AdminEndpoints
                 connectors,
                 new OpsRagDto(ragCollections, ragChunks, lastIngestAt),
                 new OpsNotificationsDto(webhookConfigured),
-                new OpsAiDto(ai.Value.Provider, ai.Value.Model, monthTokens, effective.MaxMonthlyTokens)));
+                // Every field tenant-effective, from the same resolved settings. The card used to take
+                // provider/model from the DEPLOYMENT options while taking the budget from the tenant,
+                // so an admin whose tenant runs OpenAI read "Mock / gpt-4o-mini" beside a token count
+                // that was really OpenAI spend — one unlabelled card contradicting itself at a glance.
+                // /api/admin/ai-settings is the surface that legitimately shows both, and it keeps them
+                // in separate, named fields (providerOverride vs defaultProvider) rather than merging.
+                new OpsAiDto(effective.Provider, effective.Model, monthTokens, effective.MaxMonthlyTokens)));
         })
         .RequireAuthorization(PermissionRequirement.PolicyName(Permissions.ViewAuditLog))
         .WithName("Admin_Ops");

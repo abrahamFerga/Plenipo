@@ -25,6 +25,41 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   `Options: ["checking", "savings"]` is unchanged; an existing array spreads with
   `Options: [.. codes]`.
 
+### Fixed
+
+- **`GET /api/platform/info` and the ops AI card now report the TENANT's provider, not the
+  deployment's.** Both were written when AI configuration was deployment-only; runtime per-tenant
+  provider switching landed days later and neither surface caught up. Consequences a product hit in
+  the field: a tenant that configured a real provider kept being shown the "Demo mode" banner, a
+  tenant that set `Provider = "None"` still got a Chat tab and only learned otherwise mid-turn, and
+  `/api/admin/ops` showed the deployment's provider/model beside the tenant's real token spend — one
+  unlabelled card contradicting itself at a glance. `/api/admin/ai-settings` is the surface that
+  legitimately shows both, and it keeps them in separate named fields rather than merging them.
+
+  `/info` needs authentication but no permission, so it stays reachable without a resolved tenant; in
+  that case it answers from the deployment defaults explicitly rather than depending on how a null
+  tenant filter translates.
+
+- **The OpenAI model catalog is narrowed to chat-capable models.** `POST /api/admin/ai-models`
+  returned OpenAI's whole account-wide catalog — image, TTS, transcription, embeddings, moderation,
+  legacy completions, well over a hundred ids — so the admin's model picker offered `dall-e-3` for a
+  chat assistant. Filtering happens in the OpenAI arm only (Anthropic publishes nothing but chat
+  models; Ollama's ids are arbitrary local names that a chat-family gate would reject wholesale) and
+  **before** the 1000-id cap, so a large catalog no longer loses chat models past the alphabetical cut.
+
+  It is not silent: `AiModelCatalogResult.Message` reports how many were hidden and points at the
+  type-an-id-by-hand escape hatch. OpenAI's `/v1/models` exposes no capability field, so name
+  patterns are the only signal available and will need occasional amendment — see
+  `OpenAiChatModelFilter`. Pinned dated snapshots (`gpt-4.1-2025-04-14`) are deliberately KEPT:
+  suppressing them would be a reproducibility policy dressed up as a capability fact.
+
+- **AI Settings no longer offers a "Default" model for a provider that cannot inherit one.** The
+  Model dropdown promised `Default: <deployment model>` for every provider and let you save it; the
+  server then rejected the entire save. The server is right — a model is part of a *connection*, like
+  the endpoint and the key, and a deployment may not default to OpenAI or Anthropic at all, so the
+  deployment's model id belongs to a different provider. The form now mirrors that rule, disables
+  Save, and says why, instead of sending a request guaranteed to 400.
+
 ### Added
 
 - **A mobile app — `@plenipo/mobile`, the same manifest rendered natively.** A React Native / Expo
