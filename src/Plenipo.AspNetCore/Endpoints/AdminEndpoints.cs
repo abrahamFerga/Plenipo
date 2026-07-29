@@ -1,3 +1,7 @@
+using System.Text.Json;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Plenipo.Application.Ai;
 using Plenipo.Application.Auditing;
 using Plenipo.Application.Authorization;
@@ -10,10 +14,6 @@ using Plenipo.Core.Identity;
 using Plenipo.Core.Platform;
 using Plenipo.Infrastructure.Ai;
 using Plenipo.Infrastructure.Persistence;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
-using System.Text.Json;
 
 namespace Plenipo.AspNetCore.Endpoints;
 
@@ -333,15 +333,27 @@ public static class AdminEndpoints
     {
         // The tenant's AI overrides plus the deployment defaults (so the UI can show "override or default").
         // The API key is write-only: the response only ever says whether one is on file.
-        group.MapGet("/ai-settings", async (PlatformDbContext db, IOptions<AiOptions> ai, CancellationToken ct) =>
+        group.MapGet("/ai-settings", async (
+            PlatformDbContext db,
+            IOptions<AiOptions> ai,
+            IOptions<AgentSecurityOptions> agentSecurity,
+            CancellationToken ct) =>
         {
             var row = await db.TenantAiSettings.FirstOrDefaultAsync(ct);
             var defaults = ai.Value;
+            var securityDefaults = agentSecurity.Value;
             return Results.Ok(new AiSettingsDto(
                 row?.SystemPrompt, row?.MaxConversationTokens, row?.MaxMonthlyTokens,
                 row?.Provider, row?.Model, row?.Endpoint, row?.ApiKeySecretRef is not null,
                 defaults.SystemPrompt, defaults.MaxConversationTokens, defaults.MaxMonthlyTokens,
-                defaults.Provider, defaults.Model));
+                defaults.Provider, defaults.Model,
+                row?.AgentSecurityMode, row?.PromptShieldEnabled, row?.ContentSafetyEnabled,
+                row?.SensitiveDataHandling,
+                securityDefaults.DefaultMode.ToString(),
+                securityDefaults.PromptShieldEnabledByDefault,
+                securityDefaults.ContentSafetyEnabledByDefault,
+                securityDefaults.SensitiveDataHandlingByDefault.ToString(),
+                securityDefaults.IsAzureContentSafetyConfigured));
         })
         .RequireAuthorization(PermissionRequirement.PolicyName(Permissions.ManageAiSettings))
         .WithName("Admin_AiSettings");
@@ -411,7 +423,9 @@ public static class AdminEndpoints
         // agent runner applies all of this on the very next turn; the change is auto-audited.
         group.MapPut("/ai-settings", async (
             [FromBody] AiSettingsRequest body, PlatformDbContext db, ISecretVault vault,
-            ICurrentUser current, OutboundUrlPolicy outboundUrls, CancellationToken ct) =>
+            ICurrentUser current, OutboundUrlPolicy outboundUrls,
+            IOptions<AgentSecurityOptions> agentSecurity,
+            CancellationToken ct) =>
         {
             if (current.TenantId is not Guid tenantId)
             {
@@ -428,6 +442,30 @@ public static class AdminEndpoints
             var provider = string.IsNullOrWhiteSpace(body.Provider) ? null : body.Provider.Trim();
             var model = string.IsNullOrWhiteSpace(body.Model) ? null : body.Model.Trim();
             var endpoint = string.IsNullOrWhiteSpace(body.Endpoint) ? null : body.Endpoint.Trim();
+            var securityMode = string.IsNullOrWhiteSpace(body.AgentSecurityMode)
+                ? null
+                : body.AgentSecurityMode.Trim();
+            var sensitiveDataHandling = string.IsNullOrWhiteSpace(body.SensitiveDataHandling)
+                ? null
+                : body.SensitiveDataHandling.Trim();
+
+            if (AgentSecuritySettingsValidator.ValidateTenantOverrides(
+                    securityMode,
+                    sensitiveDataHandling,
+                    body.PromptShieldEnabled,
+                    body.ContentSafetyEnabled,
+                    agentSecurity.Value.IsAzureContentSafetyConfigured) is { } securityError)
+            {
+                return Results.BadRequest(securityError);
+            }
+
+            // Store canonical enum names so API responses and audit diffs are stable across input casing.
+            securityMode = securityMode is null
+                ? null
+                : Enum.Parse<AgentSecurityMode>(securityMode, ignoreCase: true).ToString();
+            sensitiveDataHandling = sensitiveDataHandling is null
+                ? null
+                : Enum.Parse<SensitiveDataHandling>(sensitiveDataHandling, ignoreCase: true).ToString();
 
             if (endpoint is not null)
             {
@@ -463,6 +501,10 @@ public static class AdminEndpoints
             row.Provider = provider;
             row.Model = model;
             row.Endpoint = endpoint;
+            row.AgentSecurityMode = securityMode;
+            row.PromptShieldEnabled = body.PromptShieldEnabled;
+            row.ContentSafetyEnabled = body.ContentSafetyEnabled;
+            row.SensitiveDataHandling = sensitiveDataHandling;
 
             if (!string.IsNullOrEmpty(body.ApiKey))
             {
@@ -1295,12 +1337,18 @@ public static class AdminEndpoints
         string? SystemPromptOverride, int? MaxConversationTokensOverride, long? MaxMonthlyTokensOverride,
         string? ProviderOverride, string? ModelOverride, string? EndpointOverride, bool HasApiKey,
         string DefaultSystemPrompt, int DefaultMaxConversationTokens, long DefaultMaxMonthlyTokens,
-        string DefaultProvider, string DefaultModel);
+        string DefaultProvider, string DefaultModel,
+        string? AgentSecurityModeOverride, bool? PromptShieldEnabledOverride, bool? ContentSafetyEnabledOverride,
+        string? SensitiveDataHandlingOverride,
+        string DefaultAgentSecurityMode, bool DefaultPromptShieldEnabled, bool DefaultContentSafetyEnabled,
+        string DefaultSensitiveDataHandling, bool ExternalSecurityDetectorsConfigured);
 
     /// <summary>ApiKey is write-only: null = keep the stored key, non-empty = replace, "" = clear.</summary>
     private sealed record AiSettingsRequest(
         string? SystemPrompt, int? MaxConversationTokens, long? MaxMonthlyTokens,
-        string? Provider, string? Model, string? Endpoint, string? ApiKey);
+        string? Provider, string? Model, string? Endpoint, string? ApiKey,
+        string? AgentSecurityMode, bool? PromptShieldEnabled, bool? ContentSafetyEnabled,
+        string? SensitiveDataHandling);
 
     private sealed record AiModelCatalogRequest(string? Provider, string? Endpoint, string? ApiKey);
 

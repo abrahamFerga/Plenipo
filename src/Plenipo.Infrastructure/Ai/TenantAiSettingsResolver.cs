@@ -1,7 +1,7 @@
-using Plenipo.Application.Ai;
-using Plenipo.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Plenipo.Application.Ai;
+using Plenipo.Infrastructure.Persistence;
 
 namespace Plenipo.Infrastructure.Ai;
 
@@ -10,11 +10,17 @@ namespace Plenipo.Infrastructure.Ai;
 /// over the deployment <see cref="AiOptions"/> defaults. A tenant with no row — or with null fields — simply
 /// gets the defaults, so this is transparent until an admin customizes anything.
 /// </summary>
-public sealed class TenantAiSettingsResolver(PlatformDbContext db, IOptions<AiOptions> aiOptions) : ITenantAiSettings
+public sealed class TenantAiSettingsResolver(
+    PlatformDbContext db,
+    IOptions<AiOptions> aiOptions,
+    IOptions<AgentSecurityOptions> securityOptions) : ITenantAiSettings
 {
     public async Task<EffectiveAiSettings> ResolveAsync(CancellationToken cancellationToken = default)
     {
         var row = await db.TenantAiSettings.FirstOrDefaultAsync(cancellationToken);
-        return EffectiveAiSettings.Merge(row, aiOptions.Value);
+        return EffectiveAiSettings.Merge(row, aiOptions.Value) with
+        {
+            Security = EffectiveAgentSecurityPolicy.Merge(row, securityOptions.Value),
+        };
     }
 }

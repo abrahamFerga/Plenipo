@@ -22,6 +22,9 @@ public sealed record EffectiveAiSettings(string SystemPrompt, int MaxConversatio
     /// <summary>Models the chat's model picker offers (see <see cref="AiOptions.AvailableModels"/>).</summary>
     public IReadOnlyList<string> AvailableModels { get; init; } = [];
 
+    /// <summary>Application-level security controls resolved for this tenant.</summary>
+    public EffectiveAgentSecurityPolicy Security { get; init; } = EffectiveAgentSecurityPolicy.Disabled;
+
     public bool IsEnabled => !string.Equals(Provider, "None", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>A per-turn model override is valid when it IS the default or is on the advertised list.</summary>

@@ -1,6 +1,11 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Plenipo.Application.Agents;
 using Plenipo.Application.Ai;
 using Plenipo.Application.Approvals;
@@ -13,11 +18,6 @@ using Plenipo.Application.Usage;
 using Plenipo.Core.Identity;
 using Plenipo.Core.Platform;
 using Plenipo.Modules.Sdk;
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.AI;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace Plenipo.Infrastructure.Agents;
 
@@ -49,6 +49,7 @@ public sealed class AuthorizedAgentRunner(
     Plenipo.Infrastructure.Approvals.ApprovalNotifier approvalNotifier,
     ISkillCatalog skillCatalog,
     ICurrentUser currentUser,
+    IAgentSecurityService agentSecurity,
     IOptions<AiOptions> aiOptions,
     ILogger<AuthorizedAgentRunner> logger) : IAuthorizedAgentRunner
 {
@@ -86,6 +87,26 @@ public sealed class AuthorizedAgentRunner(
         // Resolve this tenant's effective AI settings — system prompt, budgets, AND the provider
         // connection (a tenant may run its own provider + vaulted key; SaaS bring-your-own-key).
         var aiSettings = await tenantAiSettings.ResolveAsync(cancellationToken);
+
+        // Security controls run before workflow expansion, provider resolution, tool disclosure, or any model
+        // call. A redacted input is the value every downstream surface sees and persists; blocked payloads are
+        // never written to the conversation store.
+        var inputInspection = await agentSecurity.InspectAsync(
+            request.Message,
+            AgentSecurityStage.UserInput,
+            aiSettings.Security,
+            cancellationToken);
+        await RecordSecurityAsync(request.ModuleId, AgentSecurityStage.UserInput, inputInspection, cancellationToken);
+        if (inputInspection.Blocked)
+        {
+            yield return AgentStreamEvent.Failed(SecurityFailureMessage(inputInspection));
+            yield break;
+        }
+
+        if (inputInspection.Modified)
+        {
+            request = request with { Message = inputInspection.Text };
+        }
 
         // A picked name may be a module WORKFLOW: a sequential chain of the module's agents. Each
         // step runs as a full authorized turn through this very method (same RBAC, budgets,
@@ -283,7 +304,15 @@ public sealed class AuthorizedAgentRunner(
         // is best-effort and never fails the turn; the hash lands on the assistant message below.
         var instructionsHash = InstructionHash.Compute(instructions);
         await instructionSnapshots.EnsureAsync(instructionsHash, instructions, cancellationToken);
-        var middleware = new ToolInvocationMiddleware(auditLog, currentUser, approvalRequired, toolsByName, request.ModuleId, conversation.Id);
+        var middleware = new ToolInvocationMiddleware(
+            auditLog,
+            currentUser,
+            approvalRequired,
+            toolsByName,
+            request.ModuleId,
+            conversation.Id,
+            agentSecurity,
+            aiSettings.Security);
 
         // Instrument the chat client (LLM calls + token usage) and the agent (runs) so the whole turn is
         // traced under the Plenipo.Agents OpenTelemetry source and shows up in the Aspire dashboard.
@@ -301,8 +330,8 @@ public sealed class AuthorizedAgentRunner(
         // calls/results), persisted per conversation. Conversations from before session support — or
         // whose state fails to round-trip — fall back to seeding a fresh session with the replayed
         // user/assistant history, exactly the pre-session behaviour.
-        // The model gets the (possibly slash-rewritten) message; the transcript below persists what
-        // the user actually typed.
+        // The model gets the (possibly security-redacted and slash-rewritten) message; the transcript
+        // below persists only that safe form.
         var session = await ResumeSessionAsync(agent, conversation, cancellationToken);
         IReadOnlyList<ChatMessage> turnInput = session.Resumed
             ? [new ChatMessage(ChatRole.User, message)]
@@ -318,7 +347,17 @@ public sealed class AuthorizedAgentRunner(
         var announcedTools = new HashSet<string>(StringComparer.Ordinal);
         var usage = new UsageAccumulator();
 
-        await foreach (var evt in StreamTurnAsync(agent, turnInput, session.Session, runOptions, assistant, announcedTools, usage, cancellationToken))
+        var bufferOutput = aiSettings.Security.RequiresOutputBuffering;
+        await foreach (var evt in StreamTurnAsync(
+            agent,
+            turnInput,
+            session.Session,
+            runOptions,
+            assistant,
+            announcedTools,
+            usage,
+            emitTokens: !bufferOutput,
+            cancellationToken))
         {
             yield return evt;
             if (evt.Type == AgentStreamEventType.Error)
@@ -327,7 +366,42 @@ public sealed class AuthorizedAgentRunner(
             }
         }
 
-        var sessionState = await SerializeSessionAsync(agent, session.Session, cancellationToken);
+        var outputRewritten = false;
+        if (aiSettings.Security.IsEnabled &&
+            (aiSettings.Security.ContentSafetyEnabled ||
+             aiSettings.Security.SensitiveDataHandling != SensitiveDataHandling.Disabled))
+        {
+            var outputInspection = await agentSecurity.InspectAsync(
+                assistant.ToString(),
+                AgentSecurityStage.ModelOutput,
+                aiSettings.Security,
+                cancellationToken);
+            await RecordSecurityAsync(request.ModuleId, AgentSecurityStage.ModelOutput, outputInspection, cancellationToken);
+
+            if (outputInspection.Blocked)
+            {
+                assistant.Clear();
+                assistant.Append(SecurityFailureMessage(outputInspection));
+                outputRewritten = true;
+            }
+            else if (outputInspection.Modified)
+            {
+                assistant.Clear();
+                assistant.Append(outputInspection.Text);
+                outputRewritten = true;
+            }
+
+            if (bufferOutput)
+            {
+                yield return AgentStreamEvent.Token(assistant.ToString());
+            }
+        }
+
+        // A framework session contains the model's original final answer. If a guardrail replaced or redacted
+        // that answer, discard the opaque state and resume next time from Plenipo's sanitized transcript.
+        var sessionState = outputRewritten
+            ? null
+            : await SerializeSessionAsync(agent, session.Session, cancellationToken);
         await conversations.AppendTurnAsync(conversation.Id, request.Message, assistant.ToString(), sessionState, instructionsHash, cancellationToken);
         if (resolvedApprovals.Count > 0)
         {
@@ -451,6 +525,7 @@ public sealed class AuthorizedAgentRunner(
         StringBuilder assistant,
         HashSet<string> announcedTools,
         UsageAccumulator usage,
+        bool emitTokens,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var enumerator = agent.RunStreamingAsync(messages, session, options: runOptions, cancellationToken).GetAsyncEnumerator(cancellationToken);
@@ -502,7 +577,10 @@ public sealed class AuthorizedAgentRunner(
                 if (!string.IsNullOrEmpty(update.Text))
                 {
                     assistant.Append(update.Text);
-                    yield return AgentStreamEvent.Token(update.Text);
+                    if (emitTokens)
+                    {
+                        yield return AgentStreamEvent.Token(update.Text);
+                    }
                 }
             }
         }
@@ -511,6 +589,43 @@ public sealed class AuthorizedAgentRunner(
             await enumerator.DisposeAsync();
         }
     }
+
+    /// <summary>Audits detector metadata only; inspected text and matched values never enter logs.</summary>
+    private Task RecordSecurityAsync(
+        string moduleId,
+        AgentSecurityStage stage,
+        AgentSecurityInspection inspection,
+        CancellationToken cancellationToken)
+    {
+        if (!inspection.HasFindings)
+        {
+            return Task.CompletedTask;
+        }
+
+        var eventType = inspection.Unavailable
+            ? AuthAuditEventType.AgentSecurityUnavailable
+            : inspection.Blocked
+                ? AuthAuditEventType.AgentSecurityBlocked
+                : AuthAuditEventType.AgentSecurityDetected;
+        var findingNames = inspection.Findings
+            .Select(f => $"{f.Detector}:{f.Category}")
+            .Distinct(StringComparer.Ordinal);
+        var detail = $"module={moduleId}; stage={stage}; findings={string.Join(",", findingNames)}";
+
+        return auditLog.RecordAuthEventAsync(new AuthAuditEntry
+        {
+            TenantId = currentUser.TenantId,
+            UserId = currentUser.UserId,
+            Subject = currentUser.Subject,
+            UserDisplay = currentUser.DisplayName,
+            EventType = eventType,
+            Detail = detail.Length <= 1000 ? detail : detail[..1000],
+        }, cancellationToken);
+    }
+
+    private static string SecurityFailureMessage(AgentSecurityInspection inspection) => inspection.Unavailable
+        ? "Required AI security screening is temporarily unavailable. Please try again later."
+        : "This content was blocked by your organization's AI security policy.";
 
 
     /// <summary>

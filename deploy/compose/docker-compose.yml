@@ -27,6 +27,9 @@ services:
       ConnectionStrings__plenipo-redis: redis:6379
       Ai__Provider: ${AI_PROVIDER:-Mock}
       Ai__Model: ${AI_MODEL:-gpt-4o-mini}
+      AgentSecurity__Provider: ${AGENT_SECURITY_PROVIDER:-None}
+      AgentSecurity__Endpoint: ${AGENT_SECURITY_ENDPOINT:-}
+      AgentSecurity__ApiKey: ${AGENT_SECURITY_API_KEY:-}
       Rag__Enabled: "true"
       Rag__EmbeddingProvider: ${EMBEDDING_PROVIDER:-Mock}
       Rag__ApiKey: ${RAG_API_KEY:-}

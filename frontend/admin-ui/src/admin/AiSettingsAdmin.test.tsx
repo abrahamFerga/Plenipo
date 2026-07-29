@@ -17,6 +17,15 @@ const SETTINGS = {
   defaultMaxMonthlyTokens: 0,
   defaultProvider: "Mock",
   defaultModel: "gpt-4o-mini",
+  agentSecurityModeOverride: null,
+  promptShieldEnabledOverride: null,
+  contentSafetyEnabledOverride: null,
+  sensitiveDataHandlingOverride: null,
+  defaultAgentSecurityMode: "Disabled",
+  defaultPromptShieldEnabled: false,
+  defaultContentSafetyEnabled: false,
+  defaultSensitiveDataHandling: "Disabled",
+  externalSecurityDetectorsConfigured: true,
 };
 
 function stubApi() {
@@ -82,6 +91,35 @@ describe("AiSettingsAdmin", () => {
         model: null,
         endpoint: null,
         apiKey: null,
+        agentSecurityMode: null,
+        promptShieldEnabled: null,
+        contentSafetyEnabled: null,
+        sensitiveDataHandling: null,
+      });
+    });
+  });
+
+  it("saves staged agent-security controls", async () => {
+    const fetchMock = stubApi();
+    renderSettings();
+
+    await screen.findByLabelText("Security enforcement");
+    fireEvent.change(screen.getByLabelText("Security enforcement"), { target: { value: "Enforce" } });
+    fireEvent.change(screen.getByLabelText("Prompt Shield"), { target: { value: "true" } });
+    fireEvent.change(screen.getByLabelText("Harmful-content screening"), { target: { value: "true" } });
+    fireEvent.change(screen.getByLabelText("Sensitive data"), { target: { value: "Redact" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      const put = fetchMock.mock.calls.find(
+        (c) => String(c[0]).includes("/api/admin/ai-settings") && (c[1] as RequestInit | undefined)?.method === "PUT",
+      );
+      const body = JSON.parse((put![1] as RequestInit).body as string);
+      expect(body).toMatchObject({
+        agentSecurityMode: "Enforce",
+        promptShieldEnabled: true,
+        contentSafetyEnabled: true,
+        sensitiveDataHandling: "Redact",
       });
     });
   });

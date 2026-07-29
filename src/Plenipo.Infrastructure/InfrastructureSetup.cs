@@ -1,3 +1,9 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Plenipo.Application.Agents;
 using Plenipo.Application.Ai;
 using Plenipo.Application.Approvals;
@@ -18,6 +24,7 @@ using Plenipo.Application.Usage;
 using Plenipo.Core.Identity;
 using Plenipo.Core.Multitenancy;
 using Plenipo.Infrastructure.Agents;
+using Plenipo.Infrastructure.Agents.Security;
 using Plenipo.Infrastructure.Ai;
 using Plenipo.Infrastructure.Approvals;
 using Plenipo.Infrastructure.Auditing;
@@ -36,12 +43,6 @@ using Plenipo.Infrastructure.Rag;
 using Plenipo.Infrastructure.Secrets;
 using Plenipo.Infrastructure.Skills;
 using Plenipo.Infrastructure.Usage;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 
 namespace Plenipo.Infrastructure;
 
@@ -304,10 +305,21 @@ public static class InfrastructureSetup
         var services = builder.Services;
 
         services.Configure<AiOptions>(builder.Configuration.GetSection(AiOptions.SectionName));
+        services.Configure<AgentSecurityOptions>(builder.Configuration.GetSection(AgentSecurityOptions.SectionName));
         var aiOptions = builder.Configuration.GetSection(AiOptions.SectionName).Get<AiOptions>() ?? new AiOptions();
+        var agentSecurityOptions = builder.Configuration
+            .GetSection(AgentSecurityOptions.SectionName)
+            .Get<AgentSecurityOptions>() ?? new AgentSecurityOptions();
         // Fail fast at startup on a misconfigured provider (e.g. OpenAI without a key) rather than on the
         // first chat, where the IChatClient is otherwise built lazily.
         AiOptionsValidator.ThrowIfInvalid(aiOptions);
+        var securityErrors = AgentSecuritySettingsValidator.ValidateOptions(agentSecurityOptions);
+        if (securityErrors.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "Agent security configuration is invalid:" + Environment.NewLine +
+                string.Join(Environment.NewLine, securityErrors.Select(error => $"- {error}")));
+        }
         if (aiOptions.IsEnabled)
         {
             services.AddSingleton<IChatClient>(_ => ChatClientFactory.Create(aiOptions));
@@ -322,6 +334,12 @@ public static class InfrastructureSetup
             .ConfigurePrimaryHttpMessageHandler(sp =>
                 sp.GetRequiredService<OutboundUrlPolicy>().CreateHttpMessageHandler());
         services.AddSingleton<IAiModelCatalog, ProviderAiModelCatalog>();
+        services.AddHttpClient(AzureContentSafetyClient.HttpClientName, client =>
+            client.Timeout = TimeSpan.FromSeconds(15))
+            .ConfigurePrimaryHttpMessageHandler(sp =>
+                sp.GetRequiredService<OutboundUrlPolicy>().CreateHttpMessageHandler());
+        services.AddSingleton<AzureContentSafetyClient>();
+        services.AddSingleton<IAgentSecurityService, AgentSecurityService>();
 
         services.AddSingleton<IModuleCatalog, ModuleCatalog>();
         services.AddSingleton<IToolRegistry, ToolRegistry>();

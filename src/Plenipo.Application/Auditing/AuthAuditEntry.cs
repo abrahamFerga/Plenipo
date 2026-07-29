@@ -29,6 +29,15 @@ public enum AuthAuditEventType
 
     /// <summary>A new user was refused because the tenant's subscription seat limit is reached.</summary>
     SeatLimitDenied = 11,
+
+    /// <summary>An inspect-only agent security control detected a risk without blocking the turn.</summary>
+    AgentSecurityDetected = 13,
+
+    /// <summary>An enforcing agent security control blocked content before it crossed a trust boundary.</summary>
+    AgentSecurityBlocked = 14,
+
+    /// <summary>A configured external agent security detector could not make a decision.</summary>
+    AgentSecurityUnavailable = 15,
 }
 
 /// <summary>Append-only record of an identity / authorization event.</summary>

@@ -428,6 +428,16 @@ export interface AiSettings {
   defaultMaxMonthlyTokens: number;
   defaultProvider: string;
   defaultModel: string;
+  agentSecurityModeOverride?: "Disabled" | "Audit" | "Enforce" | null;
+  promptShieldEnabledOverride?: boolean | null;
+  contentSafetyEnabledOverride?: boolean | null;
+  sensitiveDataHandlingOverride?: "Disabled" | "Redact" | "Block" | null;
+  defaultAgentSecurityMode: "Disabled" | "Audit" | "Enforce";
+  defaultPromptShieldEnabled: boolean;
+  defaultContentSafetyEnabled: boolean;
+  defaultSensitiveDataHandling: "Disabled" | "Redact" | "Block";
+  /** Whether the deployment has an Azure AI Content Safety connection available. */
+  externalSecurityDetectorsConfigured: boolean;
 }
 
 /** A live model catalog fetched from the selected provider. */
@@ -883,6 +893,10 @@ export const api = {
       endpoint?: string | null;
       /** Write-only: undefined/null = keep the stored key, non-empty = replace, "" = clear. */
       apiKey?: string | null;
+      agentSecurityMode?: "Disabled" | "Audit" | "Enforce" | null;
+      promptShieldEnabled?: boolean | null;
+      contentSafetyEnabled?: boolean | null;
+      sensitiveDataHandling?: "Disabled" | "Redact" | "Block" | null;
     }) => apiSend("/api/admin/ai-settings", "PUT", settings),
     agentProfiles: (moduleId?: string) =>
       apiGet<AgentProfile[]>(

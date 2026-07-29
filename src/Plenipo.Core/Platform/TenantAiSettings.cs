@@ -39,4 +39,16 @@ public sealed class TenantAiSettings : EntityBase, ITenantOwned
     /// this table and is never returned by any API — admins can only replace or clear it.
     /// </summary>
     public string? ApiKeySecretRef { get; set; }
+
+    /// <summary>Disabled | Audit | Enforce. Null = deployment default.</summary>
+    public string? AgentSecurityMode { get; set; }
+
+    /// <summary>Enable direct and indirect prompt-attack detection. Null = deployment default.</summary>
+    public bool? PromptShieldEnabled { get; set; }
+
+    /// <summary>Enable harmful-content classification on agent boundaries. Null = deployment default.</summary>
+    public bool? ContentSafetyEnabled { get; set; }
+
+    /// <summary>Disabled | Redact | Block for PII, credentials, and sensitive identifiers. Null = default.</summary>
+    public string? SensitiveDataHandling { get; set; }
 }

@@ -28,6 +28,7 @@ ship it. It unifies the patterns proven in two earlier apps — **NutriForge** (
 | **Verticals are separate systems** | Each vertical ships as its **own product** — own host, own repo, own deployment, own database — installing only its module(s) on the platform packages (see `samples/Plenipo.Legal.Host` for the shape). A business that wants only finance runs only Plenipo-for-finance. Systems connect through the **plenipo-peer connector**: one deployment's agent asks another's over the open AG-UI protocol, with the peer enforcing its own auth, RBAC, and audit. `Plenipo.Sample.Host` bundles three modules purely as a dev showcase. |
 | **Manifest-first** | A module declares its tools, tabs, permissions, and agent instructions *statically*, before any of its code runs. |
 | **Tool security before the model call** | The agent runner filters tools by the caller's permissions **before** building the request — the LLM never sees the schema of a tool the user may not call. |
+| **Agent guardrails** | Tenant admins can run prompt-attack, harmful-content, and sensitive-data controls in audit or enforcement mode across user input, tool calls, tool responses, and final output. See [docs/AGENT_SECURITY.md](docs/AGENT_SECURITY.md). |
 | **Documents built in** | Every module's agent gets platform **document tools** — read PDFs (PdfPig, Apache-2.0), generate PDFs, list files, pluggable OCR — over a tenant-scoped file store with chat attachments in the UI. See [docs/DOCUMENT_TOOLS.md](docs/DOCUMENT_TOOLS.md). |
 | **Knowledge search (opt-in RAG)** | Documents index into **scoped collections** (per matter/project); `search_knowledge` retrieves hybrid (pgvector + full-text, RRF) with per-passage citations, gated per collection through the owning module and **failing closed**. Keyless in dev via a deterministic Mock embedder. See [docs/PLATFORM_CONNECTORS_RAG_PLAN.md](docs/PLATFORM_CONNECTORS_RAG_PLAN.md). |
 | **Agent composition (profiles + skills + MCP)** | Tenant admins compose chatbots Foundry/Copilot-Studio-style without code: **agent profiles** set a module agent's instructions *and which tools it may use* (selection only narrows RBAC); **skills** (SKILL.md bundles) ship with the host; **MCP servers** configured by the operator (`Mcp:Servers`) surface external tools through the same spine — RBAC-gated (`tools.mcp.*`, granted to no role by default), audited, approval-gated by default. |
@@ -327,9 +328,9 @@ add a module.
 
 ## Security
 
-See [SECURITY.md](SECURITY.md) for how to report a vulnerability and a summary of the security model
-(pre-model-call tool authorization, layered RBAC, human-in-the-loop approval, append-only audit, and
-multi-tenant isolation).
+See [SECURITY.md](SECURITY.md) for how to report a vulnerability and a summary of the security model,
+and [docs/AGENT_SECURITY.md](docs/AGENT_SECURITY.md) for the cross-framework guardrail research,
+application-level policy pipeline, configuration, rollout guidance, and known gaps.
 
 ## License
 
