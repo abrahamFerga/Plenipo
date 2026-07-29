@@ -777,6 +777,10 @@ public sealed class LegalModule : IModule
                     new
                     {
                         heading = "Open deadlines",
+                        // A section may say what it MEANS, so the shell styles severity instead of
+                        // rendering a missed court date in the same grey as a table of names. Null
+                        // when nothing is overdue — the section then reads as ordinary content.
+                        tone = deadlines.Any(d => d.DueAt < now) ? "warning" : null,
                         columns = new[] { new { field = "dueAt", header = "Due" }, new { field = "title", header = "Deadline" }, new { field = "status", header = "Status" } },
                         rows = (object)deadlines.Select(d => new
                         {

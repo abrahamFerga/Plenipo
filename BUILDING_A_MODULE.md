@@ -214,9 +214,48 @@ DetailEndpoint = "/api/legal/matters/{id}/detail",
 ```
 
 The shell adds a **View** button per row and renders whatever generic *detail document* your endpoint
-returns: `{ title, subtitle?, sections: [ { heading, text? } | { heading, columns: [{field, header}],
-rows: [...] } ] }` — prose sections and tables, composed however the record demands, still zero React.
+returns — prose sections and tables, composed however the record demands, still zero React:
+
+```jsonc
+{
+  "title": "…", "subtitle": "…",
+  "sections": [
+    { "heading": "…", "tone": "warning", "text": "…" },
+    { "heading": "…", "columns": [{ "field": "…", "header": "…" }], "rows": [ … ] }
+  ],
+  "actions": [ { "id": "…", "label": "…", "endpoint": "…", "confirm": "…" } ]
+}
+```
+
+`tone` is optional and says what a section **means** — `"info"`, `"success"`, `"warning"`, or
+`"danger"` — so the shell can style severity instead of rendering a hard failure in the same grey as
+a data table. Omit it (or send `null`) for ordinary content. Keep `heading` unique within a document;
+the shell keys sections by it.
+
+The detail document is deliberately **untyped** server-side: you return anonymous objects and the
+shell is the only schema. That means a misspelled tone (`"warn"`) is not a compile error and nothing
+will catch it — it simply renders as an untoned section. Spell it exactly.
+
 The Legal sample's matter working file is the worked example.
+
+### Make a column navigable — `LinkTemplate`
+
+A column naming a related record can point at it, so the relation is somewhere to go rather than a
+dead end:
+
+```csharp
+Columns =
+[
+    new("fileName", "Statement"),
+    new("accountName", "Account") { LinkTemplate = "/finance/accounts" },
+],
+```
+
+`LinkTemplate` is a **client** route (the shell's own router), never an API path. It may carry
+`{field}` placeholders resolved from the row exactly as a row action's endpoint does — and unlike a
+row action it is *not* required to: a fixed route that lands every row on the same tab is the common
+case. `Masked` wins if a column declares both, since hiding a value and inviting a click on it are
+contradictory instructions.
 
 ## Step 5 — Install it
 

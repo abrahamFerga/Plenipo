@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInRouterContext, useNavigate } from "react-router-dom";
 import {
   apiAction,
   apiGet,
@@ -14,6 +15,7 @@ import {
   type TabEditor,
   type TabEditorField,
   type TabRowAction,
+  type TabSectionTone,
 } from "../lib/api";
 import { resolveFieldDefault, resolveFieldDefaults } from "../lib/fieldDefaults";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -27,27 +29,112 @@ interface GenericTabProps {
 }
 
 /**
+ * How a detail section's declared tone renders. Severity is never carried by colour alone: the
+ * section gets a border and a `data-tone`, and the heading gets a screen-reader-only severity
+ * word — so a warning reads as a warning to someone who cannot see the tint.
+ *
+ * A tone the shell does not know falls out of this lookup as `undefined` and renders exactly like
+ * an untoned section. The detail document is untyped on the server, so a module typo has to
+ * degrade quietly rather than break the page.
+ */
+const SECTION_TONES: Record<TabSectionTone, { label: string; box: string; heading: string; text: string }> = {
+  info: {
+    label: "Note",
+    box: "border-sky-300 bg-sky-50 dark:border-sky-900 dark:bg-sky-950/40",
+    heading: "text-sky-700 dark:text-sky-300",
+    text: "text-sky-900 dark:text-sky-100",
+  },
+  success: {
+    label: "Resolved",
+    box: "border-emerald-300 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40",
+    heading: "text-emerald-700 dark:text-emerald-300",
+    text: "text-emerald-900 dark:text-emerald-100",
+  },
+  warning: {
+    label: "Warning",
+    box: "border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40",
+    heading: "text-amber-700 dark:text-amber-300",
+    text: "text-amber-900 dark:text-amber-100",
+  },
+  danger: {
+    label: "Error",
+    box: "border-red-300 bg-red-50 dark:border-red-900 dark:bg-red-950/40",
+    heading: "text-red-700 dark:text-red-300",
+    text: "text-red-900 dark:text-red-100",
+  },
+};
+
+const CELL_LINK_CLASS = "focus-ring rounded text-brand-700 underline underline-offset-2 hover:text-brand-500 dark:text-brand-300";
+
+/**
+ * In-app navigation for a linked cell. Split out because `useNavigate` throws outside a Router,
+ * and `GenericTab` is a public export a host may render anywhere — so the hook is only ever
+ * called from a component that is rendered when `useInRouterContext()` already said yes.
+ * Modifier-clicks and middle-clicks fall through to the browser so "open in new tab" still works.
+ */
+function RoutedCellLink({ href, children }: { href: string; children: React.ReactNode }) {
+  const navigate = useNavigate();
+  return (
+    <a
+      href={href}
+      className={CELL_LINK_CLASS}
+      onClick={(e) => {
+        if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        navigate(href);
+      }}
+    >
+      {children}
+    </a>
+  );
+}
+
+/** A linked cell: routed when there is a router, a plain anchor when there isn't. */
+function CellLink({ href, children }: { href: string; children: React.ReactNode }) {
+  const inRouter = useInRouterContext();
+  if (!inRouter) {
+    return (
+      <a href={href} className={CELL_LINK_CLASS}>
+        {children}
+      </a>
+    );
+  }
+  return <RoutedCellLink href={href}>{children}</RoutedCellLink>;
+}
+
+/**
  * One cell's value. Columns declaring `masked` (the display-side companion of `[Pii]`) render
  * masked behind an explicit reveal toggle — per cell, per mount, never persisted. Masking is a
  * screen-privacy affordance, not access control: the value already reached this authorized
  * caller; it just shouldn't sit exposed on a shared screen.
+ *
+ * Columns declaring `linkTemplate` render the value as a link to a client route, so a named
+ * relation ("which account did this land in?") is somewhere you can go rather than a dead end.
+ * `masked` wins if a column somehow declares both — hiding a value and inviting a click on it
+ * are contradictory instructions, and privacy is the safer reading.
  */
 function CellValue({ column, row }: { column: TabColumn; row: Record<string, unknown> }) {
   const [revealed, setRevealed] = useState(false);
   const raw = row[column.field];
   const text = raw == null ? "" : String(raw);
-  if (!column.masked || text === "") return <>{text}</>;
-  return (
-    <button
-      type="button"
-      onClick={() => setRevealed((v) => !v)}
-      aria-pressed={revealed}
-      aria-label={`${revealed ? "Hide" : "Reveal"} ${column.header}`}
-      className="focus-ring rounded tabular-nums"
-    >
-      {revealed ? text : maskValue(text)}
-    </button>
-  );
+  if (text === "") return <>{text}</>;
+  if (column.masked) {
+    return (
+      <button
+        type="button"
+        onClick={() => setRevealed((v) => !v)}
+        aria-pressed={revealed}
+        aria-label={`${revealed ? "Hide" : "Reveal"} ${column.header}`}
+        className="focus-ring rounded tabular-nums"
+      >
+        {revealed ? text : maskValue(text)}
+      </button>
+    );
+  }
+  if (column.linkTemplate) {
+    return <CellLink href={resolveRowUrl(column.linkTemplate, row)}>{text}</CellLink>;
+  }
+  return <>{text}</>;
 }
 
 /**
@@ -187,10 +274,21 @@ function DetailView({ endpoint, onBack }: { endpoint: string; onBack: () => void
 
       <DetailActions actions={doc.actions ?? []} />
 
-      {doc.sections.map((section) => (
-        <section key={section.heading} className="space-y-2">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">{section.heading}</h3>
-          {section.text != null && <p className="text-sm text-slate-700 dark:text-slate-200">{section.text}</p>}
+      {doc.sections.map((section) => {
+        const tone = section.tone != null ? SECTION_TONES[section.tone] : undefined;
+        return (
+        <section
+          key={section.heading}
+          data-tone={tone ? section.tone : undefined}
+          className={tone ? `space-y-2 rounded-lg border p-4 ${tone.box}` : "space-y-2"}
+        >
+          <h3 className={`text-sm font-semibold uppercase tracking-wide ${tone ? tone.heading : "text-slate-400"}`}>
+            {tone && <span className="sr-only">{tone.label}: </span>}
+            {section.heading}
+          </h3>
+          {section.text != null && (
+            <p className={`text-sm ${tone ? tone.text : "text-slate-700 dark:text-slate-200"}`}>{section.text}</p>
+          )}
           {section.rows != null &&
             ((section.rows.length ?? 0) === 0 ? (
               <p className="text-sm text-slate-400">None.</p>
@@ -211,7 +309,10 @@ function DetailView({ endpoint, onBack }: { endpoint: string; onBack: () => void
                       <tr key={i}>
                         {(section.columns ?? []).map((c) => (
                           <td key={c.field} className="px-4 py-2 text-slate-700 dark:text-slate-200">
-                            {row[c.field] == null ? "" : String(row[c.field])}
+                            {/* Through CellValue, not String(...): a detail sub-table declares the
+                                same TabColumn as the tab table, so masked and linkTemplate have to
+                                mean the same thing here. They were silently ignored before. */}
+                            <CellValue column={c} row={row} />
                           </td>
                         ))}
                       </tr>
@@ -221,7 +322,8 @@ function DetailView({ endpoint, onBack }: { endpoint: string; onBack: () => void
               </div>
             ))}
         </section>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -839,7 +941,9 @@ function SingletonForm({
         <div key={c.field} className="grid gap-1 py-2 sm:grid-cols-[14rem_1fr] sm:gap-4">
           <dt className="text-sm font-medium text-slate-500 dark:text-slate-400">{c.header}</dt>
           <dd className="text-sm text-slate-800 dark:text-slate-200">
-            {row[c.field] == null || row[c.field] === "" ? "—" : String(row[c.field])}
+            {/* Through CellValue so masked and linkTemplate mean the same thing on a singleton
+                tab as in a table; the em dash stays this view's own empty-state. */}
+            {row[c.field] == null || row[c.field] === "" ? "—" : <CellValue column={c} row={row} />}
           </dd>
         </div>
       ))}

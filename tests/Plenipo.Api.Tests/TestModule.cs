@@ -36,7 +36,13 @@ internal sealed class TestModule : IModule
             {
                 Id = "items", Label = "Items", Route = "/test/items",
                 DataEndpoint = "/api/test/items",
-                Columns = [new("name", "Name")],
+                Columns =
+                [
+                    new("name", "Name"),
+                    // A link-capable column: a client route, with its {field} placeholder left for
+                    // the shell to resolve per row — the server has no row at manifest time.
+                    new("owner", "Owner") { LinkTemplate = "/test/owners?focus={ownerId}" },
+                ],
                 RowActions =
                 [
                     // Ungated: anyone who can see the tab may invoke it.

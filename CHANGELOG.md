@@ -52,6 +52,32 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   deleted. `Push:IncludeContent=false` withholds the title and body from the push service for
   deployments handling privileged material. The channel is inert until a device registers, so a
   deployment with no mobile app configures nothing.
+- **Detail-document sections carry a `tone`** — a section may say what it *means* (`"info"`,
+  `"success"`, `"warning"`, `"danger"`) and the shell renders it as a callout: bordered, tinted, and
+  carrying the severity as a word in the accessibility tree, never as colour alone. Before this, a
+  hard extraction failure and a table of names rendered in exactly the same grey, so the only way a
+  module could raise its voice was to shout in the heading text.
+
+  *Additive:* a section without a tone renders precisely as it did. The detail document is untyped
+  server-side, so an unrecognized tone deliberately degrades to an untoned section rather than
+  breaking the page — nothing can catch the typo for you.
+
+- **`TabColumn.LinkTemplate`** — a column may make its value navigable, pointing at a **client**
+  route (never an API path), optionally with `{field}` placeholders resolved from the row the way a
+  row action's endpoint template is. Unlike a row action the placeholder is optional: a fixed route
+  landing every row on the same tab is the common, useful case. `Masked` wins if a column declares
+  both — hiding a value and inviting a click on it are contradictory instructions.
+
+  *Additive, and deliberately not a positional parameter:* `LinkTemplate` is an init-only property,
+  so `TabColumn`'s primary constructor and generated `Deconstruct` stay binary-compatible for a
+  product already compiled against a published package. A column declaring no link renders plain
+  text exactly as before.
+
+  Two renderers that previously stringified cells directly — the sub-table inside a detail section
+  and the read-only singleton form — now go through the shared cell renderer, so `Masked` and
+  `LinkTemplate` mean the same thing everywhere a `TabColumn` is declared. **`Masked` was silently
+  ignored inside a detail section before this**; if a module declared it there expecting plain text,
+  the value now renders masked.
 
 - **`TabEditorField.Default` / `.DefaultFrom`** — a field may say what it should start as.
   `Default` is a constant the manifest knows; `DefaultFrom` (see `FieldDefaultSources`) is for what
