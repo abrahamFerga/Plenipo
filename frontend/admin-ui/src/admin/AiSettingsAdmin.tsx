@@ -14,6 +14,11 @@ interface FormState {
   apiKey: string;
   /** Explicitly remove the stored key. */
   clearKey: boolean;
+  /** Empty strings inherit the deployment policy. */
+  securityMode: string;
+  promptShield: string;
+  contentSafety: string;
+  sensitiveDataHandling: string;
 }
 
 const blankForm: FormState = {
@@ -25,6 +30,10 @@ const blankForm: FormState = {
   endpoint: "",
   apiKey: "",
   clearKey: false,
+  securityMode: "",
+  promptShield: "",
+  contentSafety: "",
+  sensitiveDataHandling: "",
 };
 
 /** Sentinel Model-dropdown option that switches the field back to free-text entry. */
@@ -57,6 +66,16 @@ export function AiSettingsAdmin() {
         endpoint: settings.data.endpointOverride ?? "",
         apiKey: "",
         clearKey: false,
+        securityMode: settings.data.agentSecurityModeOverride ?? "",
+        promptShield:
+          settings.data.promptShieldEnabledOverride == null
+            ? ""
+            : String(settings.data.promptShieldEnabledOverride),
+        contentSafety:
+          settings.data.contentSafetyEnabledOverride == null
+            ? ""
+            : String(settings.data.contentSafetyEnabledOverride),
+        sensitiveDataHandling: settings.data.sensitiveDataHandlingOverride ?? "",
       });
     }
   }, [settings.data]);
@@ -72,6 +91,12 @@ export function AiSettingsAdmin() {
         endpoint: next.endpoint.trim() || null,
         // Write-only contract: null keeps the stored key, "" clears it, non-empty replaces it.
         apiKey: next.clearKey ? "" : next.apiKey.trim() || null,
+        agentSecurityMode:
+          (next.securityMode || null) as "Disabled" | "Audit" | "Enforce" | null,
+        promptShieldEnabled: next.promptShield === "" ? null : next.promptShield === "true",
+        contentSafetyEnabled: next.contentSafety === "" ? null : next.contentSafety === "true",
+        sensitiveDataHandling:
+          (next.sensitiveDataHandling || null) as "Disabled" | "Redact" | "Block" | null,
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin", "ai-settings"] }),
   });
@@ -98,7 +123,20 @@ export function AiSettingsAdmin() {
   }
 
   const data = settings.data!;
-  const { prompt, maxTokens, monthlyTokens, provider, model, endpoint, apiKey, clearKey } = form;
+  const {
+    prompt,
+    maxTokens,
+    monthlyTokens,
+    provider,
+    model,
+    endpoint,
+    apiKey,
+    clearKey,
+    securityMode,
+    promptShield,
+    contentSafety,
+    sensitiveDataHandling,
+  } = form;
   const tokensInvalid = maxTokens.trim() !== "" && (!/^\d+$/.test(maxTokens.trim()) || Number(maxTokens) < 0);
   const monthlyInvalid =
     monthlyTokens.trim() !== "" && (!/^\d+$/.test(monthlyTokens.trim()) || Number(monthlyTokens) < 0);
@@ -282,6 +320,89 @@ export function AiSettingsAdmin() {
             model. Individual agents can pin their own model under Agent Profiles.
           </p>
         </fieldset>
+        <fieldset className="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+          <legend className="px-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            Agent security
+          </legend>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Controls run at user input, tool call, tool response, and final-output boundaries. Audit records
+            detector metadata only—never the matched text.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <label htmlFor="agent-security-mode" className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                Security enforcement
+              </label>
+              <select
+                id="agent-security-mode"
+                value={securityMode}
+                onChange={(e) => set({ securityMode: e.target.value })}
+                className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
+              >
+                <option value="">Deployment default ({data.defaultAgentSecurityMode})</option>
+                <option value="Disabled">Disabled</option>
+                <option value="Audit">Audit only</option>
+                <option value="Enforce">Enforce</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="sensitive-data-handling" className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                Sensitive data
+              </label>
+              <select
+                id="sensitive-data-handling"
+                value={sensitiveDataHandling}
+                onChange={(e) => set({ sensitiveDataHandling: e.target.value })}
+                className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
+              >
+                <option value="">Deployment default ({data.defaultSensitiveDataHandling})</option>
+                <option value="Disabled">Disabled</option>
+                <option value="Redact">Redact PII and credentials</option>
+                <option value="Block">Block when detected</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="prompt-shield" className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                Prompt Shield
+              </label>
+              <select
+                id="prompt-shield"
+                value={promptShield}
+                onChange={(e) => set({ promptShield: e.target.value })}
+                className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
+              >
+                <option value="">Deployment default ({data.defaultPromptShieldEnabled ? "enabled" : "disabled"})</option>
+                <option value="true" disabled={!data.externalSecurityDetectorsConfigured}>Enabled</option>
+                <option value="false">Disabled</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="content-safety" className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                Harmful-content screening
+              </label>
+              <select
+                id="content-safety"
+                value={contentSafety}
+                onChange={(e) => set({ contentSafety: e.target.value })}
+                className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
+              >
+                <option value="">Deployment default ({data.defaultContentSafetyEnabled ? "enabled" : "disabled"})</option>
+                <option value="true" disabled={!data.externalSecurityDetectorsConfigured}>Enabled</option>
+                <option value="false">Disabled</option>
+              </select>
+            </div>
+          </div>
+          {!data.externalSecurityDetectorsConfigured && (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              Prompt Shield and harmful-content screening need the platform operator to configure Azure AI
+              Content Safety. Deterministic sensitive-data redaction and blocking are available now.
+            </p>
+          )}
+          <p className="text-xs text-slate-400">
+            Enforced output controls inspect the completed answer before releasing it, so protected responses
+            trade token-by-token streaming for a no-leak boundary.
+          </p>
+        </fieldset>
         <div className="space-y-1">
           <label htmlFor="system-prompt" className="block text-sm font-medium text-slate-700 dark:text-slate-200">
             System prompt
@@ -348,7 +469,16 @@ export function AiSettingsAdmin() {
             type="button"
             disabled={
               save.isPending ||
-              (prompt === "" && maxTokens === "" && monthlyTokens === "" && provider === "" && model === "" && !data.hasApiKey)
+              (prompt === "" &&
+                maxTokens === "" &&
+                monthlyTokens === "" &&
+                provider === "" &&
+                model === "" &&
+                !data.hasApiKey &&
+                securityMode === "" &&
+                promptShield === "" &&
+                contentSafety === "" &&
+                sensitiveDataHandling === "")
             }
             onClick={() => {
               // Back to the deployment defaults, including clearing any stored tenant key.

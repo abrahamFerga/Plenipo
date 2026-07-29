@@ -1,8 +1,8 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Plenipo.Application.Ai;
 using Plenipo.Core.Platform;
 using Plenipo.Infrastructure.Auditing;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Plenipo.Infrastructure.Persistence.Configurations;
 
@@ -147,6 +147,8 @@ internal sealed class TenantAiSettingsConfiguration : IEntityTypeConfiguration<T
         b.Property(x => x.Provider).HasMaxLength(32);
         b.Property(x => x.Model).HasMaxLength(200);
         b.Property(x => x.Endpoint).HasMaxLength(400);
+        b.Property(x => x.AgentSecurityMode).HasMaxLength(16);
+        b.Property(x => x.SensitiveDataHandling).HasMaxLength(16);
         // An opaque ISecretVault reference — inline DataProtection ciphertext can be long.
         b.Property(x => x.ApiKeySecretRef).HasMaxLength(2000);
         b.HasIndex(x => x.TenantId).IsUnique();

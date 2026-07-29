@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using System.Text.Json;
-using Plenipo.Application.Auditing;
-using Plenipo.Core.Identity;
-using Plenipo.Modules.Sdk;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Plenipo.Application.Ai;
+using Plenipo.Application.Auditing;
+using Plenipo.Core.Identity;
+using Plenipo.Infrastructure.Agents.Security;
+using Plenipo.Modules.Sdk;
 
 namespace Plenipo.Infrastructure.Agents;
 
@@ -24,7 +26,9 @@ public sealed class ToolInvocationMiddleware(
     IReadOnlySet<string> approvalRequiredTools,
     IReadOnlyDictionary<string, ModuleTool> toolsByName,
     string moduleId,
-    Guid conversationId)
+    Guid conversationId,
+    IAgentSecurityService? agentSecurity = null,
+    EffectiveAgentSecurityPolicy? securityPolicy = null)
 {
     /// <summary>
     /// The audit-entry error recorded when a side-effecting tool call is blocked pending approval. A
@@ -33,6 +37,7 @@ public sealed class ToolInvocationMiddleware(
     /// audit rows carrying exactly this marker.
     /// </summary>
     public const string ApprovalBlockedError = "Blocked: tool requires human approval";
+    public const string SecurityBlockedError = "Blocked: agent security policy";
 
     private readonly List<BlockedToolCall> _blockedForApproval = [];
 
@@ -48,10 +53,42 @@ public sealed class ToolInvocationMiddleware(
         var name = context.Function.Name;
         toolsByName.TryGetValue(name, out var moduleTool);
 
+        // The model is untrusted even when its proposed tool call looks structurally valid. Inspect the
+        // arguments before approval or execution; in Redact mode, mutate string arguments so a tool never
+        // receives the sensitive value.
+        if (agentSecurity is not null && securityPolicy is { IsEnabled: true })
+        {
+            var serializedArguments = context.Arguments is null
+                ? "{}"
+                : SerializeArguments(context.Arguments, redactForAudit: false);
+            var inspection = serializedArguments is null
+                ? Uninspectable(securityPolicy, "UninspectableToolInput")
+                : await agentSecurity.InspectAsync(
+                    serializedArguments,
+                    AgentSecurityStage.ToolInput,
+                    securityPolicy,
+                    cancellationToken);
+            await RecordSecurityAsync(AgentSecurityStage.ToolInput, inspection, cancellationToken);
+
+            if (inspection.Blocked)
+            {
+                await RecordAsync(name, moduleTool, context.Arguments, success: false,
+                    error: SecurityBlockedError, durationMs: 0, cancellationToken);
+                return SecurityRefusal(inspection.Unavailable);
+            }
+
+            if (inspection.Modified)
+            {
+                SensitiveDataDetector.RedactArguments(context.Arguments);
+            }
+        }
+
         // Deny-by-default for side-effecting tools: never auto-execute without human approval.
         if (approvalRequiredTools.Contains(name))
         {
-            _blockedForApproval.Add(new BlockedToolCall(name, SafeSerializeArguments(context.Arguments)));
+            _blockedForApproval.Add(new BlockedToolCall(
+                name,
+                SerializeArguments(context.Arguments, redactForAudit: false)));
             await RecordAsync(name, moduleTool, context.Arguments, success: false,
                 error: ApprovalBlockedError, durationMs: 0, cancellationToken);
 
@@ -66,7 +103,40 @@ public sealed class ToolInvocationMiddleware(
         string? failure = null;
         try
         {
-            return await next(context, cancellationToken);
+            var result = await next(context, cancellationToken);
+            if (agentSecurity is null || securityPolicy is not { IsEnabled: true })
+            {
+                return result;
+            }
+
+            var serializedResult = SerializeResult(result);
+            if (serializedResult is null)
+            {
+                var unavailable = Uninspectable(securityPolicy, "UninspectableToolOutput");
+                await RecordSecurityAsync(AgentSecurityStage.ToolOutput, unavailable, cancellationToken);
+                if (unavailable.Blocked)
+                {
+                    return SecurityRefusal(unavailable: true);
+                }
+
+                return result;
+            }
+
+            // Tool responses are untrusted retrieved content. Prompt Shields treats them as documents so
+            // indirect instructions are detected before they enter the model's next context.
+            var inspection = await agentSecurity.InspectAsync(
+                serializedResult,
+                AgentSecurityStage.ToolOutput,
+                securityPolicy,
+                cancellationToken);
+            await RecordSecurityAsync(AgentSecurityStage.ToolOutput, inspection, cancellationToken);
+
+            if (inspection.Blocked)
+            {
+                return SecurityRefusal(inspection.Unavailable);
+            }
+
+            return inspection.Modified ? inspection.Text : result;
         }
         catch (Exception ex)
         {
@@ -97,14 +167,60 @@ public sealed class ToolInvocationMiddleware(
             ModuleId = moduleId,
             ToolName = toolName,
             Permission = moduleTool?.Permission ?? string.Empty,
-            ArgumentsJson = SafeSerializeArguments(arguments),
+            // Audit records never contain recognizable PII or credentials, even when tenant enforcement is off.
+            ArgumentsJson = SerializeArguments(arguments, redactForAudit: true),
             ConversationId = conversationId,
             Success = success,
             Error = error,
             DurationMs = durationMs,
         }, cancellationToken);
 
-    private static string? SafeSerializeArguments(AIFunctionArguments? arguments)
+    private Task RecordSecurityAsync(
+        AgentSecurityStage stage,
+        AgentSecurityInspection inspection,
+        CancellationToken cancellationToken)
+    {
+        if (!inspection.HasFindings)
+        {
+            return Task.CompletedTask;
+        }
+
+        var eventType = inspection.Unavailable
+            ? AuthAuditEventType.AgentSecurityUnavailable
+            : inspection.Blocked
+                ? AuthAuditEventType.AgentSecurityBlocked
+                : AuthAuditEventType.AgentSecurityDetected;
+        var findingNames = inspection.Findings
+            .Select(f => $"{f.Detector}:{f.Category}")
+            .Distinct(StringComparer.Ordinal);
+
+        return auditLog.RecordAuthEventAsync(new AuthAuditEntry
+        {
+            TenantId = currentUser.TenantId,
+            UserId = currentUser.UserId,
+            Subject = currentUser.Subject,
+            UserDisplay = currentUser.DisplayName,
+            EventType = eventType,
+            Detail = $"stage={stage}; findings={string.Join(",", findingNames)}",
+        }, cancellationToken);
+    }
+
+    private static string SecurityRefusal(bool unavailable) => unavailable
+        ? "The tool call was not executed because required security screening is temporarily unavailable."
+        : "The tool call was not executed because it violates the configured agent security policy.";
+
+    private static AgentSecurityInspection Uninspectable(
+        EffectiveAgentSecurityPolicy policy,
+        string category) =>
+        new()
+        {
+            Text = string.Empty,
+            Unavailable = true,
+            Blocked = policy.Mode == AgentSecurityMode.Enforce && policy.FailClosed,
+            Findings = [new AgentSecurityFinding("Policy", category)],
+        };
+
+    private static string? SerializeArguments(AIFunctionArguments? arguments, bool redactForAudit)
     {
         if (arguments is null)
         {
@@ -113,10 +229,34 @@ public sealed class ToolInvocationMiddleware(
 
         try
         {
-            return JsonSerializer.Serialize(arguments.ToDictionary(kv => kv.Key, kv => kv.Value));
+            var serialized = JsonSerializer.Serialize(arguments.ToDictionary(kv => kv.Key, kv => kv.Value));
+            return redactForAudit ? SensitiveDataDetector.RedactSerialized(serialized) : serialized;
         }
-        catch (NotSupportedException)
+        catch (Exception ex) when (ex is NotSupportedException or JsonException)
         {
+            return null;
+        }
+    }
+
+    private static string? SerializeResult(object? result)
+    {
+        if (result is null)
+        {
+            return "null";
+        }
+
+        if (result is string text)
+        {
+            return text;
+        }
+
+        try
+        {
+            return JsonSerializer.Serialize(result);
+        }
+        catch (Exception ex) when (ex is NotSupportedException or JsonException)
+        {
+            // A non-serializable result cannot be inspected as text; the framework will handle it as before.
             return null;
         }
     }

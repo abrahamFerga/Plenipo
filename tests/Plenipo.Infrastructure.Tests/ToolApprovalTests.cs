@@ -1,10 +1,11 @@
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+using Plenipo.Application.Ai;
 using Plenipo.Application.Auditing;
 using Plenipo.Application.Usage;
 using Plenipo.Core.Identity;
 using Plenipo.Infrastructure.Agents;
 using Plenipo.Modules.Sdk;
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.AI;
 
 namespace Plenipo.Infrastructure.Tests;
 
@@ -35,6 +36,45 @@ public sealed class ToolApprovalTests
 
         Assert.True(wasExecuted());
         Assert.Empty(middleware.BlockedForApproval);
+    }
+
+    [Fact]
+    public async Task EnforcedSensitiveDataPolicy_RedactsToolArgumentsBeforeExecution()
+    {
+        string? received = null;
+        var tool = AIFunctionFactory.Create(
+            (string recipient) =>
+            {
+                received = recipient;
+                return "executed";
+            },
+            name: "send");
+        var policy = EffectiveAgentSecurityPolicy.Disabled with
+        {
+            Mode = AgentSecurityMode.Enforce,
+            SensitiveDataHandling = SensitiveDataHandling.Redact,
+        };
+        var middleware = new ToolInvocationMiddleware(
+            new NoopAuditLog(),
+            new FakeCurrentUser(),
+            new HashSet<string>(StringComparer.Ordinal),
+            new Dictionary<string, ModuleTool>(),
+            moduleId: "demo",
+            conversationId: Guid.NewGuid(),
+            agentSecurity: new RedactingSecurityService(),
+            securityPolicy: policy);
+        var agent = new ToolCallingChatClient(
+                "send",
+                new Dictionary<string, object?> { ["recipient"] = "alice@example.com" })
+            .AsBuilder()
+            .BuildAIAgent(instructions: "test", tools: new List<AITool> { tool })
+            .AsBuilder()
+            .Use(middleware.InvokeAsync)
+            .Build();
+
+        await agent.RunAsync("send a message");
+
+        Assert.Equal("[REDACTED:EMAIL]", received);
     }
 
     private static (AIAgent Agent, ToolInvocationMiddleware Middleware, Func<bool> WasExecuted) BuildAgent(
@@ -68,7 +108,9 @@ public sealed class ToolApprovalTests
     }
 
     /// <summary>Issues a single tool call on the first response, then plain text — terminating the loop.</summary>
-    private sealed class ToolCallingChatClient(string toolToCall) : IChatClient
+    private sealed class ToolCallingChatClient(
+        string toolToCall,
+        Dictionary<string, object?>? arguments = null) : IChatClient
     {
         private int _turn;
 
@@ -78,7 +120,10 @@ public sealed class ToolApprovalTests
             _turn++;
             if (_turn == 1)
             {
-                var call = new FunctionCallContent("call-1", toolToCall, new Dictionary<string, object?>());
+                var call = new FunctionCallContent(
+                    "call-1",
+                    toolToCall,
+                    arguments ?? new Dictionary<string, object?>());
                 return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, new List<AIContent> { call })));
             }
 
@@ -92,6 +137,23 @@ public sealed class ToolApprovalTests
         public object? GetService(Type serviceType, object? serviceKey = null) => null;
 
         public void Dispose() { }
+    }
+
+    private sealed class RedactingSecurityService : IAgentSecurityService
+    {
+        public bool ExternalDetectorsConfigured => false;
+
+        public Task<AgentSecurityInspection> InspectAsync(
+            string text,
+            AgentSecurityStage stage,
+            EffectiveAgentSecurityPolicy policy,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new AgentSecurityInspection
+            {
+                Text = text.Replace("alice@example.com", "[REDACTED:EMAIL]", StringComparison.Ordinal),
+                Modified = stage == AgentSecurityStage.ToolInput &&
+                    text.Contains("alice@example.com", StringComparison.Ordinal),
+            });
     }
 
     private sealed class NoopAuditLog : IAuditLog

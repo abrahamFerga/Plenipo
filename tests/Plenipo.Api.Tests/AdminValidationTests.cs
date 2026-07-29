@@ -77,6 +77,31 @@ public sealed class AdminValidationTests : IClassFixture<PlenipoApiFactory>
     }
 
     [Fact]
+    public async Task AiSettings_rejects_an_unknown_agent_security_mode()
+    {
+        var client = Operator("val-security-mode");
+
+        var response = await client.PutAsJsonAsync(
+            "/api/admin/ai-settings",
+            new { agentSecurityMode = "maybe", sensitiveDataHandling = "Redact" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AiSettings_rejects_prompt_shields_when_the_external_service_is_not_configured()
+    {
+        var client = Operator("val-security-unavailable");
+
+        var response = await client.PutAsJsonAsync(
+            "/api/admin/ai-settings",
+            new { agentSecurityMode = "Enforce", promptShieldEnabled = true });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("Content Safety", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task AiModels_requires_a_key_before_contacting_OpenAI()
     {
         var client = Operator("val-models-key");
