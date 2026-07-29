@@ -1,0 +1,13 @@
+{
+  "$comment": "Registered consumers for release-impact routing. Add a consumer only after its GitHub App installation and label taxonomy are ready.",
+  "consumers": [
+    {
+      "repo": "abrahamFerga/networthy",
+      "solution": "Networthy.slnx",
+      "ref": "main",
+      "module": "finance",
+      "required": true,
+      "note": "Reference product for module, role, approval, document, and RAG seams."
+    }
+  ]
+}

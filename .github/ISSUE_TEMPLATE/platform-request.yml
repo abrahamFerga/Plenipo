@@ -1,0 +1,70 @@
+# An issue form rather than free-form prose: requesting agents and the platform triage workflow
+# need the same fields to make a capability request actionable.
+name: Platform request
+description: A product needs something the Plenipo platform does not yet do.
+title: "[platform-request] "
+labels: ["platform-request", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, check the source for an existing seam and apply a product-local shim if one
+        can carry the work. Filing a request must not stop the product loop.
+
+  - type: input
+    id: product
+    attributes:
+      label: Requesting product
+      description: Repository and the Plenipo version currently pinned.
+      placeholder: "networthy — Plenipo 0.1.0-alpha.28"
+    validations:
+      required: true
+
+  - type: textarea
+    id: capability
+    attributes:
+      label: Capability needed
+      description: State the need in one sentence, not a proposed implementation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: seam-tried
+    attributes:
+      label: Seam tried
+      description: Name the source-backed platform seam evaluated and why it does not fit.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: Include the smallest failing call, code, or observable behaviour.
+      render: csharp
+    validations:
+      required: true
+
+  - type: textarea
+    id: shim
+    attributes:
+      label: Local workaround
+      description: Say where the temporary shim and TODO(plenipo#N) are, or why no shim is possible.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance test
+      description: A test the requesting product will run when the capability lands.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: invariants
+    attributes:
+      label: Invariants
+      options:
+        - label: This request does not bypass RBAC, tenant isolation, approvals, or audit.
+          required: true
