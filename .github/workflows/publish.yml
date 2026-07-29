@@ -20,6 +20,13 @@
 #       dotnet nuget add source https://nuget.pkg.github.com/<OWNER>/index.json \
 #         --name plenipo --username <user> --password <a PAT with read:packages>
 #
+#  4. nuget.org — pushed via Trusted Publishing: NuGet/login exchanges this
+#     workflow's GitHub OIDC token for a short-lived API key, so no NuGet secret
+#     is stored. The nuget.org policy is keyed to repository abrahamFerga/Plenipo
+#     + workflow file publish.yml with NO environment; adding `environment:` to
+#     the job would break the claim match. Once consumers restore Plenipo.* from
+#     nuget.org, the vendored .packages/ channel in product repos can retire.
+#
 # The local pack+consume path is already proven on every CI run by
 # eng/verify-packaging.sh (see ci.yml).
 # =============================================================================
@@ -37,8 +44,10 @@ on:
         required: true
 
 # GITHUB_TOKEN needs package-write for GitHub Packages and contents-write to
-# attach assets to the release. id-token: write lets `npm publish --provenance`
-# mint a signed provenance attestation for the @plenipo/ui npm package.
+# attach assets to the release. id-token: write feeds two OIDC flows: `npm
+# publish --provenance` minting a signed attestation for @plenipo/ui, and
+# NuGet/login exchanging the workflow's OIDC token for a short-lived nuget.org
+# API key (Trusted Publishing).
 permissions:
   contents: write
   packages: write
@@ -54,7 +63,7 @@ env:
 
 jobs:
   publish:
-    name: Pack & push to GitHub Packages
+    name: Pack & publish
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -89,6 +98,23 @@ jobs:
           dotnet nuget push "./artifacts/*.nupkg" \
             --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
             --api-key "${{ secrets.GITHUB_TOKEN }}" \
+            --skip-duplicate
+
+      # nuget.org, via Trusted Publishing (policy: repo abrahamFerga/Plenipo,
+      # workflow publish.yml, no environment — this job must never declare
+      # `environment:`). The first successful push permanently claims the
+      # Plenipo.* IDs; nuget.org versions can be unlisted but never deleted.
+      - name: NuGet login (Trusted Publishing)
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: abrahamFerga
+
+      - name: Push to nuget.org
+        run: |
+          dotnet nuget push "./artifacts/*.nupkg" \
+            --source "https://api.nuget.org/v3/index.json" \
+            --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" \
             --skip-duplicate
 
       # ------------------------------------------------------------------------
