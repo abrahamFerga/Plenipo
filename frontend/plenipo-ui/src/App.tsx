@@ -3,6 +3,7 @@ import { BrowserRouter } from "react-router-dom";
 import { AppShell } from "./routes/AppShell";
 import { API_BASE } from "./lib/devAuth";
 import { resolveBrandName } from "./lib/branding";
+import { initPlenipoWebAuth, type WebAuthState } from "./lib/initWebAuth";
 
 // The dev-server entry doubles as a product host's shell. The product name resolves at RUNTIME
 // from the host (/api/platform/branding <- Branding:ProductName), so one prebuilt bundle serves
@@ -13,6 +14,18 @@ const buildTimeBrand = import.meta.env.VITE_BRAND_NAME as string | undefined;
 
 export default function App() {
   const [brandName, setBrandName] = useState(buildTimeBrand);
+
+  // Authentication is resolved BEFORE the shell mounts. AppShell fetches modules on mount, and a
+  // request issued before the client knows how this deployment authenticates would carry the dev-auth
+  // headers — inert against a secured host, but a lie on the wire and the first thing a security
+  // review would fail. So render nothing until this settles.
+  const [auth, setAuth] = useState<WebAuthState | null>(null);
+
+  useEffect(() => {
+    initPlenipoWebAuth({ apiBase: API_BASE })
+      .then(setAuth)
+      .catch(() => setAuth({ config: { mode: "dev" } }));
+  }, []);
 
   useEffect(() => {
     fetch(`${API_BASE}/api/platform/branding`)
@@ -33,6 +46,19 @@ export default function App() {
       document.title = brandName;
     }
   }, [brandName]);
+
+  if (!auth) {
+    return null;
+  }
+
+  if (auth.error) {
+    return (
+      <div role="alert" style={{ maxWidth: "40rem", margin: "4rem auto", padding: "0 1rem" }}>
+        <h1>Sign-in is not available</h1>
+        <p>{auth.error}</p>
+      </div>
+    );
+  }
 
   return (
     // Opt into the React Router v7 behaviors now — silences the v6 future-flag console warnings and keeps

@@ -64,6 +64,7 @@ Postgres, Key Vault — is `deploy/terraform/`.)
 |---|---|
 | AI provider | Configure each tenant's provider/model/key in Admin → AI Settings. Keys are vaulted and write-only; model choices are loaded live from providers. |
 | Authentication | Keep `PLENIPO_ENVIRONMENT=Production` and set both `AUTH_AUTHORITY` and `AUTH_AUDIENCE` for the external IdP (the `X-Dev-*` scheme exists only in Development) |
+| **First tenant** | Set `BOOTSTRAP_TENANT_SLUG`, `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_SUBJECT` before the first start. Outside Development nothing creates a tenant, and permissions resolve only after a tenant does — so without these an empty database has nobody who could create one, and every request 403s. Consumed once; **remove them after the first successful start**. The token's tenant claim must then carry the slug (`Auth__TenantClaim`, default `tenant`) |
 | Host filesystem connector | Explicitly set `Connectors__OperatorEnabled__local-folder=true` and one or more `Connectors__LocalFolder__AllowedRoots__N` values; otherwise it is not registered |
 | Connector secrets | Set in the admin UI (write-only). To store them in Azure Key Vault instead of the DB: `Secrets__Provider=AzureKeyVault` + `Secrets__KeyVaultUri=...` on the api service |
 | TLS / domain | Put a reverse proxy (Caddy, Traefik, nginx) in front of port 8080 |

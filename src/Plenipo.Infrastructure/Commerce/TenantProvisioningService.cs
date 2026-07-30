@@ -72,7 +72,10 @@ public sealed class TenantProvisioningService(
             DisplayName = command.AdminDisplayName?.Trim(),
         };
         db.Users.Add(admin);
-        db.UserRoles.Add(new UserRole { TenantId = tenant.Id, UserId = admin.Id, Role = "tenant_admin" });
+        foreach (var role in command.AdminRoles is { Count: > 0 } roles ? roles : ["tenant_admin"])
+        {
+            db.UserRoles.Add(new UserRole { TenantId = tenant.Id, UserId = admin.Id, Role = role });
+        }
 
         // Modules are default-ON; licensing a subset means explicitly disabling the rest.
         if (command.Modules is not null)

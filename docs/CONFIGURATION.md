@@ -93,7 +93,8 @@ and change without a deploy.
 | `Channels:Email` | `Enabled`, `Host`/`Port`/`UseSsl`, `Username`, `Password`, `Folder`, `ModuleId`, `TenantSlug`, `PollSeconds`, `ReplyEnabled`, `AllowedSenders`, `AllowUnknownSenders`, `MaxMessageBytes` | IMAP intake mailbox polled into agent turns (docs/INBOUND_CHANNELS.md); password via user-secrets/env; replies and unknown senders off by default |
 | `Email` | Outbound SMTP: `Enabled`, `Host`/`Port`/`UseStartTls`, `Username`, `Password`, `FromAddress`, `FromName` | Powers the email notification channel AND user invites; password via user-secrets/env. Unconfigured, invites still work (share the link manually) |
 | `Push` | Mobile push: `Enabled`, `IncludeContent`, `PlaceholderTitle`/`PlaceholderBody`, `ExpoEndpoint`, `ExpoAccessToken`, `MaxDevicesPerUser` | Nothing to configure for most deployments — the channel is inert until a device registers, and the built-in Expo transport needs no Apple/Google credentials. **`IncludeContent=false`** is the one to think about: see below |
-| `Auth` | `Authority`, `Audience`, `PermissionSource` (Database/Token) | Empty = dev-auth in Development only |
+| `Auth` | `Authority`, `Audience`, `ClientId`, `Scopes`, `PermissionSource` (Database/Token), `TenantClaim` (default `tenant`) | Empty = dev-auth in Development only. `ClientId`/`Scopes` are what the BROWSER signs in with — see below |
+| `Bootstrap` | `TenantSlug`, `TenantName`, `AdminEmail`, `AdminSubject`, `AdminRoles` | **First run only** — creates the deployment's first tenant and its operator. Consumed at startup, never over HTTP, inert once any operator exists. See below |
 | `Secrets` | `Provider` (DataProtection/AzureKeyVault), `KeyVaultUri` | Where runtime-entered secrets rest |
 | `DataProtection:KeysPath` | Shared durable directory for the Data Protection key ring | Optional alternative to `plenipo-redis`; required outside Development when Redis is absent |
 | `Security:OutboundUrls` | `AllowHttp`, `AllowPrivateNetworks` | Both false by default; applies to tenant-configured webhooks, AI endpoints, OAuth and connector URLs |
@@ -214,6 +215,99 @@ and every user gets a per-category mute switch in the notification bell. A mute 
 category entirely for that user — the in-app row and every channel — without touching anyone
 else's notifications or any other category. No stored row means "on", so new categories need no
 backfill.
+
+## Signing in from a browser
+
+Setting `Auth:Authority` + `Auth:Audience` secures the **API**. To let a person sign in from the shipped
+web UI, add the public client id of your SPA app registration:
+
+```jsonc
+{
+  "Auth": {
+    "Authority": "https://your-tenant.ciamlogin.com/<tenant-id>/v2.0",
+    "Audience":  "api://your-api-id",
+    "ClientId":  "<the SPA app registration's client id>",
+    "Scopes":    "api://your-api-id/.default"   // provider-specific; omit if unsure
+  }
+}
+```
+
+Register these redirect URIs with the identity provider:
+
+| Surface | Redirect URI |
+|---|---|
+| App (`/`) | `https://<your-host>/signin-callback` |
+| Admin console (`/admin`) | `https://<your-host>/admin/signin-callback` |
+
+The shell learns all of this at runtime from the anonymous `GET /api/platform/auth-config`, which is what
+lets **one prebuilt bundle serve every deployment** — nothing is baked in at build time. It then runs
+Authorization Code + PKCE with no client secret (a browser cannot keep one), holds the access token in
+memory, and offers a **Sign in** button when the API answers 401.
+
+`Auth:ClientId` is deliberately optional and does **not** fail startup when missing: an existing API-only
+deployment must keep starting after an upgrade. A browser that finds no client id says so on screen
+instead of looping on 401.
+
+A product with its own identity stack skips all of this and supplies an adapter:
+
+```tsx
+import { PlenipoApp, type AuthAdapter } from "@plenipo/ui";
+
+const auth: AuthAdapter = { getAccessToken: () => myIdentity.getToken() };
+createRoot(el).render(<PlenipoApp config={{ auth }} />);
+```
+
+That is the same `AuthAdapter` shape `@plenipo/mobile` takes, so a product that has wired one already
+knows this one. With no authority configured the shell keeps using the Development-only `X-Dev-*`
+headers, so a local host still works with nothing configured at all.
+
+## First run outside Development: the `Bootstrap` section
+
+Development seeds a `dev` tenant automatically. **Nothing else does.** So a fresh Production database
+starts empty — and because a request's permissions are only resolved *after* its tenant resolves, every
+principal on a tenant-less deployment carries an empty permission set. That includes one asserting
+`system_admin`, so `POST /api/admin/tenants` — the endpoint that would fix it — is unreachable. It is a
+deadlock, not a permissions problem.
+
+`Bootstrap` breaks it once, from configuration:
+
+```jsonc
+{
+  "Bootstrap": {
+    "TenantSlug":   "acme",              // required; lowercase letters, digits, hyphens
+    "TenantName":   "Acme Ltd",          // optional; defaults to the slug
+    "AdminEmail":   "admin@acme.test",   // required
+    "AdminSubject": "8f3c…",             // the `sub` your IdP will present for this person
+    "AdminRoles":   ["system_admin"]     // optional; this is the default
+  }
+}
+```
+
+In environment-variable form each array entry is its own key: `Bootstrap__AdminRoles__0=tenant_admin`.
+Setting any entry **replaces** the default rather than adding to it.
+
+What it does and does not do:
+
+- **Not an HTTP surface, ever.** An operator who can set configuration already controls the deployment;
+  naming the first admin adds no authority they did not have. There is no anonymous first-run door and no
+  default password.
+- **Self-disarming.** It no-ops the moment any principal in the deployment holds an operator-reserved
+  permission — not merely when a tenant exists, because a commerce-provisioned tenant gets a
+  `tenant_admin`, who deliberately cannot create tenants. **Remove the section after the first successful
+  start.**
+- **Audited** as `PlatformBootstrapped`, with the tenant, the admin and the roles granted.
+- **`AdminSubject` is required whenever `AdminRoles` grants an operator-reserved permission.** Without a
+  subject the roles are bound through a standing invite keyed on the email address, and the platform
+  matches email from an unverified token claim — fine for tenant-grade roles, not for cross-tenant control.
+- With `Auth:PermissionSource=Token` the tenant is still created, but the roles are inert: the IdP is the
+  only source of roles, and it must assert them. The host logs a warning saying so.
+
+**After bootstrapping**, the token's tenant claim (`Auth:TenantClaim`, default `tenant`) must carry the
+slug. A single-tenant deployment is resolved by fallback even without the claim, but the moment a second
+tenant exists that fallback stops working — configure the claim before you get there.
+
+If a request's tenant does not resolve, `GET /api/platform/me` reports `tenantResolved: false` with a
+`tenantProblem` naming the cause, and the resulting 403 carries the same explanation in its body.
 
 ## Where runtime configuration lives (admin console, per tenant)
 

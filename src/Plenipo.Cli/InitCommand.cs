@@ -67,6 +67,21 @@ public sealed class InitCommand : Command<InitCommand.Settings>
         [Description("Database (internal RBAC + token) | Token (external IdP only)")]
         public string? PermissionSource { get; init; }
 
+        [CommandOption("--bootstrap-tenant-slug <SLUG>")]
+        [Description("First-run only: slug of the tenant to create on an empty non-Development database.")]
+        public string? BootstrapTenantSlug { get; init; }
+
+        [CommandOption("--bootstrap-tenant-name <NAME>")]
+        public string? BootstrapTenantName { get; init; }
+
+        [CommandOption("--bootstrap-admin-email <EMAIL>")]
+        [Description("First-run only: the first operator's email address.")]
+        public string? BootstrapAdminEmail { get; init; }
+
+        [CommandOption("--bootstrap-admin-subject <SUB>")]
+        [Description("First-run only: the first operator's IdP subject. Required for an operator-grade admin.")]
+        public string? BootstrapAdminSubject { get; init; }
+
         [CommandOption("--skills <BOOL>")]
         [Description("Enable agent skills (deploy-time SKILL.md bundles shipped with the host).")]
         public bool? Skills { get; init; }
@@ -125,6 +140,10 @@ public sealed class InitCommand : Command<InitCommand.Settings>
         AuthAuthority = s.AuthAuthority,
         AuthAudience = s.AuthAudience,
         PermissionSource = s.PermissionSource,
+        BootstrapTenantSlug = s.BootstrapTenantSlug,
+        BootstrapTenantName = s.BootstrapTenantName,
+        BootstrapAdminEmail = s.BootstrapAdminEmail,
+        BootstrapAdminSubject = s.BootstrapAdminSubject,
         SkillsEnabled = s.Skills,
         SkillsPath = s.SkillsPath,
         SecretsProvider = s.SecretsProvider,
