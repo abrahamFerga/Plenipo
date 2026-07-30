@@ -707,6 +707,44 @@ namespace Plenipo.Infrastructure.Persistence.Migrations.Platform
                     b.ToTable("role_permissions", "platform");
                 });
 
+            modelBuilder.Entity("Plenipo.Core.Platform.RolePermissionSuppression", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Permission")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Role", "Permission")
+                        .IsUnique();
+
+                    b.ToTable("role_permission_suppressions", "platform");
+                });
+
             modelBuilder.Entity("Plenipo.Core.Platform.StoredFile", b =>
                 {
                     b.Property<Guid>("Id")
@@ -781,6 +819,9 @@ namespace Plenipo.Infrastructure.Persistence.Migrations.Platform
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("RolePermissionsConvertedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Slug")
                         .IsRequired()

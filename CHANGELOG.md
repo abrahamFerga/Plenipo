@@ -16,6 +16,34 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
 
 ### Changed
 
+- **Role baselines are now declaration-anchored: a tenant stores what it CHANGED, not the whole set.**
+  A permission — or a whole role — that a product declares with `AddPlenipoRole` now reaches every
+  tenant immediately, including tenants provisioned long before the declaration changed, with no
+  reconciler and no per-tenant repair. A permission a tenant admin removed is stored as an explicit
+  suppression and survives every later baseline change, and `AddPlenipoRole(..., replace: true)`
+  narrowing propagates again. What a role grants is `(baseline ∖ suppressed) ∪ granted`; see
+  [ADR 0002](docs/adr/0002-role-permission-deviation-storage.md).
+
+  Previously the first seed materialized every role's full permission set and any row at all made the
+  tenant authoritative, so a role with no rows granted nothing. A product that shipped a permission fix
+  in a later release therefore shipped something inert on exactly the deployments that had the problem —
+  and a role declared after a tenant was seeded conferred no authority at all.
+
+  *Breaking for direct callers:* `RolePermissionResolution.PermissionsForRoles` now takes granted,
+  suppressed and baseline maps, and `DatabaseInitializer.EnsureRolePermissionsSeededAsync` is removed —
+  nothing replaces it, because role rows no longer need seeding. No compatibility overload is offered:
+  one that ignored suppressions would be a privilege-escalation footgun.
+
+- **Upgrade behaviour, stated plainly.** The first start after upgrading converts each existing tenant's
+  role rows to deviations **losslessly — nobody's effective permissions change.** A permission a product
+  declared *after* a tenant was seeded is therefore recorded as suppressed on that tenant, exactly as it
+  behaves today; `DELETE /api/admin/roles/{role}/suppressions` (new, `platform.roles.manage`) restores a
+  role to its declared baseline in one call. The conversion claims each tenant with an atomic conditional
+  update inside its own transaction, so concurrent instances converge on exactly one conversion — but
+  **deploy this release single-instance or with brief downtime anyway**, because the PREVIOUS binary
+  misreads converted data. Rolling back past it requires a restore: a converted tenant's grant rows are a
+  subset of what the previous resolver expects.
+
 - **`TabEditorField.Options` now carries a label as well as a value** (`TabEditorOption`).
   Canonical identifiers are rarely readable — `America/Mexico_City` is exactly right to store and
   exactly wrong to show — so a field can now say what a human should read while still posting the
@@ -25,7 +53,67 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   `Options: ["checking", "savings"]` is unchanged; an existing array spreads with
   `Options: [.. codes]`.
 
+### Added
+
+- **The web shell can obtain a real bearer token.** Server-side auth was complete, but the shipped web
+  client had no way to get a token — no sign-in route, no authority redirect, no callback handler, no
+  token store, no refresh, no 401 recovery. `PlenipoClientConfig.authHeaders` was the right seam, but
+  overriding it presumed the host already *had* a token, and `@plenipo/ui` did not even export
+  `configureClient`, so a product could not reach it without forking the renderer. A correctly
+  configured `Auth:Authority` deployment was therefore unreachable from a browser.
+
+  `@plenipo/ui` now exports an `AuthAdapter` seam matching `@plenipo/mobile`'s, ships a
+  dependency-free browser PKCE adapter (`createOidcAuth`), and learns its authority at runtime from the
+  new anonymous `GET /api/platform/auth-config` — so one prebuilt bundle still serves every deployment.
+  Set `Auth:ClientId` (and optionally `Auth:Scopes`) and register `/signin-callback` and
+  `/admin/signin-callback` with the IdP. `Auth:ClientId` is deliberately **not** part of the startup
+  fail-fast, so an existing API-only deployment keeps starting untouched.
+
+  **In OIDC mode the shell sends no `X-Dev-*` header at all**, including on the SignalR connection —
+  a signed-out browser gets a clean 401 and a Sign in button rather than a request that quietly claims
+  `X-Dev-Roles: system_admin`. With no authority configured the dev headers still apply, so a local host
+  works with nothing configured.
+
+- **A `Bootstrap` configuration section creates the deployment's first tenant and its operator.**
+  Outside Development the platform seeded nothing, and because a request's permissions are resolved only
+  *after* its tenant resolves, every principal on a tenant-less deployment carried an empty permission
+  set — including one asserting `system_admin`. `POST /api/admin/tenants`, the endpoint that would have
+  fixed it, was therefore unreachable. That is a deadlock, not a permissions problem.
+
+  The section is consumed once at startup, is never exposed over HTTP, and no-ops the moment any
+  principal in the deployment holds an operator-reserved permission — deliberately not merely when a
+  tenant exists, since a commerce-provisioned tenant gets a `tenant_admin`, who cannot create tenants.
+  Every run is audited as `PlatformBootstrapped`. `Bootstrap:AdminSubject` is **required** when
+  `Bootstrap:AdminRoles` grants an operator-reserved permission: without it the roles bind through an
+  email-keyed invite, and email comes from an unverified token claim. The shipped Docker Compose
+  deployment — which defaults to `Production` — now carries the variables and tells you to remove them
+  after the first start.
+
 ### Fixed
+
+- **A request whose tenant does not resolve now says so.** `GET /api/platform/me` reports
+  `tenantResolved: false` with a `tenantProblem` naming the cause, the resulting 403 carries the same
+  explanation in its body, and the SignalR hub raises it as a `HubException`. Previously `/me` returned a
+  cheerful 200 while everything else returned a bare 403, so a client shell rendered normally and then
+  failed every call with nothing anywhere naming the cause — which, on a fresh deployment, is the entire
+  symptom of having no tenant at all. No status code and no authorization decision changed.
+
+- **The `Auth:RequireMfa` backstop can no longer be deleted by accident.** The `JwtBearerEvents` bag was
+  constructed *inside* the `RequireMfa` branch, so the next handler to need an event would have replaced
+  it and silently removed the MFA enforcement `SECURITY.md` advertises. It is now constructed
+  unconditionally and events are attached to it.
+
+- **The SignalR hub URL no longer carries dev-auth values as query parameters.** A comment claimed "the
+  server reads either"; nothing in the platform reads `Request.Query` for identity, so they authenticated
+  nothing — while putting `X-Dev-Roles: system_admin` into browser history, proxy logs and error reports.
+  Credentials now come from the configured client, with the bearer travelling via `accessTokenFactory`;
+  the host reads an `access_token` query parameter back for `/hubs` paths only, which is the one
+  transport a browser cannot give a header to.
+
+- **A tenant with a pending approval and no eligible approver now logs a warning.** It was a debug
+  line, so the state was effectively invisible: every approval-gated write parks until an operator
+  intervenes, and the only symptom is work silently not happening. Deployments on
+  `Auth:PermissionSource=Token` keep the debug line, where having no DB-enumerable approver is expected.
 
 - **`GET /api/platform/info` and the ops AI card now report the TENANT's provider, not the
   deployment's.** Both were written when AI configuration was deployment-only; runtime per-tenant

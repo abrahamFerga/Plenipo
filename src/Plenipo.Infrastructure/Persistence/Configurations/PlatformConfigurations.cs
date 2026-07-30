@@ -126,6 +126,22 @@ internal sealed class RolePermissionConfiguration : IEntityTypeConfiguration<Rol
     }
 }
 
+/// <summary>
+/// Same shape and limits as <see cref="RolePermissionConfiguration"/>, so a suppression can address
+/// any permission a grant can.
+/// </summary>
+internal sealed class RolePermissionSuppressionConfiguration : IEntityTypeConfiguration<RolePermissionSuppression>
+{
+    public void Configure(EntityTypeBuilder<RolePermissionSuppression> b)
+    {
+        b.ToTable("role_permission_suppressions");
+        b.HasKey(x => x.Id);
+        b.Property(x => x.Role).HasMaxLength(64).IsRequired();
+        b.Property(x => x.Permission).HasMaxLength(200).IsRequired();
+        b.HasIndex(x => new { x.TenantId, x.Role, x.Permission }).IsUnique();
+    }
+}
+
 internal sealed class TenantModuleConfiguration : IEntityTypeConfiguration<TenantModule>
 {
     public void Configure(EntityTypeBuilder<TenantModule> b)

@@ -13,6 +13,17 @@ auto-provisioning) is planned in [COMMERCIALIZATION.md](COMMERCIALIZATION.md).
 | **Shared SaaS** | A **tenant** in our multi-tenant deployment | One deployment, row-level isolation (`TenantId` global query filters, enforced by construction) |
 | **Dedicated** | Their own infrastructure, provisioned on demand | A per-customer deployment from the same Terraform/compose artifacts |
 
+## First run: the deployment's own operator
+
+Before any of the below works, the deployment needs one operator. Development seeds a `dev` tenant;
+nothing else does, and permissions resolve only after a tenant does — so a fresh Production database has
+nobody who could create the first tenant, including a principal asserting `system_admin`.
+
+Set the `Bootstrap` section before the first start (`Bootstrap:TenantSlug`, `Bootstrap:AdminEmail`,
+`Bootstrap:AdminSubject`), start the host once, then **remove the section**. It is consumed at startup
+only, never exposed over HTTP, inert once any operator exists, and audited as `PlatformBootstrapped`. Full
+reference in [CONFIGURATION.md](CONFIGURATION.md#first-run-outside-development-the-bootstrap-section).
+
 ## Shared SaaS: license → tenant
 
 Buying a license maps to creating a **tenant** plus its first admin. Everything needed exists as
@@ -26,8 +37,26 @@ API surface, so the flow is scriptable today and automatable behind a billing we
 From there the customer self-serves inside their tenant: roles, users, agent profiles (including
 per-agent models and tool selections), connectors with their own credentials, notifications.
 
-**Gap (next step):** a single `POST /api/admin/tenants:provision` convenience endpoint (tenant +
-admin + modules + AI settings in one transaction) for the billing webhook to call.
+`POST /api/admin/tenants/provision` (operator-only) does steps 1–2 in one transaction — it is what the
+billing webhook calls, and it fires `ITenantProvisionedHook` after the commit.
+
+### Role baselines across a fleet
+
+What a role grants is the product's **declared baseline** (`AddPlenipoRole` + the built-in defaults)
+adjusted by each tenant's **deviations**. Two operational consequences:
+
+- **Shipping a permission change is a release, not a migration.** Add a permission to a declared role,
+  deploy, and every tenant has it on restart. You do not visit tenants, and there is no reconciler to
+  watch. A tenant that removed that permission deliberately keeps it removed — that is the point.
+- **To repair a role that has diverged**, call `DELETE /api/admin/roles/{role}/suppressions` (or use
+  Admin → Roles). It drops everything the tenant withholds from that role, restoring the declared
+  baseline while keeping any additions the tenant made.
+
+**Upgrading to the release that introduced this** (see
+[ADR 0002](adr/0002-role-permission-deviation-storage.md)): the first start converts each existing
+tenant's role rows before serving any request. It is lossless — nobody's effective permissions change —
+but it is **one-way**. Deploy it **single-instance or with brief downtime**, because the previous binary
+misreads converted data, and take a backup: rolling back past this release requires a restore.
 
 ## AI keys per customer: ours or theirs
 

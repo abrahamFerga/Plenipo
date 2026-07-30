@@ -23,6 +23,7 @@ public sealed class PlatformDbContext(
     public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<UserPermission> UserPermissions => Set<UserPermission>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<RolePermissionSuppression> RolePermissionSuppressions => Set<RolePermissionSuppression>();
     public DbSet<TenantModule> TenantModules => Set<TenantModule>();
     public DbSet<TenantAiSettings> TenantAiSettings => Set<TenantAiSettings>();
     public DbSet<AgentProfile> AgentProfiles => Set<AgentProfile>();

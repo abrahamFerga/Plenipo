@@ -1,4 +1,5 @@
 using Plenipo.Application.Ai;
+using Plenipo.Application.Authorization;
 using Plenipo.Infrastructure.Ai;
 using Plenipo.Infrastructure.Persistence;
 using Plenipo.Infrastructure.Persistence.Interceptors;
@@ -42,6 +43,12 @@ public class PlenipoApiFactory : WebApplicationFactory<Program>
             // plus its executable tool source so tool-permission filtering can be exercised end to end.
             services.AddSingleton<IModule>(new TestModule());
             services.AddSingleton<IModuleToolSource>(new TestToolSource());
+
+            // Host-declared product roles, as a real product ships them. The second deliberately holds an
+            // operator-reserved permission: nothing prevents a host from declaring one, so the role
+            // endpoints must not treat "declared" as "safe to hand out".
+            services.AddPlenipoRole(TestModule.ProductRoleName, [Plenipo.Application.Authorization.Permissions.UseChat, TestModule.EchoPermission]);
+            services.AddPlenipoRole(TestModule.OperatorGradeRoleName, [Plenipo.Application.Authorization.Permissions.ManageTenants]);
 
             // Enable the dependency-free Mock chat client so the agent pipeline runs end to end without an API
             // key. AddAgentStack reads Ai:Provider at registration (before a config override would apply) and

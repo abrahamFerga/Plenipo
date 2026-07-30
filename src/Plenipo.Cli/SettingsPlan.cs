@@ -28,6 +28,14 @@ public sealed record SettingsPlan
     public string? AuthAudience { get; init; }
     public string? PermissionSource { get; init; }
 
+    // First-run only: the tenant and operator a non-Development deployment starts with. Without them an
+    // empty database has nobody who could create a tenant, so the section that decides whether a host is
+    // usable at all is reachable from the same tool that writes the rest of its configuration.
+    public string? BootstrapTenantSlug { get; init; }
+    public string? BootstrapTenantName { get; init; }
+    public string? BootstrapAdminEmail { get; init; }
+    public string? BootstrapAdminSubject { get; init; }
+
     public bool? SkillsEnabled { get; init; }
     public string? SkillsPath { get; init; }
 
@@ -67,6 +75,11 @@ public static class PlenipoSettingsFile
         Set(root, plan.AuthAuthority, "Auth", "Authority");
         Set(root, plan.AuthAudience, "Auth", "Audience");
         Set(root, plan.PermissionSource, "Auth", "PermissionSource");
+
+        Set(root, plan.BootstrapTenantSlug, "Bootstrap", "TenantSlug");
+        Set(root, plan.BootstrapTenantName, "Bootstrap", "TenantName");
+        Set(root, plan.BootstrapAdminEmail, "Bootstrap", "AdminEmail");
+        Set(root, plan.BootstrapAdminSubject, "Bootstrap", "AdminSubject");
 
         Set(root, plan.SkillsEnabled, "Skills", "Enabled");
         Set(root, plan.SkillsPath, "Skills", "Path");

@@ -34,12 +34,12 @@ public sealed class RoleBaselineTests
     }
 
     [Fact]
-    public void ResolutionFallback_UsesTheMergedBaseline()
+    public void Resolution_UsesTheMergedBaseline()
     {
         var merged = RoleBaseline.Merge([new ProductRole { Role = "paralegal", Permissions = ["chat.use"] }]);
         var empty = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
 
-        var permissions = RolePermissionResolution.PermissionsForRoles(["paralegal"], empty, merged);
+        var permissions = RolePermissionResolution.PermissionsForRoles(["paralegal"], empty, empty, merged);
 
         Assert.Contains("chat.use", permissions);
     }

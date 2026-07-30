@@ -1,4 +1,5 @@
 using Plenipo.Application.Authorization;
+using Plenipo.Application.Bootstrap;
 using Plenipo.Core.Platform;
 using Plenipo.Infrastructure.Persistence;
 using Plenipo.Modules.Sdk;
@@ -39,11 +40,27 @@ public static class DatabaseInitializer
                 "See GETTING_STARTED.md.", ex);
         }
 
+        // Bring any tenant seeded under the old full-set role storage onto the deviation model. Runs
+        // before anything reads a permission, is lossless, and stamps itself done per tenant.
+        await RoleStorageConversion.ConvertAsync(
+            platform,
+            RoleBaseline.Merge(services.GetServices<ProductRole>()),
+            services.GetRequiredService<ILogger<DatabaseInitializerLog>>(),
+            cancellationToken);
+
         if (app.Environment.IsDevelopment())
         {
             await SeedDevTenantAsync(platform, services, cancellationToken);
         }
+
+        // Outside Development nothing above creates a tenant, and permissions are only resolved after a
+        // tenant resolves — so an empty deployment has nobody who could create one. The Bootstrap section
+        // breaks that deadlock once, from configuration, and is inert as soon as an operator exists.
+        await services.GetRequiredService<IPlatformBootstrapper>().BootstrapAsync(cancellationToken);
     }
+
+    /// <summary>Log category for startup database work — this class is static, so it cannot be one itself.</summary>
+    internal sealed class DatabaseInitializerLog;
 
     /// <summary>
     /// Brings a context's store up to date: applies EF migrations for a relational provider (PostgreSQL in
@@ -137,44 +154,8 @@ public static class DatabaseInitializer
 
         await platform.SaveChangesAsync(cancellationToken);
 
-        await EnsureRolePermissionsSeededAsync(platform, tenant.Id, RoleBaseline.Merge(services.GetServices<ProductRole>()), cancellationToken);
-    }
-
-    /// <summary>
-    /// Materializes the built-in role → permission defaults as editable rows for a tenant, but only when
-    /// the tenant has none yet. This is what makes the baseline editable in the admin console while keeping
-    /// existing behaviour: once seeded, the rows are authoritative; a tenant with no rows falls back to the
-    /// code defaults. Idempotent and safe to call on every startup. Call before applying a role edit so a
-    /// first edit can't strand the other roles at empty.
-    /// </summary>
-    public static async Task EnsureRolePermissionsSeededAsync(
-        PlatformDbContext platform,
-        Guid tenantId,
-        IReadOnlyDictionary<string, string[]> baseline,
-        CancellationToken cancellationToken = default)
-    {
-        // RolePermission is tenant-owned, but no ambient tenant is set during startup initialization, so
-        // bypass the query filter and scope explicitly by tenantId (mirrors the TenantModule seeding above).
-        var alreadySeeded = await platform.RolePermissions.IgnoreQueryFilters()
-            .AnyAsync(rp => rp.TenantId == tenantId, cancellationToken);
-        if (alreadySeeded)
-        {
-            return;
-        }
-
-        foreach (var (role, defaults) in baseline)
-        {
-            foreach (var permission in defaults)
-            {
-                platform.RolePermissions.Add(new RolePermission
-                {
-                    TenantId = tenantId,
-                    Role = role,
-                    Permission = permission,
-                });
-            }
-        }
-
-        await platform.SaveChangesAsync(cancellationToken);
+        // No role rows are written. Under deviation storage a tenant with no rows simply tracks the
+        // declared baseline, which is what a fresh tenant should do — and what makes a later
+        // AddPlenipoRole change reach it without a reconciler.
     }
 }

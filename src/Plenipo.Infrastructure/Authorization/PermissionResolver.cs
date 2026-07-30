@@ -10,9 +10,11 @@ namespace Plenipo.Infrastructure.Authorization;
 /// <summary>
 /// Computes a user's effective permission set by merging three sources: the roles the principal holds
 /// (from token claims and/or DB assignments), the user's explicit DB grants, and any fine-grained
-/// permission claims. Roles are expanded to permissions via the tenant's <em>configured</em> role →
-/// permission rows (editable in the admin console), falling back to <see cref="RolePermissions.Defaults"/>
-/// for a tenant that has none. See <see cref="RolePermissionResolution"/> for the exact rules.
+/// permission claims. Roles are expanded to permissions from the declared baseline
+/// (<see cref="RolePermissions.Defaults"/> merged with the host's <see cref="ProductRole"/>s) adjusted by
+/// the tenant's stored <em>deviations</em> — the permissions it granted beyond the baseline and the ones
+/// it removed, both editable in the admin console. See <see cref="RolePermissionResolution"/> for the
+/// exact rules.
 ///
 /// With <c>Auth:PermissionSource=Token</c> the DB sources drop out entirely: roles come only from
 /// the IdP's token, and per-user DB grants are never consulted — the external IdP is the single
@@ -47,18 +49,15 @@ public sealed class PermissionResolver(
             roles.UnionWith(dbRoles);
         }
 
-        // 2. Expand roles → permissions using the tenant's configured baseline (query filter scopes the
-        //    rows to the ambient tenant), falling back to built-in defaults when the tenant has none.
-        var configuredByRole = (await db.RolePermissions
-                .Select(r => new { r.Role, r.Permission })
-                .ToListAsync(cancellationToken))
-            .GroupBy(r => r.Role, StringComparer.Ordinal)
-            .ToDictionary(
-                g => g.Key,
-                g => (IReadOnlyList<string>)g.Select(x => x.Permission).ToList(),
-                StringComparer.Ordinal);
+        // 2. Expand roles → permissions from the declared baseline, adjusted by this tenant's deviations.
+        //    Both reads are scoped to the ambient tenant by the global query filter.
+        var grantedByRole = await GroupByRoleAsync(
+            db.RolePermissions.Select(r => new RoleRow(r.Role, r.Permission)), cancellationToken);
+        var suppressedByRole = await GroupByRoleAsync(
+            db.RolePermissionSuppressions.Select(r => new RoleRow(r.Role, r.Permission)), cancellationToken);
 
-        permissions.UnionWith(RolePermissionResolution.PermissionsForRoles(roles, configuredByRole, _baseline.Value));
+        permissions.UnionWith(RolePermissionResolution.PermissionsForRoles(
+            roles, grantedByRole, suppressedByRole, _baseline.Value));
 
         // 3. Explicit per-user grants for the provisioned user (tenant-filtered) — never in Token mode.
         if (!tokenSourced && currentUser.UserId is Guid uid)
@@ -75,4 +74,15 @@ public sealed class PermissionResolver(
 
         return permissions;
     }
+
+    private sealed record RoleRow(string Role, string Permission);
+
+    private static async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GroupByRoleAsync(
+        IQueryable<RoleRow> rows, CancellationToken cancellationToken) =>
+        (await rows.ToListAsync(cancellationToken))
+            .GroupBy(r => r.Role, StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<string>)g.Select(x => x.Permission).ToList(),
+                StringComparer.Ordinal);
 }

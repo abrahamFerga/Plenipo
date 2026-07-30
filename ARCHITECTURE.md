@@ -115,7 +115,7 @@ them with `builder.AddPlenipoModule<FinanceModule>()`.
 ```mermaid
 flowchart LR
   subgraph platformdb["Platform database"]
-    ps["platform schema<br/>tenants, users, roles, grants,<br/>conversations, pending_approvals"]
+    ps["platform schema<br/>tenants, users, roles, grants,<br/>role_permission_suppressions,<br/>conversations, pending_approvals"]
     fs["finance schema<br/>transactions, budgets, rules<br/>(a module owns this)"]
   end
   subgraph auditdb["Audit database (append-only)"]
@@ -139,12 +139,16 @@ everything" guarantee survives an audit-DB blip without ever failing the user-fa
 
 Three layers, evaluated by `PermissionMatcher` (supports `*` and dotted wildcards like `tools.finance.*`):
 
-1. **System roles** — `system_admin`, `tenant_admin`, `user`, `guest`. The role → permission baseline is a
-   **per-tenant, runtime-editable** mapping (`role_permissions` table), seeded from the built-in
-   `RolePermissions.Defaults` and edited in the admin console; a tenant with no rows falls back to the
-   defaults. `PermissionResolver` expands a principal's roles through this mapping (see
-   `RolePermissionResolution`). `system_admin` always resolves to `*` regardless of configuration — a
-   lockout guardrail, and the role is rejected by the edit endpoint.
+1. **System roles** — `system_admin`, `tenant_admin`, `user`, `guest`. What a role grants is
+   `(baseline ∖ suppressed) ∪ granted`: the **declared baseline** (`RolePermissions.Defaults` merged with the
+   host's `AddPlenipoRole` declarations) adjusted by the tenant's **deviations** — the permissions it added
+   (`role_permissions`) and the ones it removed (`role_permission_suppressions`), both edited in the admin
+   console. A tenant stores only what it *changed*, never the whole set, so a permission a product declares
+   reaches every tenant immediately — including one provisioned long before the declaration changed — while a
+   permission an admin removed stays removed across every later baseline change. `PermissionResolver` expands
+   a principal's roles through this (see `RolePermissionResolution` / `RoleGrants`, and
+   [ADR 0002](docs/adr/0002-role-permission-deviation-storage.md)). `system_admin` always resolves to `*`
+   regardless of stored rows — a lockout guardrail, and the role is rejected by the edit endpoint.
 2. **Feature permissions** — dotted strings (`tools.finance.record_transaction`, `platform.users.manage`,
    `chat.approvals.manage`). Endpoints gate on these via a dynamic `IAuthorizationPolicyProvider`.
 3. **Per-resource ACLs** — owner/editor/viewer (the seam exists; module-specific).

@@ -102,9 +102,26 @@ import {
   ApiError,
   api,
   createAgentConnection,
+  // Authentication. A product must be able to sign someone in WITHOUT forking this package, so the
+  // whole seam has to be reachable from the published entry point — including `configureClient`,
+  // which must come from here rather than from "@plenipo/client": importing it from the sibling
+  // package configures a DIFFERENT module instance than the one these components read, which is
+  // exactly why overriding it from outside never reached the shipped shell.
+  configureClient,
+  configurePlenipoWeb,
+  createOidcAuth,
+  devAuthOnly,
+  initPlenipoWebAuth,
+  isSignInCallback,
+  plenipoWebAuth,
+  signOutPlenipoWeb,
+  type AuthAdapter,
+  type SecureStorageAdapter,
+  type AuthConfig,
   type PlenipoModuleUi,
   type ModuleTabProps,
   type PlenipoBranding,
+  type AppShellProps,
   type Module,
   type Me,
 } from "@plenipo/ui";
@@ -124,9 +141,30 @@ const branding: PlenipoBranding = { name: "Acme Ops" };
 const sampleModule: Module = { id: "demo", displayName: "Demo", tabs: [] };
 const currentUser: Me | null = null;
 
+// A product with its own identity stack implements the adapter directly; one with a plain OIDC
+// provider takes the shipped browser adapter. Both must type-check from the TARBALL.
+const byoAuth: AuthAdapter = { getAccessToken: async () => "token" };
+const store: SecureStorageAdapter = {
+  getItem: async () => null,
+  setItem: async () => {},
+  removeItem: async () => {},
+};
+const shellProps: AppShellProps = { branding };
+
+export async function signInFlow() {
+  const config: AuthConfig = { mode: "oidc", authority: "https://idp.example.com", clientId: "spa" };
+  const oidc = createOidcAuth({ authority: config.authority!, clientId: config.clientId! });
+  configurePlenipoWeb({ apiBase: "https://api.example.com", auth: oidc, storage: store, mode: config.mode });
+  configureClient({ baseUrl: "https://api.example.com" });
+  void [isSignInCallback(), plenipoWebAuth(), devAuthOnly(), shellProps];
+  await initPlenipoWebAuth({ apiBase: "https://api.example.com" });
+  await signOutPlenipoWeb();
+}
+
 export function App() {
   void [AppShell, ChatPanel, api, createAgentConnection, ApiError, useActiveModule, sampleModule, currentUser];
-  return <PlenipoApp moduleUi={[finance]} branding={branding} />;
+  // The one-liner a product writes to let someone log in.
+  return <PlenipoApp moduleUi={[finance]} branding={branding} config={{ auth: byoAuth }} />;
 }
 EOF
 

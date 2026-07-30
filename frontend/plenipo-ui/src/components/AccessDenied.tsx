@@ -1,4 +1,5 @@
 import { API_BASE } from "../lib/devAuth";
+import { plenipoWebAuth } from "../lib/webAuth";
 
 /**
  * Shown when the API is reachable but rejects the caller — a 401 (not authenticated) or 403 (missing
@@ -36,13 +37,31 @@ export function AccessDenied({
           )}
         </p>
 
-        <button
-          type="button"
-          onClick={onRetry}
-          className="focus-ring mt-4 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-500"
-        >
-          Retry
-        </button>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {/* The copy above has always told an unauthenticated visitor to "sign in and try again", while
+              the UI offered only Retry — there was nothing to sign in WITH. Offer it when the configured
+              adapter can actually start a sign-in; a dev-auth deployment still just retries. */}
+          {notSignedIn && plenipoWebAuth().signIn && (
+            <button
+              type="button"
+              onClick={() => void plenipoWebAuth().signIn?.()}
+              className="focus-ring rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-500"
+            >
+              Sign in
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onRetry}
+            className={
+              notSignedIn && plenipoWebAuth().signIn
+                ? "focus-ring rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                : "focus-ring rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-500"
+            }
+          >
+            Retry
+          </button>
+        </div>
 
         {message && (
           <p className="mt-3 break-words text-xs text-slate-400">Details: {message}</p>

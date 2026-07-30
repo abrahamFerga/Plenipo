@@ -12,9 +12,10 @@ namespace Plenipo.Sample.Host.IntegrationTests;
 public sealed class ProductRoleTests(IntegrationFixture fixture)
 {
     [Fact]
-    public async Task ProductRole_SeedsIntoNewTenants_AndGrantsItsBaseline()
+    public async Task ProductRole_AppliesToNewTenants_AndGrantsItsBaseline()
     {
-        // Provision a fresh tenant — its role table seeds from the MERGED baseline.
+        // Provision a fresh tenant. It gets NO role rows: under deviation storage a tenant tracks the
+        // merged baseline until it changes something, which is what keeps a later declaration deliverable.
         using var operator_ = fixture.ClientFor("system_admin");
         (await operator_.PostAsJsonAsync("/api/admin/tenants/provision", new
         {
@@ -34,7 +35,7 @@ public sealed class ProductRoleTests(IntegrationFixture fixture)
         var baseline = paralegal.GetProperty("permissions").EnumerateArray().Select(p => p.GetString()).ToArray();
         Assert.Contains("tools.legal.list_deadlines", baseline);
         Assert.Contains("legal.matters.view", baseline);
-        Assert.True(paralegal.GetProperty("editable").GetBoolean()); // tenant admins own it after seeding
+        Assert.True(paralegal.GetProperty("editable").GetBoolean()); // a tenant admin can still tune it
 
         // A user signs in with the paralegal role (as their IdP would assert) → the baseline applies.
         var paralegalUser = fixture.Factory.CreateClient();

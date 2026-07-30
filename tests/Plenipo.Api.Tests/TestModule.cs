@@ -24,6 +24,15 @@ internal sealed class TestModule : IModule
     /// <summary>The permission gating the items tab's "retire" row action.</summary>
     public const string RetirePermission = "test.items.retire";
 
+    /// <summary>A host-declared product role — the shape a real product ships via AddPlenipoRole.</summary>
+    public const string ProductRoleName = "test_specialist";
+
+    /// <summary>
+    /// A declared role whose baseline holds an OPERATOR-RESERVED permission. Nothing stops a host from
+    /// declaring one, so the endpoints must not assume a declared baseline is safe to hand out.
+    /// </summary>
+    public const string OperatorGradeRoleName = "test_fleet_ops";
+
     public ModuleManifest Manifest { get; } = new()
     {
         Id = "test",

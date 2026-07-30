@@ -11,6 +11,7 @@ using Plenipo.AspNetCore.Realtime;
 using Plenipo.AspNetCore.Setup;
 using Plenipo.Infrastructure;
 using Plenipo.Infrastructure.Channels;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.DataProtection;
 using StackExchange.Redis;
@@ -93,6 +94,11 @@ public static class PlenipoHostSetup
 
         builder.Services.AddPlenipoAuthentication(builder.Configuration, builder.Environment);
         builder.Services.AddAuthorization();
+
+        // Gives a 403 caused by an unresolved TENANT a body naming the cause. Purely additive — the
+        // default handler still decides and still sets the status.
+        builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, UnresolvedTenantAuthorizationResultHandler>();
+
         builder.Services.AddPlenipoRateLimiting(builder.Configuration);
         builder.Services.AddScoped<IRequestEnricher, RequestEnricher>();
 

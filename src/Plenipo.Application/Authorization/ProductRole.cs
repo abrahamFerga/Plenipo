@@ -4,8 +4,13 @@ namespace Plenipo.Application.Authorization;
 
 /// <summary>
 /// A host-declared role baseline: a NEW product role (e.g. "paralegal") or a reshape of a
-/// built-in role's default permissions. Baselines seed each tenant's editable role rows and
-/// serve as the fallback for unseeded tenants — after seeding, tenant admins own the mapping.
+/// built-in role's default permissions.
+///
+/// <para>The declaration is LIVE, not a seed. What a role grants is
+/// <c>(baseline ∖ suppressed) ∪ granted</c>: this baseline, minus whatever a tenant admin removed, plus
+/// whatever they added. Add a permission here in a later release and it reaches every existing tenant on
+/// restart — no migration, no reconciler, no per-tenant repair — while a permission an admin deliberately
+/// removed stays removed. See <c>RoleGrants</c>.</para>
 /// </summary>
 public sealed record ProductRole
 {
@@ -51,6 +56,9 @@ public static class ProductRoleRegistration
     /// Declares a product role's baseline (or reshapes a built-in's — <paramref name="replace"/>
     /// true replaces the default set, false adds to it). One call per role, next to the host's
     /// other AddPlenipo* calls. system_admin is not customizable.
+    ///
+    /// <para>Changing the permission list in a later release is the supported way to ship a permission
+    /// fix: it applies to every tenant on restart, including tenants provisioned before the change.</para>
     /// </summary>
     public static IServiceCollection AddPlenipoRole(
         this IServiceCollection services, string role, IReadOnlyList<string> permissions, bool replace = false)

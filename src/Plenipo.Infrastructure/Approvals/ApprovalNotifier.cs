@@ -4,6 +4,7 @@ using Plenipo.Core.Platform;
 using Plenipo.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Plenipo.Infrastructure.Approvals;
 
@@ -16,10 +17,9 @@ namespace Plenipo.Infrastructure.Approvals;
 /// default-on).
 ///
 /// <para><b>Who counts as an approver.</b> Every active tenant user whose DATABASE-sourced
-/// authority grants <see cref="Permissions.ManageApprovals"/>: DB role assignments expanded
-/// through the tenant's configured role → permission rows (built-in + product baselines as the
-/// unseeded fallback — the same rules the request path uses via <c>RolePermissionResolution</c>),
-/// unioned with explicit per-user grants. This is the pragmatic query: roles asserted only in a
+/// authority grants <see cref="Permissions.ManageApprovals"/>: DB role assignments expanded from the
+/// declared baseline adjusted by the tenant's stored deviations — the same rules the request path uses
+/// via <c>RolePermissionResolution</c> — unioned with explicit per-user grants. This is the pragmatic query: roles asserted only in a
 /// user's TOKEN deliberately have no DB rows (see <c>RequestEnricher</c>), so a token-only
 /// approver cannot be enumerated here and simply gets no ping — under-notifying, never
 /// over-authorizing (the approval endpoints still gate on the real permission at click time).
@@ -33,6 +33,7 @@ public sealed class ApprovalNotifier(
     PlatformDbContext db,
     INotifier notifier,
     IEnumerable<ProductRole> productRoles,
+    IOptions<AuthorizationSourceOptions> authorizationSource,
     ILogger<ApprovalNotifier> logger)
 {
     public async Task NotifyPendingAsync(PendingApproval pending, CancellationToken cancellationToken = default)
@@ -42,13 +43,27 @@ public sealed class ApprovalNotifier(
             var approverIds = await ResolveApproverIdsAsync(cancellationToken);
             if (approverIds.Count == 0)
             {
-                // Legitimate on token-sourced deployments (see class docs); worth a trace so a
-                // "nobody ever gets notified" report is diagnosable without a debugger.
-                if (logger.IsEnabled(LogLevel.Debug))
+                // A tenant with a pending approval and nobody who can clear it is a LOCKOUT: every
+                // approval-gated write parks until an operator intervenes. Outside token-sourced
+                // deployments — where having no DB-enumerable approver is expected and documented in
+                // the class docs above — say so loudly, because the state is otherwise invisible and
+                // the only symptom is work silently not happening.
+                if (authorizationSource.Value.IsTokenSourced)
                 {
-                    logger.LogDebug(
-                        "No DB-enumerable approvers for pending approval {ApprovalId}; no notifications sent.",
-                        pending.Id);
+                    if (logger.IsEnabled(LogLevel.Debug))
+                    {
+                        logger.LogDebug(
+                            "No DB-enumerable approvers for pending approval {ApprovalId}; no notifications sent.",
+                            pending.Id);
+                    }
+                }
+                else
+                {
+                    logger.LogWarning(
+                        "No user in tenant {TenantId} holds {Permission}, so pending approval {ApprovalId} has no " +
+                        "eligible approver and the action stays blocked. Grant the permission to a role in " +
+                        "Admin → Roles, or assign a role that already holds it.",
+                        pending.TenantId, Permissions.ManageApprovals, pending.Id);
                 }
 
                 return;
@@ -104,16 +119,13 @@ public sealed class ApprovalNotifier(
             .GroupBy(p => p.UserId)
             .ToDictionary(g => g.Key, g => g.Select(p => p.Permission).ToList());
 
-        // The tenant's configured role → permission rows; empty falls back to the baselines —
-        // identical expansion rules to PermissionResolver on the request path.
-        var configuredByRole = (await db.RolePermissions
-                .Select(r => new { r.Role, r.Permission })
-                .ToListAsync(cancellationToken))
-            .GroupBy(r => r.Role, StringComparer.Ordinal)
-            .ToDictionary(
-                g => g.Key,
-                g => (IReadOnlyList<string>)g.Select(x => x.Permission).ToList(),
-                StringComparer.Ordinal);
+        // The tenant's deviations from the declared baseline — identical expansion rules to
+        // PermissionResolver on the request path, so an approver the platform enumerates here is
+        // exactly an approver the request pipeline would authorize.
+        var grantedByRole = await GroupByRoleAsync(
+            db.RolePermissions.Select(r => new RoleRow(r.Role, r.Permission)), cancellationToken);
+        var suppressedByRole = await GroupByRoleAsync(
+            db.RolePermissionSuppressions.Select(r => new RoleRow(r.Role, r.Permission)), cancellationToken);
         var baseline = RoleBaseline.Merge(productRoles);
 
         var approvers = new List<Guid>();
@@ -122,7 +134,8 @@ public sealed class ApprovalNotifier(
             var permissions = new HashSet<string>(StringComparer.Ordinal);
             if (rolesByUser.TryGetValue(userId, out var roles))
             {
-                permissions.UnionWith(RolePermissionResolution.PermissionsForRoles(roles, configuredByRole, baseline));
+                permissions.UnionWith(RolePermissionResolution.PermissionsForRoles(
+                    roles, grantedByRole, suppressedByRole, baseline));
             }
 
             if (grantsByUser.TryGetValue(userId, out var grants))
@@ -138,4 +151,15 @@ public sealed class ApprovalNotifier(
 
         return approvers;
     }
+
+    private sealed record RoleRow(string Role, string Permission);
+
+    private static async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GroupByRoleAsync(
+        IQueryable<RoleRow> rows, CancellationToken cancellationToken) =>
+        (await rows.ToListAsync(cancellationToken))
+            .GroupBy(r => r.Role, StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<string>)g.Select(x => x.Permission).ToList(),
+                StringComparer.Ordinal);
 }

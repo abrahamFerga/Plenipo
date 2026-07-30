@@ -1,4 +1,6 @@
+using Plenipo.AspNetCore.Auth;
 using Plenipo.AspNetCore.Identity;
+using Plenipo.Infrastructure.Context;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Plenipo.AspNetCore.Realtime;
@@ -23,6 +25,14 @@ public sealed class EnrichmentHubFilter : IHubFilter
             {
                 // Deactivated account — refuse the hub invocation (chat-over-WebSocket) too.
                 throw new HubException("This account is deactivated.");
+            }
+
+            // An unresolved tenant leaves the context permission-less, so every gated hub method would
+            // fail with nothing to say about why. Name the cause here, matching what REST answers.
+            var requestContext = invocationContext.ServiceProvider.GetRequiredService<RequestContext>();
+            if (UnresolvedTenantProblem.Describe(requestContext) is { } problem)
+            {
+                throw new HubException(problem);
             }
         }
 

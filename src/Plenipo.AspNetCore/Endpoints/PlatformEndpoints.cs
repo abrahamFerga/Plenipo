@@ -1,5 +1,7 @@
 using Plenipo.Application.Ai;
 using Plenipo.Application.Files;
+using Plenipo.AspNetCore.Auth;
+using Plenipo.Infrastructure.Context;
 using Plenipo.Application.Modules;
 using Plenipo.Application.Skills;
 using Plenipo.Core.Identity;
@@ -40,11 +42,18 @@ public static class PlatformEndpoints
         })
         .WithName("Platform_GetModules");
 
-        group.MapGet("/me", (ICurrentUser user) => Results.Ok(new MeDto(
+        // Reports whether the caller's TENANT resolved, not just who they are. An authenticated principal
+        // whose tenant does not resolve used to get a cheerful 200 here and a bare 403 from everything
+        // else, so a client shell rendered normally and then failed every call with nothing to say about
+        // why. The permission set is still the authority; these two fields are purely diagnostic.
+        group.MapGet("/me", (ICurrentUser user, RequestContext context) => Results.Ok(new MeDto(
             user.UserId,
+            user.Subject,
             user.DisplayName,
             user.TenantId,
-            user.Permissions.OrderBy(p => p, StringComparer.Ordinal).ToArray())))
+            user.Permissions.OrderBy(p => p, StringComparer.Ordinal).ToArray(),
+            TenantResolved: context.Resolution == TenantResolution.Resolved,
+            TenantProblem: UnresolvedTenantProblem.Describe(context))))
         .WithName("Platform_GetMe");
 
         // The product's public identity, resolved at RUNTIME from host configuration
@@ -55,6 +64,27 @@ public static class PlatformEndpoints
                 Results.Ok(new BrandingDto(configuration["Branding:ProductName"] ?? "Plenipo")))
             .AllowAnonymous()
             .WithName("Platform_Branding");
+
+        // How the shell should authenticate, resolved at RUNTIME from host configuration. Same
+        // justification as /branding, and the same reason: publish.yml builds ONE bundle with an empty
+        // VITE_API_BASE precisely so it serves every deployment, and a client id baked in at build time
+        // would undo that. Anonymous on purpose — a client cannot present a token before it knows where
+        // to get one, and everything here is public OIDC client metadata by definition (an authority URL
+        // and a public client id, both visible in the browser's address bar during any sign-in).
+        // NOTHING secret may ever be added to this DTO.
+        group.MapGet("/auth-config", (IOptions<AuthOptions> auth) =>
+            {
+                // In dev mode the OIDC fields are meaningless — and an empty-string authority read as a
+                // value would send a shell redirecting to nowhere. Answer null so "no IdP" is unambiguous.
+                var configured = auth.Value.IsConfigured;
+                return Results.Ok(new AuthConfigDto(
+                    Mode: configured ? "oidc" : "dev",
+                    Authority: configured ? auth.Value.Authority : null,
+                    ClientId: configured ? NullIfBlank(auth.Value.ClientId) : null,
+                    Scopes: configured ? NullIfBlank(auth.Value.Scopes) : null));
+            })
+            .AllowAnonymous()
+            .WithName("Platform_AuthConfig");
 
         // Facts the shell uses to set expectations (e.g. a "demo mode" banner when the chat assistant
         // is running on the dependency-free Mock provider rather than a real LLM).
@@ -147,7 +177,23 @@ public static class PlatformEndpoints
     /// <summary>An entry in the chat's agent picker: a tenant profile or a module-shipped agent.</summary>
     private sealed record ModuleAgentDto(string Name, string? Description, bool IsDefault, string? Model);
 
-    private sealed record MeDto(Guid? UserId, string? DisplayName, Guid? TenantId, string[] Permissions);
+    /// <summary>
+    /// Public OIDC client metadata. <c>Mode</c> is <c>"oidc"</c> when a real authority is configured and
+    /// <c>"dev"</c> otherwise — which is what tells a shell whether the dev-auth headers are live or inert.
+    /// </summary>
+    private sealed record AuthConfigDto(string Mode, string? Authority, string? ClientId, string? Scopes);
+
+    /// <summary>Configuration binds an unset key to "", which a client would read as a value.</summary>
+    private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    private sealed record MeDto(
+        Guid? UserId,
+        string? Subject,
+        string? DisplayName,
+        Guid? TenantId,
+        string[] Permissions,
+        bool TenantResolved,
+        string? TenantProblem);
 
     /// <summary>The host's product identity; extensible (logo URL, accent color) without a breaking change.</summary>
     private sealed record BrandingDto(string Name);

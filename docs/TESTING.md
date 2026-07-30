@@ -28,12 +28,18 @@ but chat there has nothing to talk to. Details, headless mode, and API smoke com
 ## Layer 2 — unit tests (platform + frontend)
 
 ```bash
-dotnet test Plenipo.slnx                # Application/Infrastructure/Cli unit tests
+dotnet test Plenipo.slnx                # Application/Infrastructure/Api/Cli tests
 pnpm -C frontend -r test               # plenipo-ui + admin-ui (vitest)
 ```
 
 Pure-logic seams are deliberately extracted so they're unit-testable: `InstructionComposer`,
 `TokenBudget`, `PermissionMatcher`, `PlenipoSettingsFile.Merge`, skill frontmatter parsing, etc.
+
+`tests/Plenipo.Api.Tests` is not a unit-test project despite living here: it hosts the whole
+`Plenipo.Api` in-process over EF InMemory — **no Docker** — and drives the real HTTP pipeline
+(dev-auth → permission resolution → the admin endpoints' escalation guards) in seconds. It is the right
+tier for endpoint-level RBAC and authorization behaviour; reach for Layer 3 when the behaviour depends on
+real SQL, transactions, or a restart.
 
 ## Layer 3 — integration tests: the real pipeline against real Postgres
 
@@ -49,6 +55,21 @@ dotnet test samples/Plenipo.Samples.slnx    # requires Docker (Testcontainers)
 
 When you add a platform capability, add its integration test here — a module-shaped consumer is
 the test fixture, which is exactly the guarantee downstream verticals need.
+
+Two things only this layer can prove, both worth knowing about:
+
+- **Behaviour that only exists on a relational provider.** The role-storage conversion claims each tenant
+  with a conditional `UPDATE` inside a transaction, routed through the provider's execution strategy — the
+  in-memory provider has none of that, so `RoleBaselineIntegrationTests` is the only place the real path
+  runs. It caught a startup-breaking bug that every unit test passed straight through.
+- **A restart over an existing database.** Derive a second `WebApplicationFactory` over the fixture's
+  Postgres (see `RedeclaredRoleFactory`) to exercise "the host restarts with different code against the
+  data it already wrote".
+
+**Harness limit worth stating:** `ProductionApiFactory` (and `BootstrapIntegrationTests`) can boot the host
+in `Production` with a configured authority, but nothing in this repo can mint a token that survives
+`ValidateIssuer` against it. So a Production-mode test asserts through the database, and the HTTP half of
+the same behaviour is covered under dev auth in `tests/Plenipo.Api.Tests`.
 
 ## Layer 4 — golden conversation evals
 
