@@ -242,6 +242,25 @@ internal sealed class UserNotificationConfiguration : IEntityTypeConfiguration<U
     }
 }
 
+internal sealed class UserDeviceConfiguration : IEntityTypeConfiguration<UserDevice>
+{
+    public void Configure(EntityTypeBuilder<UserDevice> b)
+    {
+        b.ToTable("user_devices");
+        b.HasKey(x => x.Id);
+        b.Property(x => x.InstallationId).HasMaxLength(128).IsRequired();
+        // Expo tokens are ~50 chars; raw APNs/FCM tokens and Web Push endpoints run far longer.
+        b.Property(x => x.PushToken).HasMaxLength(1024).IsRequired();
+        b.Property(x => x.DeviceName).HasMaxLength(128);
+        b.Property(x => x.Platform).HasConversion<string>().HasMaxLength(16).IsRequired();
+        // Re-registering the same installation must UPDATE, never add a second row — this is what
+        // makes token rotation (an OS update, a reinstall) safe to do on every app launch.
+        b.HasIndex(x => new { x.TenantId, x.UserId, x.InstallationId }).IsUnique();
+        // The fan-out query: every device belonging to one recipient.
+        b.HasIndex(x => new { x.TenantId, x.UserId });
+    }
+}
+
 internal sealed class ConversationConfiguration : IEntityTypeConfiguration<Conversation>
 {
     public void Configure(EntityTypeBuilder<Conversation> b)

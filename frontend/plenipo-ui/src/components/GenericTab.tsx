@@ -4,6 +4,8 @@ import {
   apiAction,
   apiGet,
   apiSend,
+  maskValue,
+  resolveRowUrl,
   type ModuleTab,
   type TabAction,
   type TabColumn,
@@ -23,14 +25,6 @@ interface GenericTabProps {
   tab: ModuleTab;
   children?: React.ReactNode;
 }
-
-/** Substitute every `{field}` placeholder in an endpoint template from the row's values. */
-function resolveRowUrl(template: string, row: Record<string, unknown>): string {
-  return template.replace(/\{(\w+)\}/g, (_, field: string) => encodeURIComponent(String(row[field] ?? "")));
-}
-
-/** Mask all but the last four characters — enough to recognize your own account, not enough to read it off a screen. */
-const maskValue = (text: string) => (text.length > 4 ? `••••${text.slice(-4)}` : "••••");
 
 /**
  * One cell's value. Columns declaring `masked` (the display-side companion of `[Pii]`) render

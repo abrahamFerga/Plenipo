@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "Plenipo",
+    "slug": "plenipo",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "plenipo",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.example.plenipo"
+    },
+    "android": {
+      "package": "com.example.plenipo",
+      "edgeToEdgeEnabled": true
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "//": "A product replaces these with its own assets; the defaults just keep prebuild honest."
+        }
+      ]
+    ],
+    "extra": {
+      "//": "eas.projectId is required before `eas build`; `npx eas init` writes it."
+    }
+  }
+}

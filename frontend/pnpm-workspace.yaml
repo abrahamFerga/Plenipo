@@ -1,10 +1,18 @@
 packages:
+  # Renderer-free API client + manifest contract, shared by every shell — @plenipo/client
+  - "plenipo-client"
+
   # Base platform library (the end-user / domain shell) — publishable as @plenipo/ui
   - "plenipo-ui"
 
+  # Server-driven React Native shell (the same manifest, rendered natively) — @plenipo/mobile
+  - "plenipo-mobile"
+
+  # The reference Expo app — the template a product copies and rebrands
+  - "mobile-app"
+
   # Admin console app (security / RBAC / users / token usage / audit) — served at /admin
   - "admin-ui"
-
   # Domain-specific UI packages (future — each vertical ships its own)
   # - "packages/finance-ui"   # @plenipo/finance-ui
   # - "packages/nutrition-ui" # @plenipo/nutrition-ui
@@ -12,10 +20,24 @@ packages:
   # Sample / demo applications
   # - "apps/demo"
 
-# Allow native postinstall build scripts only for the deps that genuinely need them
-# (esbuild fetches its platform binary; Vite uses it). pnpm blocks all others by default.
+  # Allow native postinstall build scripts only for the deps that genuinely need them
+  # (esbuild fetches its platform binary; Vite uses it). pnpm blocks all others by default.
 allowBuilds:
   esbuild: true
+
+minimumReleaseAgeExclude:
+  - '@expo/cli@57.0.11'
+  - '@expo/inline-modules@0.1.4'
+  - '@expo/local-build-cache-provider@57.0.5'
+  - '@expo/log-box@57.0.2'
+  - '@expo/prebuild-config@57.0.10'
+  - babel-preset-expo@57.0.5
+  - expo-asset@57.0.8
+  - expo-constants@57.0.8
+  - expo-modules-core@57.0.8
+  - expo-notifications@57.0.8
+  - expo@57.0.9
+  - jest-expo@57.0.3
 
 # Vitest supports multiple Vite majors and otherwise resolves the lowest compatible release.
 # Keep every dev-server path on the patched Vite line.

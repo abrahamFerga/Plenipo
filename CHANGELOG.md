@@ -5,8 +5,8 @@ All notable changes to Plenipo are recorded here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it leaves alpha.
 
 Releases are cut from a tagged GitHub Release (`v*`), which triggers the publish workflow
-(`.github/workflows/publish.yml`) to push the `Plenipo.*` NuGet packages and the `@plenipo/ui`
-npm package. Until then, everything lives under **Unreleased**.
+(`.github/workflows/publish.yml`) to push the `Plenipo.*` NuGet packages and the `@plenipo/client`
+and `@plenipo/ui` npm packages. Until then, everything lives under **Unreleased**.
 
 ## [Unreleased] — toward 0.1.0-alpha
 
@@ -26,6 +26,32 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   `Options: [.. codes]`.
 
 ### Added
+
+- **A mobile app — `@plenipo/mobile`, the same manifest rendered natively.** A React Native / Expo
+  shell that builds its tab bar, lists, editor forms, singleton forms, charts, detail documents,
+  tab and row actions, and chat from `GET /api/platform/modules`. Installing a module in a C# host
+  puts it on phones that already have the build: shipping domain capability becomes a backend
+  deploy rather than an App Store review. A product's app is a base URL and a brand
+  (`frontend/mobile-app` is the template), with the same `defineModule` registry the web shell uses
+  for the tabs that need a native screen. Chat rides the AG-UI SSE endpoint rather than the SignalR
+  hub — a WebSocket doesn't survive a phone's backgrounding — but both drive the same
+  `AuthorizedAgentRunner`, so RBAC filtering, approvals, audit and token accounting are identical.
+  See [docs/MOBILE.md](docs/MOBILE.md).
+
+- **`@plenipo/client`** — the renderer-free contract extracted out of `@plenipo/ui`: the TypeScript
+  mirror of every C# descriptor, the REST surface, the AG-UI transport, the `PermissionMatcher`
+  mirror, form defaults, chart shaping, and row-template resolution. No React, no DOM, no bundler
+  globals, enforced by a test that reads the sources. This is what keeps two renderers from drifting
+  apart on the manifest. `@plenipo/ui`'s public API is unchanged — it re-exports the same names.
+
+- **Mobile push, through the existing notification seam.** A `UserDevice` entity plus
+  `PUT/GET/DELETE /api/notifications/devices` (self-scoped; a push token is never echoed back), and
+  a `PushNotificationChannel` fanning out to a pluggable `IPushTransport`. The built-in Expo
+  transport fronts APNs and FCM with no Apple or Google credentials in the repo or CI. Registration
+  is idempotent per installation, because tokens rotate; tokens the service reports as gone are
+  deleted. `Push:IncludeContent=false` withholds the title and body from the push service for
+  deployments handling privileged material. The channel is inert until a device registers, so a
+  deployment with no mobile app configures nothing.
 
 - **`TabEditorField.Default` / `.DefaultFrom`** — a field may say what it should start as.
   `Default` is a constant the manifest knows; `DefaultFrom` (see `FieldDefaultSources`) is for what

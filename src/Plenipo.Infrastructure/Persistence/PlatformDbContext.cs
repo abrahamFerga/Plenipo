@@ -29,6 +29,7 @@ public sealed class PlatformDbContext(
     public DbSet<InstructionSnapshot> InstructionSnapshots => Set<InstructionSnapshot>();
     public DbSet<UserNotification> UserNotifications => Set<UserNotification>();
     public DbSet<UserNotificationPreference> UserNotificationPreferences => Set<UserNotificationPreference>();
+    public DbSet<UserDevice> UserDevices => Set<UserDevice>();
     public DbSet<UserInvite> UserInvites => Set<UserInvite>();
     public DbSet<NotificationSettings> NotificationSettings => Set<NotificationSettings>();
     public DbSet<Conversation> Conversations => Set<Conversation>();

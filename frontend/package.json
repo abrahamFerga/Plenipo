@@ -7,9 +7,11 @@
   "scripts": {
     "dev": "pnpm --filter @plenipo/ui dev",
     "dev:admin": "pnpm --filter @plenipo/admin-ui dev",
+    "//build:client": "Only needed to PUBLISH @plenipo/client — in the workspace every shell resolves it from source.",
+    "build:client": "pnpm --filter @plenipo/client build",
     "build": "pnpm --filter @plenipo/ui build",
     "build:admin": "pnpm --filter @plenipo/admin-ui build",
-    "build:all": "pnpm --filter @plenipo/ui build && pnpm --filter @plenipo/admin-ui build",
+    "build:all": "pnpm -r build",
     "lint": "pnpm -r lint"
   }
 }

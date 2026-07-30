@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "./api";
+import { resetClientConfig } from "./config";
 
-// devAuth resolves API_BASE from import.meta.env.VITE_API_BASE, which is unset under test → the default.
+// An unconfigured client points at the local dev host — these tests exercise that default.
 const BASE = "http://localhost:8080";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  resetClientConfig();
 });
 
 describe("api client", () => {

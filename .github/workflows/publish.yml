@@ -149,22 +149,37 @@ jobs:
           (cd frontend/plenipo-ui/dist-app && zip -r "$GITHUB_WORKSPACE/artifacts/plenipo-ui-app.zip" .)
           (cd frontend/admin-ui/dist && zip -r "$GITHUB_WORKSPACE/artifacts/plenipo-admin-ui.zip" .)
 
-      # Publish the @plenipo/ui LIBRARY to the public npm registry — product hosts that
-      # build their own app entry on the moduleUi seam (e.g. Networthy's ADR-0008) now install it
-      # with `pnpm add @plenipo/ui`, no release-asset copying. The dist is built with
-      # VITE_API_BASE="" (frozen at library-build time) so consumers get same-origin API calls; a
-      # checked-out source alias still covers dev servers that need a live env. --provenance signs a
-      # build attestation (needs id-token: write); --ignore-scripts avoids re-running prepack since
-      # we just built. Requires an NPM_TOKEN secret (automation token for the @abrahamferga scope).
-      - name: Publish @plenipo/ui to npm
+      # Publish the frontend LIBRARIES to the public npm registry — product hosts that build their
+      # own app entry on the moduleUi seam (e.g. Networthy's ADR-0008) install them with
+      # `pnpm add @plenipo/ui`, no release-asset copying.
+      #
+      # Order matters: @plenipo/ui depends on @plenipo/client, so the client has to exist on the
+      # registry at the version the ui's manifest will name. Both are published with `pnpm publish`
+      # rather than `npm publish` for exactly that dependency — pnpm rewrites the `workspace:*`
+      # protocol to the concrete version it just published, which npm would ship verbatim and
+      # leave uninstallable.
+      #
+      # The ui dist is built with VITE_API_BASE="" (frozen at library-build time) so consumers get
+      # same-origin API calls; a checked-out source alias still covers dev servers that need a live
+      # env. --provenance signs a build attestation (needs id-token: write); --ignore-scripts
+      # avoids re-running prepack since we just built; --no-git-checks because the version bump
+      # below leaves the tree dirty. Requires an NPM_TOKEN secret (automation token for the
+      # @abrahamferga scope).
+      - name: Publish @plenipo/client and @plenipo/ui to npm
         if: github.event_name == 'release'
         env:
           VITE_API_BASE: ""
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+
+          pnpm -C frontend/plenipo-client build
+          (cd frontend/plenipo-client && npm pkg set version="$VERSION")
+          (cd frontend/plenipo-client && pnpm publish --ignore-scripts --no-git-checks --access public --provenance --tag latest)
+
           pnpm -C frontend/plenipo-ui build
-          (cd frontend/plenipo-ui && npm pkg set version="${{ steps.ver.outputs.version }}")
-          (cd frontend/plenipo-ui && npm publish --ignore-scripts --access public --provenance --tag latest)
+          (cd frontend/plenipo-ui && npm pkg set version="$VERSION")
+          (cd frontend/plenipo-ui && pnpm publish --ignore-scripts --no-git-checks --access public --provenance --tag latest)
 
       - name: Attach artifacts to the release
         if: github.event_name == 'release'

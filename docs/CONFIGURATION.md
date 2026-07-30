@@ -92,6 +92,7 @@ and change without a deploy.
 | `Channels:WhatsApp` | `Enabled`, Meta Cloud API secrets, `AllowedSenders`, `AllowUnknownSenders` | Secrets via user-secrets/env; unknown senders denied by default |
 | `Channels:Email` | `Enabled`, `Host`/`Port`/`UseSsl`, `Username`, `Password`, `Folder`, `ModuleId`, `TenantSlug`, `PollSeconds`, `ReplyEnabled`, `AllowedSenders`, `AllowUnknownSenders`, `MaxMessageBytes` | IMAP intake mailbox polled into agent turns (docs/INBOUND_CHANNELS.md); password via user-secrets/env; replies and unknown senders off by default |
 | `Email` | Outbound SMTP: `Enabled`, `Host`/`Port`/`UseStartTls`, `Username`, `Password`, `FromAddress`, `FromName` | Powers the email notification channel AND user invites; password via user-secrets/env. Unconfigured, invites still work (share the link manually) |
+| `Push` | Mobile push: `Enabled`, `IncludeContent`, `PlaceholderTitle`/`PlaceholderBody`, `ExpoEndpoint`, `ExpoAccessToken`, `MaxDevicesPerUser` | Nothing to configure for most deployments — the channel is inert until a device registers, and the built-in Expo transport needs no Apple/Google credentials. **`IncludeContent=false`** is the one to think about: see below |
 | `Auth` | `Authority`, `Audience`, `PermissionSource` (Database/Token) | Empty = dev-auth in Development only |
 | `Secrets` | `Provider` (DataProtection/AzureKeyVault), `KeyVaultUri` | Where runtime-entered secrets rest |
 | `DataProtection:KeysPath` | Shared durable directory for the Data Protection key ring | Optional alternative to `plenipo-redis`; required outside Development when Redis is absent |
@@ -179,6 +180,32 @@ names an email address and starting roles, and the first sign-in with that addre
 automatically (any IdP — the invite is keyed on the email claim, no token link). With `Email`
 configured the invitee gets a mail; without it the invite still works and the admin shares the
 sign-in link. Pending invites are revocable; everything is audited.
+
+### Mobile push: what leaves the deployment
+
+The push channel is on by default and does nothing until someone registers a device from the mobile
+shell, so a deployment with no mobile app configures nothing.
+
+The decision worth making deliberately is **`Push:IncludeContent`**. It defaults to `true`, which
+sends the notification's title and body to the push service — a third party — where they also land
+on a lock screen readable by anyone holding the phone. For a deployment handling privileged
+material (a legal matter, a diagnosis, a client's finances), set it to `false`:
+
+```jsonc
+"Push": { "IncludeContent": false }
+```
+
+The device then receives only "New notification"; tapping through fetches the real content over the
+app's authenticated session. The category and the deep link still travel — they are routing, not
+content.
+
+Two things are always true regardless: a push token is never echoed back by any endpoint (including
+the caller's own device list), and a token the push service reports as permanently gone is deleted
+rather than kept.
+
+To use your own FCM/APNs credentials or a corporate gateway instead of Expo, replace the transport
+with one DI registration — `services.AddSingleton<IPushTransport, MyTransport>()` — and nothing
+above it changes. See [MOBILE.md](MOBILE.md).
 
 ### Per-user notification preferences
 

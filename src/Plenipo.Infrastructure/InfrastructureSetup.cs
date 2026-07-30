@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Plenipo.Application.Agents;
 using Plenipo.Application.Ai;
@@ -355,6 +356,17 @@ public static class InfrastructureSetup
         services.AddScoped<INotificationChannel, EmailNotificationChannel>(); // no-op until Email: is configured
         services.AddHttpClient(WebhookNotificationChannel.HttpClientName,
             client => client.Timeout = TimeSpan.FromSeconds(10))
+            .ConfigurePrimaryHttpMessageHandler(sp =>
+                sp.GetRequiredService<OutboundUrlPolicy>().CreateHttpMessageHandler());
+
+        // Mobile push. Registered unconditionally and inert until a device registers, so a
+        // deployment with no mobile app pays nothing for it. TryAdd on the transport so a product
+        // that brings its own FCM/APNs keys (or an MDM gateway) replaces Expo with one line.
+        services.Configure<PushOptions>(builder.Configuration.GetSection(PushOptions.SectionName));
+        services.TryAddSingleton<IPushTransport, ExpoPushTransport>();
+        services.AddScoped<INotificationChannel, PushNotificationChannel>();
+        services.AddHttpClient(ExpoPushTransport.HttpClientName,
+            client => client.Timeout = TimeSpan.FromSeconds(15))
             .ConfigurePrimaryHttpMessageHandler(sp =>
                 sp.GetRequiredService<OutboundUrlPolicy>().CreateHttpMessageHandler());
         services.AddScoped<IConversationStore, ConversationStore>();

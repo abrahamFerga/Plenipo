@@ -1,0 +1,16 @@
+{
+  // Emits the published JS + declarations into dist/. Tests live next to the code but must not
+  // ship in the package.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "types": []
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
+}

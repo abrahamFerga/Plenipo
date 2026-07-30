@@ -37,14 +37,20 @@ modules. On first run it applies the database migrations and seeds a `dev` tenan
 
 ### 3. Run the UI
 
-The frontend is **two apps**: the end-user **domain UI** (`@plenipo/ui`) and the **admin console**
-(`@plenipo/admin-ui`). Both are Vite dev servers pointed at the API.
+The frontend is **two web apps** — the end-user **domain UI** (`@plenipo/ui`) and the **admin
+console** (`@plenipo/admin-ui`), both Vite dev servers pointed at the API — plus a **mobile app**
+(`@plenipo/mobile`) that renders the same manifest natively.
 
 ```bash
 cd frontend
 pnpm install
 pnpm dev                    # domain UI    → http://localhost:5173
 pnpm dev:admin              # admin console → http://localhost:5174/admin   (in a second terminal)
+```
+
+```bash
+# The mobile app, in Expo Go. A phone can't reach "localhost" — point it at your LAN address.
+EXPO_PUBLIC_API_BASE=http://192.168.1.x:8080 pnpm -C frontend/mobile-app start
 ```
 
 Both default to the API at `http://localhost:8080` (override with `VITE_API_BASE` — see `.env.example`).

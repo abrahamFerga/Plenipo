@@ -46,6 +46,7 @@ app.Run();
 | 5 | Deliver notifications your way (SMS, chat-ops, …) | `INotificationChannel` + `AddPlenipoNotificationChannel<T>()` — fan-out is best-effort per channel; in-app inbox is always the baseline. Email is built in: configure the `Email:` section | `src/Plenipo.Infrastructure/Notifications/EmailNotificationChannel.cs` |
 | 6 | Add product-wide agent tools (offered in every module's chat) | `IPlatformToolSource` + `AddPlenipoPlatformTools<T>()` — same RBAC gate, approval flags, and audit as everything else | `src/Plenipo.Infrastructure/Documents/DocumentToolSource.cs` |
 | 7 | Brand the workspace UI | `<PlenipoApp branding={{ name, logo }} moduleUi={[…]} />` — name/logo in the shell, custom React per tab via the module UI registry; everything else stays server-driven | `frontend/plenipo-ui/README.md` |
+| 7b | Ship a **mobile app** | `<PlenipoMobileApp config={{ apiBase, ...expoAdapters() }} branding={…} />` — the same manifest rendered natively, so your modules' tabs, editors, charts and chat are already there. Same `defineModule` registry for native screens; `theme={{ both: { brand } }}` to rebrand. Push arrives through seam #5. Copy `frontend/mobile-app` and change two lines | [docs/MOBILE.md](docs/MOBILE.md); `frontend/plenipo-mobile/README.md` |
 | 8 | Shape identity and roles | `Auth:` config — `PermissionSource` (`Database`/`Token`), `DefaultRole` (what a JIT user gets when their token asserts nothing; empty = permission-less). Declare PRODUCT roles / reshape built-in baselines with `AddPlenipoRole("paralegal", [...])` — seeded into every tenant, runtime-editable afterwards in Admin → Roles. `system_admin` is never customizable | `samples/Plenipo.Sample.Host/Program.cs` |
 | 9 | Swap infrastructure pieces | `ISecretVault` (DataProtection/Key Vault), `IOcrEngine`, `IEmbeddingGenerator`, `ISmtpTransport` — one DI registration each | `src/Plenipo.Infrastructure` |
 
@@ -95,7 +96,11 @@ casewell's `scripts/build-ui.ps1` for a worked one-command version of the checko
 ## What's deliberately NOT extensible (yet)
 
 - **Admin console pages** — the console is a fixed surface; product-specific admin UI lives in
-  your product's own frontend for now.
+  your product's own frontend for now. The mobile shell has no admin surface at all, by the same
+  split: operator administration stays on the desktop console.
+- **Offline writes on mobile** — the mobile shell caches reads and refetches on reconnect, but
+  queues nothing. A queued write would have to be reconciled against the approval gate, which is a
+  design question rather than a missing feature.
 - **Inbound conversation channels** — WhatsApp is the only inbound lane today. The
   inbound-channel SDK (SMS/Telegram/email-intake adapters, WhatsApp as the first one) is
   designed in [docs/INBOUND_CHANNELS.md](docs/INBOUND_CHANNELS.md). Outbound (notification)
