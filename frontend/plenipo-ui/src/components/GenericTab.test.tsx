@@ -29,6 +29,37 @@ function renderTab(tab: ModuleTab, rows: unknown) {
   );
 }
 
+/** Render a tab whose single row is already drilled into, so a detail document is on screen. */
+function renderDetail(detail: unknown) {
+  const fetchMock = vi.fn((input: RequestInfo | URL) => {
+    const url = String(input);
+    return Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve(url.includes("/detail") ? detail : [{ id: "b-1", fileName: "april.pdf" }]),
+    } as unknown as Response);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const result = render(
+    <QueryClientProvider client={client}>
+      <GenericTab
+        tab={{
+          id: "review",
+          label: "Statement review",
+          route: "/finance/review",
+          dataEndpoint: "/api/finance/imports/batches",
+          columns: [{ field: "fileName", header: "Statement" }],
+          detailEndpoint: "/api/finance/imports/{id}/detail",
+        }}
+      />
+    </QueryClientProvider>,
+  );
+  return screen.findByRole("button", { name: "View" }).then((view) => {
+    fireEvent.click(view);
+    return result;
+  });
+}
+
 describe("GenericTab (server-driven table)", () => {
   afterEach(() => {
     cleanup();
@@ -519,6 +550,102 @@ describe("GenericTab (server-driven table)", () => {
     expect(screen.getByText("12345678")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Hide Number" }));
+    expect(screen.queryByText("12345678")).toBeNull();
+  });
+
+  it("a column declaring linkTemplate renders its value as a link, resolving {field} from the row", async () => {
+    renderTab(
+      {
+        ...foodsTab,
+        columns: [
+          { field: "fileName", header: "Statement" },
+          { field: "accountName", header: "Account", linkTemplate: "/finance/accounts?focus={accountId}" },
+        ],
+      },
+      [{ fileName: "april.pdf", accountName: "Everyday checking", accountId: "acc 1" }],
+    );
+
+    const link = await screen.findByRole("link", { name: "Everyday checking" });
+    // The placeholder resolves from the row, URL-encoded, exactly as a row action's endpoint does.
+    expect(link.getAttribute("href")).toBe("/finance/accounts?focus=acc%201");
+  });
+
+  it("a column with no linkTemplate stays plain text — the additive guarantee", async () => {
+    renderTab(foodsTab, [{ name: "Chicken breast", kcalPer100g: 165 }]);
+
+    expect(await screen.findByText("Chicken breast")).toBeTruthy();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("masked wins over linkTemplate — hiding a value and inviting a click on it contradict", async () => {
+    renderTab(
+      {
+        ...foodsTab,
+        columns: [{ field: "number", header: "Number", masked: true, linkTemplate: "/finance/accounts" }],
+      },
+      [{ number: "12345678" }],
+    );
+
+    expect(await screen.findByText("••••5678")).toBeTruthy();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("a toned detail section renders as a callout, and says its severity to a screen reader", async () => {
+    const detail = {
+      title: "april.pdf",
+      sections: [
+        {
+          heading: "Review warning",
+          tone: "warning",
+          text: "Withdrawals declared 1,715.50; the lines total 1,715.49 — off by 0.01.",
+        },
+        { heading: "Extracted lines", text: "18 line(s)." },
+      ],
+    };
+    await renderDetail(detail);
+
+    const warning = await screen.findByText("Review warning");
+    const section = warning.closest("section");
+    expect(section?.getAttribute("data-tone")).toBe("warning");
+    // Severity is never colour alone — the word is in the accessibility tree.
+    expect(warning.textContent).toContain("Warning");
+
+    // The untoned section beside it is untouched.
+    const plain = screen.getByText("Extracted lines").closest("section");
+    expect(plain?.getAttribute("data-tone")).toBeNull();
+  });
+
+  it("an unrecognized tone degrades to a neutral section instead of breaking the page", async () => {
+    await renderDetail({
+      title: "april.pdf",
+      // The detail document is untyped server-side, so a typo has to be survivable.
+      sections: [{ heading: "Review warning", tone: "warn", text: "off by 0.01." }],
+    });
+
+    const heading = await screen.findByText("Review warning");
+    expect(heading.closest("section")?.getAttribute("data-tone")).toBeNull();
+    expect(screen.getByText("off by 0.01.")).toBeTruthy();
+  });
+
+  it("a detail sub-table honours masked and linkTemplate — the same TabColumn means the same thing", async () => {
+    await renderDetail({
+      title: "april.pdf",
+      sections: [
+        {
+          heading: "Extracted lines",
+          columns: [
+            { field: "description", header: "Description" },
+            { field: "account", header: "Account", linkTemplate: "/finance/accounts" },
+            { field: "number", header: "Number", masked: true },
+          ],
+          rows: [{ description: "Card payment", account: "Everyday checking", number: "12345678" }],
+        },
+      ],
+    });
+
+    expect(await screen.findByText("Card payment")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Everyday checking" }).getAttribute("href")).toBe("/finance/accounts");
+    expect(screen.getByText("••••5678")).toBeTruthy();
     expect(screen.queryByText("12345678")).toBeNull();
   });
 

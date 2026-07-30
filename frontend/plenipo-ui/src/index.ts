@@ -79,6 +79,7 @@ export type {
   TabRowAction,
   TabDetailDocument,
   TabDetailSection,
+  TabSectionTone,
   Conversation,
   ConversationMessage,
   PlatformInfo,

@@ -14,6 +14,12 @@ export interface TabColumn {
   header: string;
   /** PII-grade value (account number, token): render masked behind a per-cell reveal toggle. */
   masked?: boolean;
+  /**
+   * Makes the value navigable: a CLIENT route (never an API path), optionally with `{field}`
+   * placeholders substituted from the row the way a row action's endpoint template is. A fixed
+   * route with no placeholder is normal and useful — every row landing on the same tab.
+   */
+  linkTemplate?: string | null;
 }
 
 /** A field in a tab's generic editor form. */
@@ -135,11 +141,20 @@ export interface AdminExtension {
 }
 
 /** A section of a drill-down detail document: prose, or a sub-table. */
+/**
+ * What a detail section MEANS, so severity is styled instead of every section reading like data.
+ * Omit for ordinary content. An unrecognized value renders as if omitted — a typo degrades to
+ * neutral rather than breaking the page.
+ */
+export type TabSectionTone = "info" | "success" | "warning" | "danger";
+
 export interface TabDetailSection {
   heading: string;
   text?: string;
   columns?: TabColumn[];
   rows?: Record<string, unknown>[];
+  /** Severity of what this section says. Absent = ordinary content. */
+  tone?: TabSectionTone | null;
 }
 
 /**

@@ -12,7 +12,24 @@ namespace Plenipo.Modules.Sdk;
 /// screen-privacy affordance, not access control: the caller was already authorized to read the
 /// value, it just shouldn't sit exposed on a shared or shoulder-surfable screen.
 /// </summary>
-public sealed record TabColumn(string Field, string Header, bool Masked = false);
+public sealed record TabColumn(string Field, string Header, bool Masked = false)
+{
+    /// <summary>
+    /// Optional: makes this column's value navigable, turning a named relation into a way to go
+    /// look at it. A CLIENT route (the shell's own router — <c>/finance/accounts</c>), never an API
+    /// path, optionally with <c>{field}</c> placeholders substituted from the row exactly as
+    /// <see cref="TabRowAction.EndpointTemplate"/> does. Placeholders are optional on purpose: a
+    /// fixed route that lands every row on the same tab is the common, useful case (a statement's
+    /// destination account is on the accounts tab), so this is deliberately NOT validated for a
+    /// <c>{</c> the way a row action's endpoint is.
+    /// <para>
+    /// Declared as an init-only property rather than a fourth positional parameter so the primary
+    /// constructor and generated <c>Deconstruct</c> stay binary-compatible for products already
+    /// compiled against a published package.
+    /// </para>
+    /// </summary>
+    public string? LinkTemplate { get; init; }
+}
 
 /// <summary>
 /// One choice in a field's select: the <paramref name="Value"/> that gets posted, and the
@@ -294,9 +311,29 @@ public sealed record TabDescriptor
     /// <summary>
     /// Optional drill-down: a GET endpoint with one <c>{field}</c> placeholder substituted from the
     /// row (e.g. <c>/api/legal/matters/{id}/detail</c>), returning a DETAIL DOCUMENT the shell
-    /// renders generically — <c>{ title, subtitle?, sections: [{ heading, text? } | { heading,
-    /// columns: [{field, header}], rows: [...] }] }</c>. Gives list rows a composed detail view
-    /// (a matter's parties/deadlines/tasks/documents in one page) with no custom UI.
+    /// renders generically. Gives list rows a composed detail view (a matter's
+    /// parties/deadlines/tasks/documents in one page) with no custom UI.
+    /// <para>The document's shape:</para>
+    /// <code>
+    /// {
+    ///   title, subtitle?,
+    ///   sections: [ { heading, tone?, text? }
+    ///             | { heading, tone?, columns: [{field, header, masked?, linkTemplate?}], rows: [...] } ],
+    ///   actions?: [ { id, label, endpoint, confirm? } ]
+    /// }
+    /// </code>
+    /// <para>
+    /// <c>tone</c> is optional and says what a section MEANS, so the shell can style severity
+    /// instead of rendering a hard failure in the same grey as a data table: one of
+    /// <c>"info"</c>, <c>"success"</c>, <c>"warning"</c>, <c>"danger"</c>. Omit it for ordinary
+    /// content. An unrecognized value renders as if omitted — a typo degrades to neutral rather
+    /// than breaking the page, which also means nothing will catch it for you, so spell it exactly.
+    /// </para>
+    /// <para>
+    /// This document is deliberately untyped on the server: modules return anonymous objects and
+    /// the shell is the only schema. Keep <c>heading</c> unique within a document — the shell keys
+    /// sections by it.
+    /// </para>
     /// </summary>
     public string? DetailEndpoint { get; init; }
 

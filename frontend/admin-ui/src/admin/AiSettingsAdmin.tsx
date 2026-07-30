@@ -145,6 +145,14 @@ export function AiSettingsAdmin() {
   const needsKey = provider === "OpenAI" || provider === "Anthropic";
   const willHaveKey = apiKey.trim() !== "" || (data.hasApiKey && !clearKey);
   const keyMissing = needsKey && !willHaveKey;
+  // A model is part of a CONNECTION, like the endpoint and the key: once the tenant names its own
+  // provider, the deployment's model cannot stand in for it. The server says so (TenantAiSettingsValidator
+  // rejects a blank model for these four), and it is right — the deployment default is a model id
+  // belonging to a DIFFERENT provider, since a deployment may not default to OpenAI or Anthropic at all.
+  // So mirror the rule here instead of offering a "Default" the save is guaranteed to refuse.
+  const needsModel =
+    provider === "OpenAI" || provider === "Anthropic" || provider === "AzureOpenAI" || provider === "Ollama";
+  const modelMissing = needsModel && model.trim() === "";
   const canDiscover = provider === "OpenAI" || provider === "Anthropic" || provider === "Ollama";
   // Models discovered from the provider (empty until "Load models from provider" succeeds).
   const discoveredModels = models.data?.models ?? [];
@@ -166,7 +174,7 @@ export function AiSettingsAdmin() {
         className="space-y-5"
         onSubmit={(e) => {
           e.preventDefault();
-          if (!tokensInvalid && !monthlyInvalid && !keyMissing) save.mutate(form);
+          if (!tokensInvalid && !monthlyInvalid && !keyMissing && !modelMissing) save.mutate(form);
         }}
       >
         <fieldset className="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
@@ -215,7 +223,13 @@ export function AiSettingsAdmin() {
                   }}
                   className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
                 >
-                  <option value="">Default: {data.defaultModel}</option>
+                  {/* Offered only when this provider can actually inherit the deployment's model —
+                      i.e. when the tenant has not taken over the connection. */}
+                  {needsModel ? (
+                    <option value="">Select a model…</option>
+                  ) : (
+                    <option value="">Default: {data.defaultModel}</option>
+                  )}
                   {/* Keep a previously-saved id selectable even when the provider no longer lists it. */}
                   {model !== "" && !discoveredModels.includes(model) && (
                     <option value={model}>{model} (custom)</option>
@@ -232,9 +246,22 @@ export function AiSettingsAdmin() {
                   id="ai-model"
                   value={model}
                   onChange={(e) => set({ model: e.target.value })}
-                  placeholder={`Default: ${data.defaultModel}`}
+                  placeholder={
+                    needsModel
+                      ? provider === "AzureOpenAI"
+                        ? "Your Azure deployment name"
+                        : "Required for this provider"
+                      : `Default: ${data.defaultModel}`
+                  }
                   className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
                 />
+              )}
+              {modelMissing && (
+                <p className="text-xs text-red-600">
+                  {provider === "AzureOpenAI"
+                    ? "Azure OpenAI needs the deployment name configured in your Azure resource."
+                    : `The ${provider} provider needs an explicit model — the deployment default belongs to a different provider.`}
+                </p>
               )}
               {discoveredModels.length > 0 && modelCustom && (
                 <button
@@ -461,7 +488,7 @@ export function AiSettingsAdmin() {
         <div className="flex items-center gap-2">
           <button
             type="submit"
-            disabled={tokensInvalid || monthlyInvalid || keyMissing || save.isPending}
+            disabled={tokensInvalid || monthlyInvalid || keyMissing || modelMissing || save.isPending}
             className="focus-ring rounded bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-40"
           >
             {save.isPending ? "Saving…" : "Save"}

@@ -18,7 +18,7 @@ internal static class TabDtoMapper
             .OrderBy(t => t.Order)
             .Select(t => new TabDto(
                 t.Id, t.Label, t.Route, t.Icon, t.Home, t.DataEndpoint,
-                t.Columns.Select(c => new TabColumnDto(c.Field, c.Header, c.Masked)).ToArray(),
+                t.Columns.Select(c => new TabColumnDto(c.Field, c.Header, c.Masked, c.LinkTemplate)).ToArray(),
                 t.Placeholder,
                 // The editor ships only to callers holding its permission, so the payload never
                 // advertises affordances the user can't use (the endpoints stay gated regardless).
@@ -69,7 +69,9 @@ internal sealed record TabActionDto(string Id, string Label, string Endpoint, st
 
 internal sealed record TabRowActionDto(string Id, string Label, string EndpointTemplate, string? Confirm);
 
-internal sealed record TabColumnDto(string Field, string Header, bool Masked);
+// LinkTemplate ships with its {field} placeholders UNRESOLVED, like a row action's endpoint: the
+// shell substitutes from the row it is rendering, because the server has no row here.
+internal sealed record TabColumnDto(string Field, string Header, bool Masked, string? LinkTemplate);
 
 internal sealed record TabEditorDto(string UpsertEndpoint, string? DeleteEndpoint, string? KeyField, TabEditorFieldDto[] Fields);
 

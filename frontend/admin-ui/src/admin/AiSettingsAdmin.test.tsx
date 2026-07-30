@@ -156,6 +156,48 @@ describe("AiSettingsAdmin", () => {
     expect(document.querySelector('option[value="provider-model-a"]')).not.toBeNull();
   });
 
+  it("will not submit a provider that needs its own model without one", async () => {
+    // The trap this closes: the form used to promise "Default: gpt-4o-mini" for every provider and
+    // let you save it, and the server then refused the whole save. It refuses correctly — a model
+    // belongs to a connection, and the deployment default is an id for a DIFFERENT provider (a
+    // deployment may not default to OpenAI at all). So the form must not offer it.
+    const fetchMock = stubApi();
+    renderSettings();
+
+    await screen.findByLabelText("System prompt");
+    fireEvent.change(screen.getByLabelText("Provider"), { target: { value: "OpenAI" } });
+    fireEvent.change(screen.getByLabelText("API key"), { target: { value: "sk-test" } });
+
+    // Save is blocked, and says why rather than failing at the server.
+    expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/needs an explicit model/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(
+      fetchMock.mock.calls.some(
+        (c) => String(c[0]).includes("/api/admin/ai-settings") && (c[1] as RequestInit | undefined)?.method === "PUT",
+      ),
+    ).toBe(false);
+
+    // Naming a model unblocks it.
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "gpt-4o" } });
+    expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("still offers the deployment default model for a provider that can inherit it", async () => {
+    // Mock and the "deployment default" provider option are not tenant-owned connections, so
+    // inheriting the deployment's model is meaningful there and stays on offer.
+    stubApi();
+    renderSettings();
+
+    await screen.findByLabelText("System prompt");
+    fireEvent.change(screen.getByLabelText("Provider"), { target: { value: "Mock" } });
+
+    expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByText(/needs an explicit model/)).toBeNull();
+    expect((screen.getByLabelText("Model") as HTMLInputElement).placeholder).toBe("Default: gpt-4o-mini");
+  });
+
   it("turns the Model field into a dropdown once models are loaded, with a manual-entry escape", async () => {
     stubApi();
     renderSettings();
