@@ -16,6 +16,32 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
 
 ### Changed
 
+- **Role baselines are now declaration-anchored: a tenant stores what it CHANGED, not the whole set.**
+  A permission — or a whole role — that a product declares with `AddPlenipoRole` now reaches every
+  tenant immediately, including tenants provisioned long before the declaration changed, with no
+  reconciler and no per-tenant repair. A permission a tenant admin removed is stored as an explicit
+  suppression and survives every later baseline change, and `AddPlenipoRole(..., replace: true)`
+  narrowing propagates again. What a role grants is `(baseline ∖ suppressed) ∪ granted`; see
+  [ADR 0002](docs/adr/0002-role-permission-deviation-storage.md).
+
+  Previously the first seed materialized every role's full permission set and any row at all made the
+  tenant authoritative, so a role with no rows granted nothing. A product that shipped a permission fix
+  in a later release therefore shipped something inert on exactly the deployments that had the problem —
+  and a role declared after a tenant was seeded conferred no authority at all.
+
+  *Breaking for direct callers:* `RolePermissionResolution.PermissionsForRoles` now takes granted,
+  suppressed and baseline maps, and `DatabaseInitializer.EnsureRolePermissionsSeededAsync` is removed —
+  nothing replaces it, because role rows no longer need seeding. No compatibility overload is offered:
+  one that ignored suppressions would be a privilege-escalation footgun.
+
+- **Upgrade behaviour, stated plainly.** The first start after upgrading converts each existing tenant's
+  role rows to deviations **losslessly — nobody's effective permissions change.** A permission a product
+  declared *after* a tenant was seeded is therefore recorded as suppressed on that tenant, exactly as it
+  behaves today; `DELETE /api/admin/roles/{role}/suppressions` (new, `platform.roles.manage`) restores a
+  role to its declared baseline in one call. **Deploy this release single-instance or with brief
+  downtime**, and note that rolling back past it requires a restore: a converted tenant's grant rows are
+  a subset of what the previous resolver expects.
+
 - **`TabEditorField.Options` now carries a label as well as a value** (`TabEditorOption`).
   Canonical identifiers are rarely readable — `America/Mexico_City` is exactly right to store and
   exactly wrong to show — so a field can now say what a human should read while still posting the
@@ -26,6 +52,11 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   `Options: [.. codes]`.
 
 ### Fixed
+
+- **A tenant with a pending approval and no eligible approver now logs a warning.** It was a debug
+  line, so the state was effectively invisible: every approval-gated write parks until an operator
+  intervenes, and the only symptom is work silently not happening. Deployments on
+  `Auth:PermissionSource=Token` keep the debug line, where having no DB-enumerable approver is expected.
 
 - **`GET /api/platform/info` and the ops AI card now report the TENANT's provider, not the
   deployment's.** Both were written when AI configuration was deployment-only; runtime per-tenant

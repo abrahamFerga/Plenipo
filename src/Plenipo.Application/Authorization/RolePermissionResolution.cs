@@ -1,49 +1,49 @@
 namespace Plenipo.Application.Authorization;
 
 /// <summary>
-/// Pure logic for turning a set of roles into the permissions they grant, given a tenant's <em>configured</em>
-/// role → permission rows. Kept free of any database or HTTP concern so it can be unit-tested in isolation;
-/// <c>PermissionResolver</c> in the infrastructure layer fetches the rows and calls this.
+/// Pure logic for turning a set of roles into the permissions they grant, given a tenant's stored
+/// <em>deviations</em> from the declared baseline. Kept free of any database or HTTP concern so it can be
+/// unit-tested in isolation; <c>PermissionResolver</c> in the infrastructure layer fetches the rows and
+/// calls this.
 ///
 /// Rules:
 /// <list type="bullet">
-///   <item>If the tenant has <b>any</b> configured rows, they are authoritative — a role with no rows grants
-///   nothing (so an admin can deliberately empty a role).</item>
-///   <item>If the tenant has <b>no</b> configured rows at all (never seeded — e.g. a legacy or anonymous
-///   context), fall back to the built-in <see cref="RolePermissions.Defaults"/>, preserving prior behaviour.</item>
-///   <item><c>system_admin</c> always holds the global wildcard <c>*</c>, regardless of configuration — a
-///   lockout guardrail so the role can never be edited (or left unseeded) into impotence.</item>
+///   <item>A role grants <c>(baseline ∖ suppressed) ∪ granted</c>. The baseline is the built-in defaults
+///   merged with the host's <see cref="ProductRole"/> declarations (<see cref="RoleBaseline.Merge"/>), so a
+///   permission a product declares reaches EVERY tenant immediately — including one provisioned before the
+///   declaration changed.</item>
+///   <item>A permission a tenant admin removed is stored as an explicit suppression, so it stays removed
+///   across every later baseline change. An admin can still deliberately empty a role: suppressing all of
+///   its baseline grants nothing.</item>
+///   <item><c>system_admin</c> always holds the global wildcard <c>*</c>, regardless of stored rows — a
+///   lockout guardrail so the role can never be edited into impotence.</item>
 /// </list>
+///
+/// This deliberately has no tenant-wide "is this tenant configured" switch. The previous storage model
+/// materialized every role's full permission set on first seed and treated the presence of ANY row as
+/// "this tenant is authoritative", which meant a role with no rows granted nothing — so a declaration
+/// change could never reach a seeded tenant, and a per-role write could zero every other role.
 /// </summary>
 public static class RolePermissionResolution
 {
     /// <summary>
-    /// Computes the permissions granted by <paramref name="roles"/> under a tenant's configuration.
+    /// Computes the permissions granted by <paramref name="roles"/> under a tenant's deviations.
     /// </summary>
     /// <param name="roles">The roles held by the principal (from token claims and/or DB assignments).</param>
-    /// <param name="configuredByRole">
-    /// The tenant's configured role → permissions, grouped by role. Empty when the tenant has never been
-    /// seeded, which triggers the built-in-defaults fallback.
-    /// </param>
+    /// <param name="grantedByRole">Permissions the tenant granted beyond the baseline, grouped by role.</param>
+    /// <param name="suppressedByRole">Baseline permissions the tenant removed, grouped by role.</param>
+    /// <param name="baselineByRole">The declared baseline: built-ins merged with host <see cref="ProductRole"/>s.</param>
     public static IReadOnlySet<string> PermissionsForRoles(
         IEnumerable<string> roles,
-        IReadOnlyDictionary<string, IReadOnlyList<string>> configuredByRole) =>
-        PermissionsForRoles(roles, configuredByRole, RolePermissions.Defaults);
-
-    /// <summary>
-    /// As above, with an explicit fallback baseline — the built-ins merged with any host-declared
-    /// <see cref="ProductRole"/>s (see <see cref="RoleBaseline.Merge"/>).
-    /// </summary>
-    public static IReadOnlySet<string> PermissionsForRoles(
-        IEnumerable<string> roles,
-        IReadOnlyDictionary<string, IReadOnlyList<string>> configuredByRole,
-        IReadOnlyDictionary<string, string[]> fallbackByRole)
+        IReadOnlyDictionary<string, IReadOnlyList<string>> grantedByRole,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> suppressedByRole,
+        IReadOnlyDictionary<string, string[]> baselineByRole)
     {
-        ArgumentNullException.ThrowIfNull(fallbackByRole);
         ArgumentNullException.ThrowIfNull(roles);
-        ArgumentNullException.ThrowIfNull(configuredByRole);
+        ArgumentNullException.ThrowIfNull(grantedByRole);
+        ArgumentNullException.ThrowIfNull(suppressedByRole);
+        ArgumentNullException.ThrowIfNull(baselineByRole);
 
-        var tenantHasConfiguration = configuredByRole.Count > 0;
         var result = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var role in roles)
@@ -55,18 +55,7 @@ public static class RolePermissionResolution
                 continue;
             }
 
-            if (tenantHasConfiguration)
-            {
-                if (configuredByRole.TryGetValue(role, out var configured))
-                {
-                    result.UnionWith(configured);
-                }
-                // else: a known role with no rows in a configured tenant grants nothing.
-            }
-            else
-            {
-                result.UnionWith(fallbackByRole.TryGetValue(role, out var fallback) ? fallback : []);
-            }
+            result.UnionWith(RoleGrants.Effective(role, baselineByRole, grantedByRole, suppressedByRole));
         }
 
         return result;

@@ -26,8 +26,26 @@ API surface, so the flow is scriptable today and automatable behind a billing we
 From there the customer self-serves inside their tenant: roles, users, agent profiles (including
 per-agent models and tool selections), connectors with their own credentials, notifications.
 
-**Gap (next step):** a single `POST /api/admin/tenants:provision` convenience endpoint (tenant +
-admin + modules + AI settings in one transaction) for the billing webhook to call.
+`POST /api/admin/tenants/provision` (operator-only) does steps 1–2 in one transaction — it is what the
+billing webhook calls, and it fires `ITenantProvisionedHook` after the commit.
+
+### Role baselines across a fleet
+
+What a role grants is the product's **declared baseline** (`AddPlenipoRole` + the built-in defaults)
+adjusted by each tenant's **deviations**. Two operational consequences:
+
+- **Shipping a permission change is a release, not a migration.** Add a permission to a declared role,
+  deploy, and every tenant has it on restart. You do not visit tenants, and there is no reconciler to
+  watch. A tenant that removed that permission deliberately keeps it removed — that is the point.
+- **To repair a role that has diverged**, call `DELETE /api/admin/roles/{role}/suppressions` (or use
+  Admin → Roles). It drops everything the tenant withholds from that role, restoring the declared
+  baseline while keeping any additions the tenant made.
+
+**Upgrading to the release that introduced this** (see
+[ADR 0002](adr/0002-role-permission-deviation-storage.md)): the first start converts each existing
+tenant's role rows before serving any request. It is lossless — nobody's effective permissions change —
+but it is **one-way**. Deploy it **single-instance or with brief downtime**, because the previous binary
+misreads converted data, and take a backup: rolling back past this release requires a restore.
 
 ## AI keys per customer: ours or theirs
 

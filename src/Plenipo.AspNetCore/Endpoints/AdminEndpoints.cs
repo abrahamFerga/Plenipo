@@ -721,23 +721,20 @@ public static class AdminEndpoints
         .RequireAuthorization(PermissionRequirement.PolicyName(Permissions.ViewAuditLog))
         .WithName("Admin_SecurityCatalog");
 
-        // Roles and the baseline permissions each grants — the tenant's configured mapping (editable),
-        // falling back to the built-in defaults for a tenant that has none yet.
+        // Roles and the permissions each grants in this tenant: the declared baseline adjusted by the
+        // tenant's stored deviations (see RoleGrants). A role with no rows is the normal case — it simply
+        // tracks the baseline, so a product's later AddPlenipoRole change shows up here immediately.
         group.MapGet("/roles", async (PlatformDbContext db, IEnumerable<ProductRole> productRoles, CancellationToken ct) =>
         {
             var baseline = RoleBaseline.Merge(productRoles);
-            var rows = await db.RolePermissions
-                .Select(r => new { r.Role, r.Permission })
-                .ToListAsync(ct);
-            var configured = rows
-                .GroupBy(r => r.Role, StringComparer.Ordinal)
-                .ToDictionary(g => g.Key, g => g.Select(x => x.Permission).ToArray(), StringComparer.Ordinal);
-            var tenantHasConfiguration = rows.Count > 0;
+            var granted = await GroupedByRoleAsync(db.RolePermissions.Select(r => new RolePermissionRow(r.Role, r.Permission)), ct);
+            var suppressed = await GroupedByRoleAsync(db.RolePermissionSuppressions.Select(r => new RolePermissionRow(r.Role, r.Permission)), ct);
 
             // Built-in and host-declared roles first (always present), then any custom roles the
             // tenant defined at runtime (which exist purely as their permission rows).
             var declared = Roles.All.Concat(baseline.Keys).Distinct(StringComparer.Ordinal).ToArray();
-            var customRoles = configured.Keys
+            var customRoles = granted.Keys.Concat(suppressed.Keys)
+                .Distinct(StringComparer.Ordinal)
                 .Where(r => !declared.Contains(r, StringComparer.Ordinal))
                 .OrderBy(r => r, StringComparer.Ordinal);
 
@@ -751,15 +748,10 @@ public static class AdminEndpoints
                     return new RoleDto(role, ["*"], Editable: false, BuiltIn: true);
                 }
 
-                // A declared role (built-in or host product role) falls back to its baseline until
-                // the tenant has any configuration; a runtime custom role only ever exists as its rows.
-                var permissions = !tenantHasConfiguration && baseline.TryGetValue(role, out var fallback)
-                    ? fallback
-                    : configured.GetValueOrDefault(role, []);
-
                 return new RoleDto(
                     role,
-                    permissions.OrderBy(p => p, StringComparer.Ordinal).ToArray(),
+                    RoleGrants.Effective(role, baseline, granted, suppressed)
+                        .OrderBy(p => p, StringComparer.Ordinal).ToArray(),
                     Editable: true,
                     BuiltIn: builtIn);
             }).ToArray();
@@ -810,9 +802,10 @@ public static class AdminEndpoints
                 return Results.BadRequest($"Permission(s) reserved for the platform operator: {string.Join(", ", forbidden)}. These grant cross-tenant access and can't be assigned here.");
             }
 
-            // Seed the tenant's built-in defaults first so the configured-vs-default semantics stay consistent.
-            await DatabaseInitializer.EnsureRolePermissionsSeededAsync(db, tenantId, RoleBaseline.Merge(productRoles), ct);
-            if (await db.RolePermissions.AnyAsync(r => r.Role == role, ct))
+            // A custom role has no baseline, so its rows ARE its definition — a role that already has any
+            // is already defined. A declared product role is rejected above by the built-in check plus
+            // the baseline lookup here, since it exists without ever having rows.
+            if (RoleBaseline.Merge(productRoles).ContainsKey(role) || await db.RolePermissions.AnyAsync(r => r.Role == role, ct))
             {
                 return Results.Conflict($"Role '{role}' already exists.");
             }
@@ -855,6 +848,9 @@ public static class AdminEndpoints
             }
 
             db.RolePermissions.RemoveRange(permissionRows);
+            // A custom role has no baseline to suppress, but a role that was edited before being deleted
+            // can still have suppression rows; leaving them would haunt a later role of the same name.
+            db.RolePermissionSuppressions.RemoveRange(await db.RolePermissionSuppressions.Where(r => r.Role == role).ToListAsync(ct));
             var assignments = await db.UserRoles.Where(ur => ur.Role == role).ToListAsync(ct);
             db.UserRoles.RemoveRange(assignments);
             await db.SaveChangesAsync(ct);
@@ -891,9 +887,12 @@ public static class AdminEndpoints
                 return Results.BadRequest("No tenant context.");
             }
 
-            // The role must be known: a built-in, or a custom role the tenant has already defined.
+            // The role must be known: a built-in, a host-declared product role, or a custom role the tenant
+            // has already defined. A declared role normally has NO rows, so row existence is not the test.
+            var baseline = RoleBaseline.Merge(productRoles);
             var builtIn = Roles.All.Contains(role, StringComparer.Ordinal);
-            if (!builtIn && !await db.RolePermissions.AnyAsync(r => r.Role == role, ct))
+            var declared = builtIn || baseline.ContainsKey(role);
+            if (!declared && !await db.RolePermissions.AnyAsync(r => r.Role == role, ct))
             {
                 return Results.BadRequest($"Unknown role '{role}'. Create it first via POST /api/admin/roles.");
             }
@@ -901,11 +900,12 @@ public static class AdminEndpoints
             var desired = (body.Permissions ?? [])
                 .Select(p => p?.Trim())
                 .Where(p => !string.IsNullOrEmpty(p))
+                .Select(p => p!)
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
 
             // A custom role is defined by its permissions; emptying it would orphan it — require DELETE instead.
-            if (!builtIn && desired.Count == 0)
+            if (!declared && desired.Count == 0)
             {
                 return Results.BadRequest("A custom role must keep at least one permission; delete the role instead.");
             }
@@ -922,25 +922,39 @@ public static class AdminEndpoints
                 return Results.BadRequest($"Permission(s) reserved for the platform operator: {string.Join(", ", forbidden)}. These grant cross-tenant access and can't be assigned here.");
             }
 
-            // Seed the tenant's full default set first if it has none, so replacing one role can't leave the
-            // others resolving to empty.
-            await DatabaseInitializer.EnsureRolePermissionsSeededAsync(db, tenantId, RoleBaseline.Merge(productRoles), ct);
+            // Store the DEVIATION from the declared baseline, not the whole set: what this tenant adds and
+            // what it withholds. The wire contract is unchanged — the caller PUTs the full desired set and
+            // GET /roles returns exactly that — but only the difference is persisted, so this role's edit
+            // never freezes it (or any other role) against a later baseline change.
+            var existingGrants = await db.RolePermissions.Where(r => r.Role == role).ToListAsync(ct);
+            var existingSuppressions = await db.RolePermissionSuppressions.Where(r => r.Role == role).ToListAsync(ct);
 
-            var existing = await db.RolePermissions.Where(r => r.Role == role).ToListAsync(ct);
-            var previous = existing.Select(r => r.Permission).ToHashSet(StringComparer.Ordinal);
-            db.RolePermissions.RemoveRange(existing);
+            var previous = RoleGrants.Effective(
+                role,
+                baseline,
+                Grouped(existingGrants.Select(r => new RolePermissionRow(r.Role, r.Permission))),
+                Grouped(existingSuppressions.Select(r => new RolePermissionRow(r.Role, r.Permission))))
+                .ToHashSet(StringComparer.Ordinal);
 
-            foreach (var permission in desired)
+            db.RolePermissions.RemoveRange(existingGrants);
+            db.RolePermissionSuppressions.RemoveRange(existingSuppressions);
+
+            var baselineForRole = baseline.TryGetValue(role, out var declaredPermissions) ? declaredPermissions : [];
+            foreach (var permission in desired.Except(baselineForRole, StringComparer.Ordinal))
             {
-                db.RolePermissions.Add(new RolePermission { TenantId = tenantId, Role = role, Permission = permission! });
+                db.RolePermissions.Add(new RolePermission { TenantId = tenantId, Role = role, Permission = permission });
+            }
+            foreach (var permission in baselineForRole.Except(desired, StringComparer.Ordinal))
+            {
+                db.RolePermissionSuppressions.Add(new RolePermissionSuppression { TenantId = tenantId, Role = role, Permission = permission });
             }
 
             await db.SaveChangesAsync(ct);
 
             // Audit the security-config change (who, which role, and the exact diff) — a change to what a role
             // grants affects every holder, so it belongs in the append-only audit trail like any tool call.
-            var added = desired.Where(p => !previous.Contains(p!)).ToArray();
-            var removed = previous.Where(p => !desired.Contains(p)).ToArray();
+            var added = desired.Where(p => !previous.Contains(p)).ToArray();
+            var removed = previous.Where(p => !desired.Contains(p, StringComparer.Ordinal)).ToArray();
             if (added.Length > 0 || removed.Length > 0)
             {
                 await auditLog.RecordAuthEventAsync(new AuthAuditEntry
@@ -958,6 +972,56 @@ public static class AdminEndpoints
         })
         .RequireAuthorization(PermissionRequirement.PolicyName(Permissions.ManageRoles))
         .WithName("Admin_SetRolePermissions");
+
+        // Drop every permission this tenant withholds from a role, snapping it back to what the product
+        // declares. The one-call repair for a role that diverged from the baseline — including a role the
+        // upgrade to deviation storage recorded as suppressed because the tenant did not grant it at the
+        // time. Additions the tenant made are kept: this restores the baseline, it does not reset the role.
+        group.MapDelete("/roles/{role}/suppressions", async (
+            string role, PlatformDbContext db, ICurrentUser current, IAuditLog auditLog,
+            IEnumerable<ProductRole> productRoles, CancellationToken ct) =>
+        {
+            if (string.Equals(role, Roles.SystemAdmin, StringComparison.Ordinal))
+            {
+                return Results.BadRequest("The system_admin role is not editable; it always holds the global wildcard.");
+            }
+            if (current.TenantId is not Guid tenantId)
+            {
+                return Results.BadRequest("No tenant context.");
+            }
+
+            var suppressions = await db.RolePermissionSuppressions.Where(r => r.Role == role).ToListAsync(ct);
+            if (suppressions.Count == 0)
+            {
+                return Results.NotFound();
+            }
+
+            // Only restore what the role's CURRENT baseline actually declares. A suppression left over from
+            // a permission the product has since retracted must not resurrect it.
+            var baselineForRole = RoleBaseline.Merge(productRoles).TryGetValue(role, out var declared) ? declared : [];
+            var restored = suppressions
+                .Select(r => r.Permission)
+                .Where(p => baselineForRole.Contains(p, StringComparer.Ordinal))
+                .OrderBy(p => p, StringComparer.Ordinal)
+                .ToArray();
+
+            db.RolePermissionSuppressions.RemoveRange(suppressions);
+            await db.SaveChangesAsync(ct);
+
+            await auditLog.RecordAuthEventAsync(new AuthAuditEntry
+            {
+                TenantId = tenantId,
+                UserId = current.UserId,
+                Subject = current.Subject,
+                UserDisplay = current.DisplayName,
+                EventType = AuthAuditEventType.RolePermissionsChanged,
+                Detail = DescribeRoleChange(role, restored, []),
+            }, ct);
+
+            return Results.NoContent();
+        })
+        .RequireAuthorization(PermissionRequirement.PolicyName(Permissions.ManageRoles))
+        .WithName("Admin_ResetRoleSuppressions");
     }
 
     // ── User RBAC management ─────────────────────────────────────────────────
@@ -1020,22 +1084,25 @@ public static class AdminEndpoints
         // Assign a role to a user.
         group.MapPost("/users/{userId:guid}/roles", async (
             Guid userId, [FromBody] RoleChangeRequest body,
-            PlatformDbContext db, ICurrentUser current, IAuditLog auditLog, CancellationToken ct) =>
+            PlatformDbContext db, ICurrentUser current, IAuditLog auditLog,
+            IEnumerable<ProductRole> productRoles, CancellationToken ct) =>
         {
-            if (!Roles.All.Contains(body.Role, StringComparer.Ordinal)
-                && !await db.RolePermissions.AnyAsync(r => r.Role == body.Role, ct))
+            var baseline = RoleBaseline.Merge(productRoles);
+            var granted = await GroupedByRoleAsync(db.RolePermissions.Select(r => new RolePermissionRow(r.Role, r.Permission)), ct);
+            var suppressed = await GroupedByRoleAsync(db.RolePermissionSuppressions.Select(r => new RolePermissionRow(r.Role, r.Permission)), ct);
+
+            if (!RoleGrants.IsKnown(body.Role, baseline, granted.Keys))
             {
                 return Results.BadRequest($"Unknown role '{body.Role}'.");
             }
 
             // Escalation guard: you cannot assign a role that holds an operator-reserved permission you lack —
             // e.g. a tenant admin must not hand out system_admin (its global wildcard is cross-tenant control).
-            // The role's effective grants are the tenant's configured rows if any, else the built-in default.
-            var roleGrants = await db.RolePermissions.Where(r => r.Role == body.Role).Select(r => r.Permission).ToListAsync(ct);
-            if (roleGrants.Count == 0)
-            {
-                roleGrants = RolePermissions.ForRole(body.Role).ToList();
-            }
+            // Judged on what the role EFFECTIVELY grants here, which for a host-declared product role is its
+            // declared baseline — rows alone would have missed it entirely.
+            var roleGrants = string.Equals(body.Role, Roles.SystemAdmin, StringComparison.Ordinal)
+                ? ["*"]
+                : RoleGrants.Effective(body.Role, baseline, granted, suppressed);
             var forbidden = PermissionGrantValidator.FindForbiddenGrants(roleGrants, Permissions.OperatorOnly, current.HasPermission);
             if (forbidden.Count > 0)
             {
@@ -1273,6 +1340,20 @@ public static class AdminEndpoints
 
     /// <summary>Caps an audit Detail string to its 1000-char column.</summary>
     private static string TruncateDetail(string detail) => detail.Length <= 1000 ? detail : detail[..1000];
+
+    /// <summary>A role → permission row, shared by the grant and suppression tables.</summary>
+    private sealed record RolePermissionRow(string Role, string Permission);
+
+    /// <summary>Groups role rows for <see cref="RoleGrants"/>. The tenant query filter scopes the source.</summary>
+    private static async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GroupedByRoleAsync(
+        IQueryable<RolePermissionRow> rows, CancellationToken ct) => Grouped(await rows.ToListAsync(ct));
+
+    private static Dictionary<string, IReadOnlyList<string>> Grouped(IEnumerable<RolePermissionRow> rows) =>
+        rows.GroupBy(r => r.Role, StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<string>)g.Select(x => x.Permission).ToList(),
+                StringComparer.Ordinal);
 
     /// <summary>The permissions this deployment recognises — platform permissions plus every registered module tool.</summary>
     private static IReadOnlySet<string> KnownPermissions(IModuleCatalog catalog) =>

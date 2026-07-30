@@ -38,7 +38,7 @@ public static class UserInviteEndpoints
         group.MapPost("/", async (
                 CreateInviteRequest body, PlatformDbContext db, ITenantContext tenant,
                 ISmtpTransport smtp, IConfiguration configuration, HttpContext http, ICurrentUser current,
-                ILoggerFactory loggerFactory, CancellationToken ct) =>
+                IEnumerable<ProductRole> productRoles, ILoggerFactory loggerFactory, CancellationToken ct) =>
             {
                 var email = body.Email?.Trim().ToLowerInvariant();
                 if (string.IsNullOrWhiteSpace(email) || !email.Contains('@') || email.Length > 320)
@@ -72,22 +72,22 @@ public static class UserInviteEndpoints
                     return Results.Forbid();
                 }
 
+                // A host-declared product role normally has NO rows — it tracks the declared baseline — so
+                // row existence is neither a role-exists test nor a description of what it grants.
+                var baseline = RoleBaseline.Merge(productRoles);
+                var granted = await GroupedByRoleAsync(db.RolePermissions.Select(r => new RoleRow(r.Role, r.Permission)), ct);
+                var suppressed = await GroupedByRoleAsync(db.RolePermissionSuppressions.Select(r => new RoleRow(r.Role, r.Permission)), ct);
+
                 foreach (var role in roles)
                 {
-                    if (!Roles.All.Contains(role, StringComparer.Ordinal) &&
-                        !await db.RolePermissions.AnyAsync(r => r.Role == role, ct))
+                    if (!RoleGrants.IsKnown(role, baseline, granted.Keys))
                     {
                         return Results.BadRequest(new { error = $"Unknown role '{role}'." });
                     }
 
-                    var grants = await db.RolePermissions
-                        .Where(r => r.Role == role)
-                        .Select(r => r.Permission)
-                        .ToListAsync(ct);
-                    if (grants.Count == 0)
-                    {
-                        grants = RolePermissions.ForRole(role).ToList();
-                    }
+                    var grants = string.Equals(role, Roles.SystemAdmin, StringComparison.Ordinal)
+                        ? ["*"]
+                        : RoleGrants.Effective(role, baseline, granted, suppressed);
 
                     var forbidden = PermissionGrantValidator.FindForbiddenGrants(
                         grants, Permissions.OperatorOnly, current.HasPermission);
@@ -157,6 +157,17 @@ public static class UserInviteEndpoints
             })
             .WithName("Admin_RevokeInvite");
     }
+
+    private sealed record RoleRow(string Role, string Permission);
+
+    private static async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GroupedByRoleAsync(
+        IQueryable<RoleRow> rows, CancellationToken ct) =>
+        (await rows.ToListAsync(ct))
+            .GroupBy(r => r.Role, StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<string>)g.Select(x => x.Permission).ToList(),
+                StringComparer.Ordinal);
 
     private sealed record InviteDto(
         Guid Id, string Email, string[] Roles, DateTimeOffset CreatedAt, DateTimeOffset? RedeemedAt);
