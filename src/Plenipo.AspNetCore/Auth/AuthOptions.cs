@@ -13,6 +13,24 @@ public sealed class AuthOptions
 
     public bool RequireHttpsMetadata { get; set; } = true;
 
+    /// <summary>
+    /// The PUBLIC client id the browser and mobile apps sign in with. Published unauthenticated by
+    /// <c>GET /api/platform/auth-config</c> so one prebuilt bundle can serve every deployment — the shell
+    /// asks the host who to authenticate against instead of baking it in at build time.
+    ///
+    /// <para>Deliberately NOT part of <see cref="IsConfigured"/>: an existing API-only deployment must keep
+    /// starting after an upgrade without adding config it never needed. A browser client that finds no
+    /// client id says so on screen instead.</para>
+    /// </summary>
+    public string? ClientId { get; set; }
+
+    /// <summary>
+    /// Space-separated scopes the browser requests, beyond <c>openid profile email</c>. Empty by default:
+    /// the correct value is IdP-specific (Entra wants <c>{audience}/.default</c>, Keycloak and Authentik
+    /// reject it), so the platform ships no guess.
+    /// </summary>
+    public string? Scopes { get; set; }
+
     /// <summary>Claim whose value identifies the Plenipo tenant (matched against <c>Tenant.Slug</c>).</summary>
     public string TenantClaim { get; set; } = "tenant";
 

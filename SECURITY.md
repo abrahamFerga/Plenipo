@@ -75,8 +75,20 @@ before deploying.
   Set `Auth:RequireMfa` to make the platform additionally **reject any token that was not issued
   after MFA** (judged by the `amr` claim; accepted markers configurable via `Auth:MfaAmrValues`),
   so an IdP misconfiguration can't silently admit single-factor sessions.
-- `/alive` (liveness) and `/health` (readiness) are anonymous. If you add health checks that surface
-  sensitive dependency detail, restrict `/health` (auth, or an internal-only port).
+- **Browser sign-in.** Set `Auth:ClientId` to the PUBLIC client id of your SPA registration, and register
+  `https://<your-host>/signin-callback` and `https://<your-host>/admin/signin-callback` as its redirect
+  URIs. The shipped shell then runs Authorization Code + PKCE with no client secret — a browser cannot
+  keep one. `Auth:Scopes` adds provider-specific scopes beyond `openid profile email`; there is no
+  default, because Entra's `{audience}/.default` is rejected by Keycloak and Authentik.
+  *Trade-off to know:* the access token is held in memory only, and the refresh token in
+  `sessionStorage` — readable by script on your own origin, which is the honest limit of a browser SPA.
+  Shorten refresh-token lifetime at the IdP if that matters to your threat model.
+- **Anonymous endpoints** are exactly: `/alive` and `/health` (liveness/readiness),
+  `/api/platform/branding` (the product name, which must render before any sign-in),
+  `/api/platform/auth-config` (public OIDC client metadata — a client cannot present a token before it
+  knows where to get one), and the signature-verified Stripe and WhatsApp webhooks. Nothing else.
+  If you add health checks that surface sensitive dependency detail, restrict `/health` (auth, or an
+  internal-only port).
 - Run behind HTTPS; terminate TLS at the ingress (the Container App / reverse proxy).
 - Keep the audit connection on an independently credentialed database server. The audit context rejects
   updates/deletes, but database-level retention and restricted administrator access remain operator duties.

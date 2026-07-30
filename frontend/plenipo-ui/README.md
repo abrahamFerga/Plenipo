@@ -75,18 +75,49 @@ The product **name and logo** in the top bar are content (not CSS), set via the 
 />
 ```
 
-## Dev auth
+## Authentication
 
-Until real OIDC is wired up, every API request and the SignalR connection send
-dev-auth headers, defined in `src/lib/devAuth.ts`:
+The shell asks the host how to authenticate (`GET /api/platform/auth-config`, anonymous) and wires
+itself accordingly. **Nothing is baked in at build time**, which is what lets one prebuilt bundle
+serve every deployment.
 
-- `X-Dev-Subject: dev-user`
-- `X-Dev-Tenant: dev`
-- `X-Dev-Roles: system_admin`
-- `X-Dev-Name: Dev User`
+### No IdP configured — the default
 
-(For the WebSocket handshake, which cannot set custom headers, the same values
-are also forwarded as query-string parameters.)
+Every API request and the SignalR connection send the platform's Development-only dev-auth headers
+(`src/lib/devAuth.ts`): `X-Dev-Subject: dev-user`, `X-Dev-Tenant: dev`, `X-Dev-Roles: system_admin`,
+`X-Dev-Name: Dev User`. A brand-new app talks to a local host with nothing configured.
+
+### A real IdP configured
+
+Set `Auth:Authority`, `Auth:Audience` and `Auth:ClientId` on the host, and register
+`https://<host>/signin-callback` (and `/admin/signin-callback` for the console) with the provider. The
+shell then runs Authorization Code + PKCE with no dependencies and no client secret, holds the access
+token in memory, and offers a **Sign in** button when the API answers 401. In this mode it sends **no
+`X-Dev-*` header at all** — a signed-out browser gets a clean 401 it can recover from.
+
+### Bring your own identity stack
+
+`AuthAdapter` is the same shape `@plenipo/mobile` takes, so a product that has wired one already knows
+this one:
+
+```tsx
+import { PlenipoApp, type AuthAdapter } from "@plenipo/ui";
+
+const auth: AuthAdapter = {
+  getAccessToken: () => myIdentity.getToken(),   // called before every request
+  signIn: () => myIdentity.login(),              // optional; offered on 401
+  signOut: () => myIdentity.logout(),            // optional
+};
+
+createRoot(el).render(<PlenipoApp config={{ auth }} />);
+```
+
+Returning `null` from `getAccessToken` is a supported answer, not a failure — in dev mode it means "use
+the dev headers", and in OIDC mode it means "not signed in yet".
+
+Hosts composing `AppShell` directly call `initPlenipoWebAuth()` (or `configurePlenipoWeb`) and **await it
+before rendering** — the shell requests modules on mount, and a request issued before the client is
+configured would carry the dev headers.
 
 ## How it works
 

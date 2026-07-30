@@ -93,7 +93,7 @@ and change without a deploy.
 | `Channels:Email` | `Enabled`, `Host`/`Port`/`UseSsl`, `Username`, `Password`, `Folder`, `ModuleId`, `TenantSlug`, `PollSeconds`, `ReplyEnabled`, `AllowedSenders`, `AllowUnknownSenders`, `MaxMessageBytes` | IMAP intake mailbox polled into agent turns (docs/INBOUND_CHANNELS.md); password via user-secrets/env; replies and unknown senders off by default |
 | `Email` | Outbound SMTP: `Enabled`, `Host`/`Port`/`UseStartTls`, `Username`, `Password`, `FromAddress`, `FromName` | Powers the email notification channel AND user invites; password via user-secrets/env. Unconfigured, invites still work (share the link manually) |
 | `Push` | Mobile push: `Enabled`, `IncludeContent`, `PlaceholderTitle`/`PlaceholderBody`, `ExpoEndpoint`, `ExpoAccessToken`, `MaxDevicesPerUser` | Nothing to configure for most deployments — the channel is inert until a device registers, and the built-in Expo transport needs no Apple/Google credentials. **`IncludeContent=false`** is the one to think about: see below |
-| `Auth` | `Authority`, `Audience`, `PermissionSource` (Database/Token), `TenantClaim` (default `tenant`) | Empty = dev-auth in Development only |
+| `Auth` | `Authority`, `Audience`, `ClientId`, `Scopes`, `PermissionSource` (Database/Token), `TenantClaim` (default `tenant`) | Empty = dev-auth in Development only. `ClientId`/`Scopes` are what the BROWSER signs in with — see below |
 | `Bootstrap` | `TenantSlug`, `TenantName`, `AdminEmail`, `AdminSubject`, `AdminRoles` | **First run only** — creates the deployment's first tenant and its operator. Consumed at startup, never over HTTP, inert once any operator exists. See below |
 | `Secrets` | `Provider` (DataProtection/AzureKeyVault), `KeyVaultUri` | Where runtime-entered secrets rest |
 | `DataProtection:KeysPath` | Shared durable directory for the Data Protection key ring | Optional alternative to `plenipo-redis`; required outside Development when Redis is absent |
@@ -215,6 +215,51 @@ and every user gets a per-category mute switch in the notification bell. A mute 
 category entirely for that user — the in-app row and every channel — without touching anyone
 else's notifications or any other category. No stored row means "on", so new categories need no
 backfill.
+
+## Signing in from a browser
+
+Setting `Auth:Authority` + `Auth:Audience` secures the **API**. To let a person sign in from the shipped
+web UI, add the public client id of your SPA app registration:
+
+```jsonc
+{
+  "Auth": {
+    "Authority": "https://your-tenant.ciamlogin.com/<tenant-id>/v2.0",
+    "Audience":  "api://your-api-id",
+    "ClientId":  "<the SPA app registration's client id>",
+    "Scopes":    "api://your-api-id/.default"   // provider-specific; omit if unsure
+  }
+}
+```
+
+Register these redirect URIs with the identity provider:
+
+| Surface | Redirect URI |
+|---|---|
+| App (`/`) | `https://<your-host>/signin-callback` |
+| Admin console (`/admin`) | `https://<your-host>/admin/signin-callback` |
+
+The shell learns all of this at runtime from the anonymous `GET /api/platform/auth-config`, which is what
+lets **one prebuilt bundle serve every deployment** — nothing is baked in at build time. It then runs
+Authorization Code + PKCE with no client secret (a browser cannot keep one), holds the access token in
+memory, and offers a **Sign in** button when the API answers 401.
+
+`Auth:ClientId` is deliberately optional and does **not** fail startup when missing: an existing API-only
+deployment must keep starting after an upgrade. A browser that finds no client id says so on screen
+instead of looping on 401.
+
+A product with its own identity stack skips all of this and supplies an adapter:
+
+```tsx
+import { PlenipoApp, type AuthAdapter } from "@plenipo/ui";
+
+const auth: AuthAdapter = { getAccessToken: () => myIdentity.getToken() };
+createRoot(el).render(<PlenipoApp config={{ auth }} />);
+```
+
+That is the same `AuthAdapter` shape `@plenipo/mobile` takes, so a product that has wired one already
+knows this one. With no authority configured the shell keeps using the Development-only `X-Dev-*`
+headers, so a local host still works with nothing configured at all.
 
 ## First run outside Development: the `Bootstrap` section
 

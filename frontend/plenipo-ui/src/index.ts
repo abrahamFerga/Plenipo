@@ -16,6 +16,7 @@
 export { PlenipoApp } from "./components/PlenipoApp";
 export type { PlenipoAppProps } from "./components/PlenipoApp";
 export { AppShell } from "./routes/AppShell";
+export type { AppShellProps } from "./routes/AppShell";
 
 // Module UI registry — register host React components per module tab (generic fallback otherwise).
 export { defineModule, createModuleUiRegistry, resolveTabComponent } from "./lib/moduleUi";
@@ -115,6 +116,28 @@ export type {
 } from "./lib/api";
 export type { AgentStreamEvent } from "./lib/signalr";
 export type { AguiEvent } from "./lib/agui";
+
+// Authentication — the seam that lets a product sign someone in without forking this package.
+// `configureClient` is re-exported from the BUNDLED @plenipo/client instance: importing it from
+// "@plenipo/client" in a consuming app configures a different module instance than the one these
+// components read, which is why overriding it from outside never reached the shipped shell.
+export {
+  configurePlenipoWeb,
+  plenipoWebAuth,
+  plenipoWebMode,
+  signOutPlenipoWeb,
+  resetPlenipoWeb,
+  devAuthOnly,
+  memoryStorage,
+  sessionStorageAdapter,
+} from "./lib/webAuth";
+export type { AuthAdapter, SecureStorageAdapter, PlenipoWebConfig } from "./lib/webAuth";
+export { createOidcAuth, isSignInCallback } from "./lib/oidc";
+export type { OidcOptions, OidcAuthAdapter } from "./lib/oidc";
+export { initPlenipoWebAuth } from "./lib/initWebAuth";
+export type { InitWebAuthOptions, WebAuthState } from "./lib/initWebAuth";
+export { configureClient, clientConfig, devAuthHeaders, fetchAuthConfig } from "./lib/api";
+export type { AuthConfig } from "./lib/api";
 
 // API / lib utilities
 export { apiGet, apiSend, apiPost, api, ApiError, uploadFile } from "./lib/api";

@@ -42,7 +42,7 @@ function tabsFor(module: Module | undefined, chatEnabled: boolean): ModuleTab[] 
   return chatEnabled ? [CHAT_TAB, ...rest] : rest;
 }
 
-interface AppShellProps {
+export interface AppShellProps {
   /**
    * Host-registered UI for modules — custom React components per tab. Any tab without a
    * registered component falls back to the built-in server-driven `GenericTab`. The server

@@ -44,20 +44,41 @@ public static class AuthSetup
                     NameClaimType = "name",
                     RoleClaimType = "roles",
                 };
+                // Constructed unconditionally so a later handler can ATTACH an event without replacing the
+                // bag — assigning options.Events inside the RequireMfa branch made this a trap where the
+                // next feature to need an event would silently delete the MFA backstop SECURITY.md
+                // advertises.
+                options.Events = new JwtBearerEvents();
+
+                // A browser's WebSocket handshake cannot set an Authorization header, so SignalR sends
+                // the bearer as an `access_token` query parameter instead. Accept it for HUB PATHS ONLY:
+                // a query string is logged by proxies and kept in browser history, so widening this to
+                // the REST surface would leak credentials into places headers never reach. The token
+                // itself still goes through the identical validation — this only changes where it is
+                // read from, for the one transport that cannot carry a header.
+                options.Events.OnMessageReceived = context =>
+                {
+                    var token = context.Request.Query["access_token"];
+                    if (!string.IsNullOrEmpty(token)
+                        && context.HttpContext.Request.Path.StartsWithSegments("/hubs", StringComparison.Ordinal))
+                    {
+                        context.Token = token;
+                    }
+
+                    return Task.CompletedTask;
+                };
+
                 if (auth.RequireMfa)
                 {
                     // MFA enrollment lives at the IdP; this is the platform-side backstop that a
                     // token minted WITHOUT it never authenticates, however the IdP is configured.
-                    options.Events = new JwtBearerEvents
+                    options.Events.OnTokenValidated = context =>
                     {
-                        OnTokenValidated = context =>
+                        if (context.Principal is null || !MfaEnforcement.SatisfiesMfa(context.Principal, auth))
                         {
-                            if (context.Principal is null || !MfaEnforcement.SatisfiesMfa(context.Principal, auth))
-                            {
-                                context.Fail("Token was not issued with multi-factor authentication (no accepted amr value).");
-                            }
-                            return Task.CompletedTask;
-                        },
+                            context.Fail("Token was not issued with multi-factor authentication (no accepted amr value).");
+                        }
+                        return Task.CompletedTask;
                     };
                 }
             });
