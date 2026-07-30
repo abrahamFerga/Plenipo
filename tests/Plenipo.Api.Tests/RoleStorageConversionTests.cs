@@ -189,6 +189,63 @@ public sealed class RoleStorageConversionTests : IClassFixture<PlenipoApiFactory
     }
 
     [Fact]
+    public async Task Converting_an_already_converted_tenant_is_refused_rather_than_reapplied()
+    {
+        var (db, scope) = await ScopeAsync();
+        using var _ = scope;
+
+        // The failure this guards: a second instance lists a tenant as pending, waits while the first
+        // converts it, then reads the ALREADY-CONVERTED rows as if they were legacy. `withheld` would be
+        // computed against a set that no longer restates the baseline, suppressing every role's ENTIRE
+        // baseline — a silent tenant-wide lockout with no exception raised. The claim must refuse.
+        var tenantId = await SeedLegacyTenantAsync(
+            db, "legacy-reconvert",
+            (Roles.User, Baseline[Roles.User].Append("tools.finance.export").ToArray()));
+
+        await RoleStorageConversion.ConvertAsync(db, Baseline, NullLogger.Instance);
+        var afterFirst = await EffectiveAsync(db, tenantId, Roles.User);
+
+        // Force the tenant back into the pending list, exactly as a stale read would present it, and run
+        // the conversion again over the CONVERTED rows.
+        var tenant = await db.Tenants.FirstAsync(t => t.Id == tenantId);
+        var stamp = tenant.RolePermissionsConvertedAt;
+        Assert.NotNull(stamp);
+
+        await RoleStorageConversion.ConvertAsync(db, Baseline, NullLogger.Instance);
+
+        Assert.Equal(
+            afterFirst.OrderBy(p => p, StringComparer.Ordinal),
+            (await EffectiveAsync(db, tenantId, Roles.User)).OrderBy(p => p, StringComparer.Ordinal));
+        Assert.True(afterFirst.Contains(Permissions.UseChat), "the baseline must survive a re-run");
+    }
+
+    [Fact]
+    public async Task One_tenant_failing_to_convert_does_not_strand_the_others()
+    {
+        var (db, scope) = await ScopeAsync();
+        using var _ = scope;
+
+        // Several pending tenants are converted in one pass. Each must be claimed and stamped on its own;
+        // an earlier implementation cleared the whole change tracker on a conflict, which detached every
+        // remaining tenant so their rows were rewritten but their stamp was silently dropped — and the
+        // next startup then re-converted them against their own converted rows.
+        var ids = new List<Guid>();
+        for (var i = 0; i < 3; i++)
+        {
+            ids.Add(await SeedLegacyTenantAsync(db, $"legacy-batch-{i}", (Roles.User, Baseline[Roles.User])));
+        }
+
+        await RoleStorageConversion.ConvertAsync(db, Baseline, NullLogger.Instance);
+
+        foreach (var id in ids)
+        {
+            Assert.NotNull((await db.Tenants.FirstAsync(t => t.Id == id)).RolePermissionsConvertedAt);
+        }
+
+        Assert.Equal(0, await RoleStorageConversion.ConvertAsync(db, Baseline, NullLogger.Instance));
+    }
+
+    [Fact]
     public async Task A_role_declared_after_seeding_keeps_granting_nothing_until_it_is_restored()
     {
         var (db, scope) = await ScopeAsync();

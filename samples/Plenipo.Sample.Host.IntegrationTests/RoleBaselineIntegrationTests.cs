@@ -1,11 +1,14 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using Plenipo.Application.Authorization;
+using Plenipo.AspNetCore.Setup;
+using Plenipo.Core.Platform;
 using Plenipo.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Plenipo.Sample.Host.IntegrationTests;
 
@@ -133,6 +136,54 @@ public sealed class RoleBaselineIntegrationTests(IntegrationFixture fixture)
             await db.RolePermissions.IgnoreQueryFilters()
                 .AnyAsync(r => r.TenantId == tenantId && r.Role == Roles.Guest),
             "editing one role must not materialize rows for another");
+    }
+
+    [Fact]
+    public async Task The_upgrade_conversion_is_lossless_and_claims_each_tenant_once()
+    {
+        // The conversion's real path — a transaction plus a conditional UPDATE that claims the tenant and
+        // holds a row lock — only exists on a relational provider, so this is the only place it runs. The
+        // claim is what stops a second instance reading already-converted rows as if they were legacy and
+        // suppressing every role's entire baseline.
+        const string slug = "legacy-upgrade";
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PlatformDbContext>();
+
+        // A tenant exactly as the OLD seed left it: every role's full set materialized, minus one
+        // permission its admin removed, plus one it added.
+        var baseline = RolePermissions.Defaults;
+        var tenant = new Tenant { Name = slug, Slug = slug, RolePermissionsConvertedAt = null };
+        db.Tenants.Add(tenant);
+        foreach (var (role, permissions) in baseline)
+        {
+            var rows = role == Roles.User
+                ? permissions.Where(p => p != Permissions.UploadFiles).Append("tools.legal.list_deadlines")
+                : permissions;
+            foreach (var permission in rows)
+            {
+                db.RolePermissions.Add(new RolePermission { TenantId = tenant.Id, Role = role, Permission = permission });
+            }
+        }
+
+        await db.SaveChangesAsync();
+
+        var merged = RoleBaseline.Merge(scope.ServiceProvider.GetServices<ProductRole>());
+        var converted = await RoleStorageConversion.ConvertAsync(db, merged, NullLogger.Instance);
+        Assert.True(converted >= 1);
+
+        // Lossless: `user` keeps exactly what it had — the removal stays removed, the addition stays.
+        using var admin = fixture.ClientForTenant("system_admin", slug);
+        var after = await PermissionsForRoleAsync(admin, Roles.User);
+        Assert.DoesNotContain(Permissions.UploadFiles, after);
+        Assert.Contains("tools.legal.list_deadlines", after);
+        Assert.Contains(Permissions.UseChat, after);
+
+        // Stamped, and a second pass claims nothing — no re-conversion against its own converted rows.
+        Assert.NotNull((await db.Tenants.FirstAsync(t => t.Slug == slug)).RolePermissionsConvertedAt);
+        Assert.Equal(0, await RoleStorageConversion.ConvertAsync(db, merged, NullLogger.Instance));
+        Assert.Equal(
+            after.OrderBy(p => p, StringComparer.Ordinal),
+            (await PermissionsForRoleAsync(admin, Roles.User)).OrderBy(p => p, StringComparer.Ordinal));
     }
 
     [Fact]

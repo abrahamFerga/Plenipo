@@ -46,6 +46,26 @@ public sealed class AuditInterceptor(ICurrentUser currentUser, IAuditLog auditLo
         return await base.SavedChangesAsync(eventData, result, cancellationToken);
     }
 
+    /// <summary>
+    /// Discards the staged batch when the save fails. Entries are captured BEFORE the write and drained
+    /// only after it succeeds, so without this a rolled-back save leaves its entries queued and the NEXT
+    /// successful save on the same scoped context flushes them — writing an append-only, uncorrectable
+    /// record of changes that never happened.
+    /// </summary>
+    public override void SaveChangesFailed(DbContextErrorEventData eventData)
+    {
+        _pending.Clear();
+        base.SaveChangesFailed(eventData);
+    }
+
+    /// <inheritdoc cref="SaveChangesFailed"/>
+    public override Task SaveChangesFailedAsync(
+        DbContextErrorEventData eventData, CancellationToken cancellationToken = default)
+    {
+        _pending.Clear();
+        return base.SaveChangesFailedAsync(eventData, cancellationToken);
+    }
+
     private void Capture(DbContext context)
     {
         var actor = currentUser.DisplayName ?? currentUser.Subject ?? "system";

@@ -112,9 +112,17 @@ That materialization was the bug.
   is lossless by construction: for a role in both the legacy rows `C` and the baseline `B` it writes
   suppressions `B ∖ C` and keeps grants `C ∖ B`, giving `(B ∖ (B ∖ C)) ∪ (C ∖ B) = C`. But a tenant's grant
   rows afterwards are a *subset* of what the old resolver expects, so **rolling back past this release
-  requires a restore**, and the release should be deployed single-instance or with brief downtime. The
-  conversion tolerates a concurrent peer rather than crash-looping, but the old binary must not read
-  converted data.
+  requires a restore**, and the release should be deployed single-instance or with brief downtime — the
+  old binary must not read converted data.
+
+  Each tenant is **claimed** by an atomic conditional `UPDATE … WHERE role_permissions_converted_at IS
+  NULL` inside its own transaction, and its legacy rows are read only after that claim's row lock is held.
+  This is load-bearing, not belt-and-braces: without it a second instance can list a tenant as pending,
+  wait while the first converts it, then read the *already converted* rows as if they were legacy —
+  computing `withheld` against a set that no longer restates the baseline and suppressing every role's
+  entire baseline. That failure raises no exception and logs a successful conversion, so it cannot be left
+  to a duplicate-key rescue. The whole unit runs through the provider's execution strategy, which the
+  configured Npgsql retrying strategy requires for any user-initiated transaction.
 
 **The one judgement call.** When the conversion meets a role a legacy tenant has *no* rows for while the
 baseline declares one, it cannot tell "the product declared this after the tenant was seeded" from "the admin

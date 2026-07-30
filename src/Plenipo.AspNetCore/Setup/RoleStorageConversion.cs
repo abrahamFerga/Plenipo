@@ -2,6 +2,7 @@ using Plenipo.Application.Authorization;
 using Plenipo.Core.Platform;
 using Plenipo.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Plenipo.AspNetCore.Setup;
 
@@ -36,9 +37,12 @@ public static class RoleStorageConversion
         ArgumentNullException.ThrowIfNull(baseline);
         ArgumentNullException.ThrowIfNull(logger);
 
-        // Tenants are not tenant-owned, so no query filter applies here.
+        // Tenants are not tenant-owned, so no query filter applies here. Projected rather than tracked:
+        // each tenant is re-read and CLAIMED inside its own transaction below, so a tenant entity held
+        // across the loop would only be a stale copy waiting to be acted on.
         var pending = await platform.Tenants
             .Where(t => t.RolePermissionsConvertedAt == null)
+            .Select(t => new PendingTenant(t.Id, t.Slug))
             .ToListAsync(cancellationToken);
 
         if (pending.Count == 0)
@@ -61,11 +65,88 @@ public static class RoleStorageConversion
         return converted;
     }
 
+    /// <summary>A tenant awaiting conversion. Projected, never tracked — see <see cref="ConvertAsync"/>.</summary>
+    private sealed record PendingTenant(Guid Id, string Slug);
+
+    /// <summary>
+    /// Claims a tenant and converts it, all inside one transaction.
+    ///
+    /// <para>The claim is an atomic conditional UPDATE, so it both arbitrates between concurrent instances
+    /// and takes a row lock for the rest of the transaction. That lock is what makes the subsequent read
+    /// safe: without it a second instance could list this tenant as pending, wait while the first converts
+    /// it, then read the ALREADY-CONVERTED rows as if they were legacy — computing <c>withheld</c> against
+    /// a set that no longer restates the baseline and suppressing every role's entire baseline. That is a
+    /// silent tenant-wide lockout with no exception raised, so it cannot be left to a duplicate-key
+    /// rescue; it has to be impossible.</para>
+    ///
+    /// <para>The whole unit runs through the provider's execution strategy, which is mandatory here: the
+    /// Npgsql retrying strategy this platform configures REFUSES a user-initiated transaction otherwise,
+    /// which would fail every startup that has a tenant left to convert.</para>
+    /// </summary>
     private static async Task<bool> ConvertTenantAsync(
         PlatformDbContext platform,
-        Tenant tenant,
+        PendingTenant tenant,
         IReadOnlyDictionary<string, string[]> baseline,
         ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        // The in-memory provider used by endpoint tests has neither transactions nor ExecuteUpdate — and
+        // no concurrency to arbitrate — so it takes a plain read-modify-write claim.
+        if (!platform.Database.IsRelational())
+        {
+            var existing = await platform.Tenants.FirstOrDefaultAsync(t => t.Id == tenant.Id, cancellationToken);
+            if (existing is null || existing.RolePermissionsConvertedAt is not null)
+            {
+                LogConcurrentClaim(logger, tenant);
+                return false;
+            }
+
+            existing.RolePermissionsConvertedAt = DateTimeOffset.UtcNow;
+            await platform.SaveChangesAsync(cancellationToken);
+            return await ApplyAsync(platform, tenant, baseline, logger, null, cancellationToken);
+        }
+
+        var strategy = platform.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async token =>
+        {
+            // A retried attempt must not re-add what the failed one staged. Safe to clear: tenants are
+            // projected rather than tracked, so nothing the loop depends on lives in the tracker.
+            platform.ChangeTracker.Clear();
+
+            await using var transaction = await platform.Database.BeginTransactionAsync(token);
+
+            var claimed = await platform.Tenants
+                .Where(t => t.Id == tenant.Id && t.RolePermissionsConvertedAt == null)
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(t => t.RolePermissionsConvertedAt, DateTimeOffset.UtcNow), token);
+            if (claimed != 1)
+            {
+                await transaction.RollbackAsync(token);
+                LogConcurrentClaim(logger, tenant);
+                return false;
+            }
+
+            return await ApplyAsync(platform, tenant, baseline, logger, transaction, token);
+        }, cancellationToken);
+    }
+
+    private static void LogConcurrentClaim(ILogger logger, PendingTenant tenant)
+    {
+        if (logger.IsEnabled(LogLevel.Information))
+        {
+            logger.LogInformation(
+                "Role permission storage for tenant {Slug} was converted concurrently by another instance.",
+                tenant.Slug);
+        }
+    }
+
+    /// <summary>Rewrites one claimed tenant's legacy rows as deviations. Caller owns the transaction.</summary>
+    private static async Task<bool> ApplyAsync(
+        PlatformDbContext platform,
+        PendingTenant tenant,
+        IReadOnlyDictionary<string, string[]> baseline,
+        ILogger logger,
+        IDbContextTransaction? transaction,
         CancellationToken cancellationToken)
     {
         // RolePermission is tenant-owned, but no ambient tenant is set during startup initialization, so
@@ -75,11 +156,14 @@ public static class RoleStorageConversion
             .ToListAsync(cancellationToken);
 
         // A tenant that was never seeded already tracks the baseline: it converts to zero deviations,
-        // which is exactly what it resolved to before. Stamp it and move on.
+        // which is exactly what it resolved to before. The claim already stamped it.
         if (legacyRows.Count == 0)
         {
-            tenant.RolePermissionsConvertedAt = DateTimeOffset.UtcNow;
-            await platform.SaveChangesAsync(cancellationToken);
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
+
             return true;
         }
 
@@ -144,36 +228,14 @@ public static class RoleStorageConversion
 
         platform.RolePermissions.RemoveRange(redundant);
         platform.RolePermissionSuppressions.AddRange(suppressions);
-        tenant.RolePermissionsConvertedAt = DateTimeOffset.UtcNow;
 
-        try
+        // The stamp and the rows land together, so a reader never observes a half-converted tenant and a
+        // crash here leaves the tenant untouched and still pending. A failure is a startup failure —
+        // fail-closed is the only safe direction for a rewrite of a tenant's permission storage.
+        await platform.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
         {
-            // One transaction per tenant, so a reader never observes a half-converted tenant.
-            await platform.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException)
-        {
-            // Two instances starting against one database race here, and the loser hits the unique
-            // index on (TenantId, Role, Permission). That is a peer having done the identical
-            // deterministic work, not a failure — but only if the tenant really is converted now.
-            // Anything else is a genuine error and must still fail startup.
-            platform.ChangeTracker.Clear();
-            var stamped = await platform.Tenants
-                .AsNoTracking()
-                .AnyAsync(t => t.Id == tenant.Id && t.RolePermissionsConvertedAt != null, cancellationToken);
-            if (!stamped)
-            {
-                throw;
-            }
-
-            if (logger.IsEnabled(LogLevel.Information))
-            {
-                logger.LogInformation(
-                    "Role permission storage for tenant {Slug} was converted concurrently by another instance.",
-                    tenant.Slug);
-            }
-
-            return false;
+            await transaction.CommitAsync(cancellationToken);
         }
 
         if (logger.IsEnabled(LogLevel.Information))

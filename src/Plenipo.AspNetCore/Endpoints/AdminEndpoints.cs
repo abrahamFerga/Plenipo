@@ -834,11 +834,23 @@ public static class AdminEndpoints
         // Delete a custom role: removes its permission rows and any assignments of it. Built-in roles can't
         // be deleted.
         group.MapDelete("/roles/{role}", async (
-            string role, PlatformDbContext db, ICurrentUser current, IAuditLog auditLog, CancellationToken ct) =>
+            string role, PlatformDbContext db, ICurrentUser current, IAuditLog auditLog,
+            IEnumerable<ProductRole> productRoles, CancellationToken ct) =>
         {
             if (Roles.All.Contains(role, StringComparer.Ordinal))
             {
                 return Results.BadRequest($"'{role}' is a built-in role and cannot be deleted.");
+            }
+
+            // A host-declared product role is code, not data: deleting its rows would not remove it, it
+            // would RESET it — dropping the tenant's suppressions and handing every holder back the
+            // permissions an admin deliberately removed, while also purging their assignments. Reject it
+            // for the same reason a built-in is rejected, and point at the edit that was actually meant.
+            if (RoleBaseline.Merge(productRoles).ContainsKey(role))
+            {
+                return Results.BadRequest(
+                    $"'{role}' is declared by this product and cannot be deleted. Change what it grants with " +
+                    $"PUT /api/admin/roles/{role}/permissions instead.");
             }
 
             var permissionRows = await db.RolePermissions.Where(r => r.Role == role).ToListAsync(ct);
@@ -1004,6 +1016,17 @@ public static class AdminEndpoints
                 .Where(p => baselineForRole.Contains(p, StringComparer.Ordinal))
                 .OrderBy(p => p, StringComparer.Ordinal)
                 .ToArray();
+
+            // This RESTORES permissions, so it is a grant path and must clear the same escalation bar as
+            // PUT. Without this a tenant admin could suppress an operator-reserved permission out of a
+            // declared role, assign themselves the now-harmless role, then undo the suppression here and
+            // walk away with cross-tenant control — an escalation the PUT validator alone does not close.
+            var forbidden = PermissionGrantValidator.FindForbiddenGrants(restored, Permissions.OperatorOnly, current.HasPermission);
+            if (forbidden.Count > 0)
+            {
+                return Results.BadRequest(
+                    $"Restoring '{role}' would grant permission(s) reserved for the platform operator: {string.Join(", ", forbidden)}. These grant cross-tenant access and can't be assigned here.");
+            }
 
             db.RolePermissionSuppressions.RemoveRange(suppressions);
             await db.SaveChangesAsync(ct);

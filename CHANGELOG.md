@@ -38,9 +38,11 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   role rows to deviations **losslessly — nobody's effective permissions change.** A permission a product
   declared *after* a tenant was seeded is therefore recorded as suppressed on that tenant, exactly as it
   behaves today; `DELETE /api/admin/roles/{role}/suppressions` (new, `platform.roles.manage`) restores a
-  role to its declared baseline in one call. **Deploy this release single-instance or with brief
-  downtime**, and note that rolling back past it requires a restore: a converted tenant's grant rows are
-  a subset of what the previous resolver expects.
+  role to its declared baseline in one call. The conversion claims each tenant with an atomic conditional
+  update inside its own transaction, so concurrent instances converge on exactly one conversion — but
+  **deploy this release single-instance or with brief downtime anyway**, because the PREVIOUS binary
+  misreads converted data. Rolling back past it requires a restore: a converted tenant's grant rows are a
+  subset of what the previous resolver expects.
 
 - **`TabEditorField.Options` now carries a label as well as a value** (`TabEditorOption`).
   Canonical identifiers are rarely readable — `America/Mexico_City` is exactly right to store and

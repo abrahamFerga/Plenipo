@@ -160,6 +160,46 @@ public sealed class RolePermissionSuppressionTests : IDisposable
     }
 
     [Fact]
+    public async Task A_declared_product_role_cannot_be_deleted()
+    {
+        // A declared role is code, not data. Deleting its rows would not remove it — it would RESET it,
+        // dropping the tenant's suppressions so every holder gets back permissions the admin removed,
+        // while also purging their assignments. The role reappears at full baseline on the next GET.
+        var client = ClientAs("system_admin", "supp-delete-declared");
+
+        var response = await client.DeleteAsync($"/api/admin/roles/{TestModule.ProductRoleName}");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("declared", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Resetting_suppressions_cannot_restore_an_operator_reserved_permission()
+    {
+        // The escalation this closes: suppress an operator permission out of a declared role, assign
+        // yourself the now-harmless role, then undo the suppression here. The reset is a GRANT path and
+        // must clear the same bar as PUT.
+        var client = ClientAs("system_admin", "supp-escalate-setup");
+        var role = TestModule.OperatorGradeRoleName;
+
+        // A system_admin may narrow it (they hold the permission being suppressed).
+        var before = await PermissionsForAsync(client, role);
+        Assert.Contains(Permissions.ManageTenants, before);
+        (await client.PutAsJsonAsync(
+            $"/api/admin/roles/{role}/permissions",
+            new { permissions = before.Where(p => p != Permissions.ManageTenants).ToArray() }))
+            .EnsureSuccessStatusCode();
+
+        // ...but a tenant admin, who does not, may not undo that suppression.
+        var tenantAdmin = ClientAs("tenant_admin", "supp-escalate-attacker");
+        var response = await tenantAdmin.DeleteAsync($"/api/admin/roles/{role}/suppressions");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("operator", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(Permissions.ManageTenants, await PermissionsForAsync(client, role));
+    }
+
+    [Fact]
     public async Task A_tenant_admin_still_cannot_grant_an_operator_reserved_permission()
     {
         // Invariant guard for the new write path: the escalation check must run before the diff.
