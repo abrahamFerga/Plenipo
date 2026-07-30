@@ -23,11 +23,7 @@ network:
     - github
 safe-outputs:
   allowed-github-references: [abrahamFerga/networthy]
-  github-app:
-    client-id: ${{ vars.GH_AW_ROUTER_APP_ID }}
-    private-key: ${{ secrets.GH_AW_ROUTER_APP_PRIVATE_KEY }}
-    owner: abrahamFerga
-    repositories: [networthy]
+  github-token: ${{ secrets.COPILOT_GITHUB_TOKEN }}
   create-issue:
     target-repo: abrahamFerga/networthy
     labels: [platform:upgrade]
