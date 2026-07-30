@@ -39,8 +39,12 @@ flowchart TD
   Host["Your API host<br/>(samples/Plenipo.Sample.Host)"]
   Host --> Web
   Host -. "AddPlenipoModule" .-> Module
+  Client["@plenipo/client<br/>renderer-free contract + REST + AG-UI"]
   UI["@plenipo/ui (React)<br/>domain shell"] -- "/api/platform/modules" --> Host
+  Mobile["@plenipo/mobile (React Native)<br/>the same manifest, natively"] -- "/api/platform/modules" --> Host
   Admin["@plenipo/admin-ui<br/>admin console @ /admin"] -- "/api/admin/*" --> Host
+  Client --> UI
+  Client --> Mobile
 ```
 
 ## A chat turn, end to end
@@ -169,7 +173,15 @@ usage) surface in the **Aspire dashboard** alongside HTTP and database activity.
 
 ## Frontend
 
-The frontend is **two surfaces**, deliberately separated so the product UI can be adapted/branded per host
+The frontend is **three surfaces over one contract**. The contract is
+**`@plenipo/client`** — a renderer-free TypeScript package holding the mirror of every C# descriptor
+(`ModuleManifest`, `TabDescriptor`, …), the REST surface, the AG-UI chat transport, the
+`PermissionMatcher` mirror, and the chart shaping. It imports no React and touches no DOM, so a
+change to the C# side lands in exactly one TypeScript file and every shell sees it. (Enforced, not
+merely intended: a test reads the sources and fails on `document.`, `window.`, `localStorage`,
+`import.meta.env`, or an import of `react`/`react-native`.)
+
+The three surfaces are deliberately separated so the product UI can be adapted/branded per host
 while operator administration stays generic and consistent across every deployment:
 
 - **`@plenipo/ui`** — the **end-user / domain** shell (a React + Vite library). It is **server-driven**: it
@@ -186,6 +198,18 @@ while operator administration stays generic and consistent across every deployme
   `app.UsePlenipoAdminConsole()` (Plenipo's analogue of OpenClaw's "control UI built into the gateway"). The
   console is just static assets; the `/api/admin/*` endpoints it reads stay RBAC-gated server-side, so the
   API — not the asset host — remains the security boundary.
+- **`@plenipo/mobile`** — the **native** end-user shell (React Native / Expo). The same idea as
+  `@plenipo/ui`, rendered with native views: it builds the tab bar, tables, editor forms, charts,
+  detail views and chat from the same `/api/platform/modules` payload, so **installing a backend
+  module puts it on phones that already have the build** — a backend deploy, not an App Store
+  review. A product's app is a base URL, a brand, and (optionally) native screens registered per
+  tab through the same `defineModule` registry the web uses.
+  <br>Chat rides the **AG-UI** SSE endpoint rather than the SignalR hub — a WebSocket on a phone
+  dies on every backgrounding and hand-off — but both drive the same `AuthorizedAgentRunner`, so
+  RBAC filtering, approvals, audit and token accounting are identical. Push notifications reach it
+  through the ordinary `INotificationChannel` seam (`PushNotificationChannel` + a pluggable
+  `IPushTransport`), which makes a phone the fastest way to clear the human-in-the-loop approval
+  queue. See [docs/MOBILE.md](docs/MOBILE.md).
 
 ## Where to look in the code
 
@@ -198,7 +222,9 @@ while operator administration stays generic and consistent across every deployme
 | Multi-tenancy | `src/Plenipo.Infrastructure/Persistence/PlatformDbContext.cs` |
 | Endpoints (platform/chat/admin/approvals/AG-UI) | `src/Plenipo.AspNetCore/Endpoints/` |
 | Serving the admin console at `/admin` | `src/Plenipo.AspNetCore/Hosting/AdminConsoleExtensions.cs` |
+| Shared frontend contract | `frontend/plenipo-client/` (`@plenipo/client`) |
 | Domain (end-user) UI | `frontend/plenipo-ui/` (`@plenipo/ui`) |
+| Mobile shell + reference app | `frontend/plenipo-mobile/` (`@plenipo/mobile`), `frontend/mobile-app/` |
 | Admin console app | `frontend/admin-ui/` (`@plenipo/admin-ui`) |
 | A worked example module | `samples/Plenipo.Modules.Finance/` |
 | Infra (Azure) | `infra/` (Terraform) + `.github/workflows/` |

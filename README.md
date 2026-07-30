@@ -21,8 +21,8 @@ ship it. It unifies the patterns proven in two earlier apps — **NutriForge** (
 
 | Idea | How Plenipo does it |
 |------|--------------------|
-| **Base, not fork** | The platform is 6 NuGet packages + two npm libraries (the domain shell `@plenipo/ui` and the admin console `@plenipo/admin-ui`). Your product references them and adds modules. |
-| **Two UIs** | The end-user **domain UI** (`@plenipo/ui`, branded per product) and the generic **admin console** (`@plenipo/admin-ui`, served at `/admin`) are separate surfaces, so operator administration is consistent everywhere while the product UI stays adaptable. |
+| **Base, not fork** | The platform is 6 NuGet packages + npm libraries (the shared contract `@plenipo/client`, the domain shell `@plenipo/ui`, the native shell `@plenipo/mobile`, the admin console `@plenipo/admin-ui`). Your product references them and adds modules. |
+| **Web and native, one manifest** | The end-user **domain UI** (`@plenipo/ui`, branded per product), the **mobile app** (`@plenipo/mobile`), and the generic **admin console** (`@plenipo/admin-ui`, served at `/admin`) are separate surfaces over the same server-driven manifest — so operator administration is consistent everywhere, the product UI stays adaptable, and a new module reaches phones without an app release. |
 | **Chat-first** | Every module gets an agent; the dashboard front page is chat (over SignalR or the open **AG-UI** protocol). A **WhatsApp channel** (Meta Cloud API) routes phone messages through the same authorized runner — see [docs/WHATSAPP_CHANNEL.md](docs/WHATSAPP_CHANNEL.md). |
 | **Modules, not forks** | A vertical implements `IModule`: a manifest of tools + tabs, its own services and endpoints. The host discovers and loads them. |
 | **Verticals are separate systems** | Each vertical ships as its **own product** — own host, own repo, own deployment, own database — installing only its module(s) on the platform packages (see `samples/Plenipo.Legal.Host` for the shape). A business that wants only finance runs only Plenipo-for-finance. Systems connect through the **plenipo-peer connector**: one deployment's agent asks another's over the open AG-UI protocol, with the peer enforcing its own auth, RBAC, and audit. `Plenipo.Sample.Host` bundles three modules purely as a dev showcase. |
@@ -83,7 +83,10 @@ samples/Plenipo.Samples.slnx          # example apps built ON the platform (NuGe
 ├── Plenipo.Sample.Host/              # runnable host wiring all three modules
 └── Plenipo.Sample.AppHost/           # Aspire orchestration for the sample (Postgres ×2, Redis, mock chat)
 
+frontend/plenipo-client/              # @plenipo/client — renderer-free contract: manifest types, REST, AG-UI, RBAC mirror
 frontend/plenipo-ui/                  # @plenipo/ui — React + Vite library: the end-user (domain) chat shell + server-driven tabs
+frontend/plenipo-mobile/              # @plenipo/mobile — React Native shell: the same manifest, rendered natively
+frontend/mobile-app/                  # the reference Expo app — the template a product copies and rebrands
 frontend/admin-ui/                   # @plenipo/admin-ui — the admin console app (security/RBAC/users/usage/audit), served at /admin
 infra/                               # Terraform (azurerm): Container Apps, Postgres, Redis, Key Vault, Entra External ID
 .claude/skills/run-plenipo/           # skill: run Aspire, read logs/telemetry, run the UI, test the chatbot
@@ -244,10 +247,16 @@ This exact pack-and-consume path is verified on every CI run: [`eng/verify-packa
 packs the platform and builds a throwaway module project against the produced packages, so a broken pack or
 bad package metadata fails the build instead of reaching you.
 
-## Frontend: two packages
+## Frontend: three surfaces over one contract
 
-The frontend is split into two surfaces so the **product UI stays adaptable** while **operator administration
-stays consistent** across every Plenipo deployment:
+The frontend is split so the **product UI stays adaptable** while **operator administration stays
+consistent** across every Plenipo deployment — and so the same manifest can be rendered on a phone.
+
+Underneath them all sits **`@plenipo/client`** (`frontend/plenipo-client`) — the **renderer-free**
+contract: the TypeScript mirror of every C# descriptor (`ModuleManifest`, `TabDescriptor`,
+`TabEditor`, `TabChart`, …), the REST surface, the AG-UI chat transport, the `PermissionMatcher`
+mirror, form defaults, and chart shaping. No React, no DOM, no bundler globals — checked by a test
+that reads the sources. A change to the C# side lands in one TypeScript file and every shell sees it.
 
 - **`@plenipo/ui`** (`frontend/plenipo-ui`) — the **end-user / domain** shell, an npm library (Vite library mode,
   ESM + UMD, with bundled **TypeScript declarations**). It exports the batteries-included `PlenipoApp` (and the
@@ -262,6 +271,16 @@ stays consistent** across every Plenipo deployment:
   access and is served at `/admin` (by its own Vite dev server, or by the API host via
   `app.UsePlenipoAdminConsole()`). This is the platform's analogue of OpenClaw's "control UI built into the
   gateway": every host gets a generic security/RBAC/usage/audit console for free, independent of its domain UI.
+- **`@plenipo/mobile`** (`frontend/plenipo-mobile`) — the **native** end-user shell (React Native /
+  Expo), the same server-driven idea rendered with native views. It builds its tab bar, lists,
+  editor forms, charts, detail views and chat from the same `/api/platform/modules` payload, so
+  **installing a backend module puts it on phones that already have the build** — a backend deploy,
+  not an App Store review. A product's app is a base URL plus a brand
+  ([`frontend/mobile-app`](frontend/mobile-app) is the ~30-line template), with the same
+  `defineModule` registry for native screens where the generic renderer isn't enough. Chat rides
+  the AG-UI SSE endpoint (a WebSocket doesn't survive a phone's backgrounding) and push arrives
+  through the ordinary `INotificationChannel` seam, which makes a phone the fastest way to clear
+  the human-in-the-loop approval queue. See [docs/MOBILE.md](docs/MOBILE.md).
 
 Mount the whole domain shell with `PlenipoApp` (it wires a React Query client + router), registering your
 host's React pages for each module's tabs — anything you don't register falls back to the server-driven view:

@@ -104,8 +104,10 @@ jobs:
         run: bash eng/verify-packaging.sh
 
   # ---------------------------------------------------------------------------
-  # Frontend (pnpm workspace): lint + unit/component tests + build + real-browser
-  # E2E, across BOTH UI packages (@plenipo/ui and @plenipo/admin-ui).
+  # Frontend (pnpm workspace): lint + typecheck + unit/component tests + build +
+  # real-browser E2E. Covers the shared contract (@plenipo/client), both web
+  # surfaces (@plenipo/ui, @plenipo/admin-ui), and the React Native shell
+  # (@plenipo/mobile) with its reference app.
   # ---------------------------------------------------------------------------
   frontend:
     name: Frontend lint, test, build & E2E
@@ -135,11 +137,22 @@ jobs:
       - name: Lint (all packages)
         run: pnpm lint
 
+      # The mobile shell and the reference app have no bundle to build, so a type error would
+      # otherwise only surface when someone opened Metro.
+      - name: Typecheck (packages that ship TypeScript source)
+        run: pnpm -r typecheck
+
       - name: Unit + component tests (all packages)
         run: pnpm -r test
 
       - name: Build (both UI packages)
         run: pnpm build:all
+
+      # Proves Metro can actually resolve and bundle the app — the pnpm symlinks, the
+      # TypeScript-source packages, and every native module. A unit test cannot catch a
+      # resolution failure that only happens inside the bundler.
+      - name: Bundle the mobile app (Metro)
+        run: pnpm --filter @plenipo/mobile-app exec expo export --platform android --output-dir "$RUNNER_TEMP/mobile-export"
 
       - name: Install Playwright chromium
         run: pnpm --filter @plenipo/ui exec playwright install --with-deps chromium
