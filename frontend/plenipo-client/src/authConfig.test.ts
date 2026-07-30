@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { configureClient, resetClientConfig } from "./config";
 import { fetchAuthConfig } from "./api";
 
