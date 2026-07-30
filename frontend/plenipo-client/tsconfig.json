@@ -1,0 +1,24 @@
+{
+  // The DOM lib is here for the shapes of `fetch`, `Response`, `FormData` and friends — which
+  // React Native implements too. It is NOT permission to touch the DOM: this package must run
+  // unchanged under Hermes, and `renderer-free.test.ts` fails the build if `document`, `window`,
+  // `localStorage`, or `import.meta.env` ever appear in src/.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "useDefineForClassFields": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "erasableSyntaxOnly": false,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["src", "eslint.config.js"]
+}

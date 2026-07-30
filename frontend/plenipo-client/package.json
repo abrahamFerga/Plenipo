@@ -1,0 +1,52 @@
+{
+  "name": "@plenipo/client",
+  "version": "0.1.0-alpha",
+  "description": "Renderer-free Plenipo API client and manifest contract — shared by the web shell (@plenipo/ui) and the mobile shell (@plenipo/mobile).",
+  "license": "MIT",
+  "homepage": "https://github.com/abrahamFerga/Plenipo/tree/main/frontend/plenipo-client#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abrahamFerga/Plenipo.git",
+    "directory": "frontend/plenipo-client"
+  },
+  "bugs": "https://github.com/abrahamFerga/Plenipo/issues",
+  "type": "module",
+  "//": "In the workspace this package resolves to TypeScript SOURCE — so a shell's dev server, tests, and typecheck never depend on a dist/ that may be stale or unbuilt, and there is no build-ordering rule to remember. pnpm swaps in the dist entries below on pack/publish, so consumers get compiled JS + declarations.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "prepack": "npm run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.13.0",
+    "eslint": "^9.13.0",
+    "globals": "^17.7.0",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.64.0",
+    "vitest": "^3.2.6"
+  }
+}

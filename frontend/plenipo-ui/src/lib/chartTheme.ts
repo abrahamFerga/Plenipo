@@ -24,25 +24,14 @@ export const SERIES_BG = [
   "bg-[#eda100] dark:bg-[#c98500]",
   "bg-[#4a3aa7] dark:bg-[#9085e9]",
 ];
-export const MAX_SERIES = SERIES_STROKE.length;
+// The cap itself lives with the shaping in @plenipo/client, so the web and mobile shells roll up
+// the same tail. The palettes above must offer exactly that many hues — pinned in chartTheme.test.ts.
+export { MAX_SERIES } from "@plenipo/client";
 
 // The rolled-up tail ("Other") is recessive by design — identity lives in the named segments.
 export const OTHER_STROKE = "stroke-slate-400 dark:stroke-slate-500";
 export const OTHER_FILL = "fill-slate-400 dark:fill-slate-500";
 export const OTHER_BG = "bg-slate-400 dark:bg-slate-500";
 
-export const formatY = (v: number): string =>
-  Math.abs(v) >= 1000 ? v.toLocaleString(undefined, { maximumFractionDigits: 0 }) : v.toLocaleString();
-
-export function niceTicks(min: number, max: number, count = 4): number[] {
-  if (min === max) {
-    return [min];
-  }
-  const step = (max - min) / count;
-  const magnitude = 10 ** Math.floor(Math.log10(step));
-  const nice = [1, 2, 2.5, 5, 10].map((m) => m * magnitude).find((s) => s >= step) ?? step;
-  const start = Math.ceil(min / nice) * nice;
-  const ticks: number[] = [];
-  for (let v = start; v <= max + 1e-9; v += nice) ticks.push(v);
-  return ticks;
-}
+// Number formatting and tick selection are shaping, not styling — shared with every other shell.
+export { formatY, niceTicks } from "@plenipo/client";

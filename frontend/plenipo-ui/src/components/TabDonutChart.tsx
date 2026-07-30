@@ -1,6 +1,6 @@
 import { useMemo } from "react";
-import type { TabChart as TabChartSpec } from "../lib/api";
-import { formatY, MAX_SERIES, OTHER_BG, OTHER_STROKE, SERIES_BG, SERIES_STROKE } from "../lib/chartTheme";
+import { buildDonutSlices, type TabChart as TabChartSpec } from "../lib/api";
+import { formatY, OTHER_BG, OTHER_STROKE, SERIES_BG, SERIES_STROKE } from "../lib/chartTheme";
 
 /**
  * The shell's proportional donut — a tab declaring `chart.kind = "donut"` renders its
@@ -10,37 +10,14 @@ import { formatY, MAX_SERIES, OTHER_BG, OTHER_STROKE, SERIES_BG, SERIES_STROKE }
  * sits in the hole, so the one number a proportional view implies is stated, not implied.
  */
 
-interface Slice {
-  label: string;
-  value: number;
-  isOther: boolean;
-}
-
 const SIZE = 160;
 const CENTER = SIZE / 2;
 const RADIUS = 58;
 const RING = 26;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
-function buildSlices(rows: Record<string, unknown>[], spec: TabChartSpec): Slice[] {
-  const totals = new Map<string, number>();
-  for (const row of rows) {
-    const value = typeof row[spec.yField] === "number" ? (row[spec.yField] as number) : Number(row[spec.yField]);
-    // A share must be a positive, finite number — anything else can't occupy arc length.
-    if (!Number.isFinite(value) || value <= 0) continue;
-    const label = String(row[spec.xField] ?? "");
-    totals.set(label, (totals.get(label) ?? 0) + value);
-  }
-  const named = [...totals.entries()]
-    .map(([label, value]) => ({ label, value, isOther: false }))
-    .sort((a, b) => b.value - a.value);
-  if (named.length <= MAX_SERIES) return named;
-  const other = named.slice(MAX_SERIES).reduce((sum, s) => sum + s.value, 0);
-  return [...named.slice(0, MAX_SERIES), { label: "Other", value: other, isOther: true }];
-}
-
 export function TabDonutChart({ rows, spec }: { rows: Record<string, unknown>[]; spec: TabChartSpec }) {
-  const slices = useMemo(() => buildSlices(rows, spec), [rows, spec]);
+  const slices = useMemo(() => buildDonutSlices(rows, spec), [rows, spec]);
 
   if (slices.length === 0) {
     return (

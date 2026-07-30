@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { apiGet, type TabChart as TabChartSpec } from "../lib/api";
+import { apiGet, buildLineSeries, type TabChart as TabChartSpec } from "../lib/api";
 import { formatY, MAX_SERIES, niceTicks, SERIES_BG, SERIES_FILL, SERIES_STROKE } from "../lib/chartTheme";
 import { TabBarChart } from "./TabBarChart";
 import { TabDonutChart } from "./TabDonutChart";
@@ -24,35 +24,6 @@ import { TabDonutChart } from "./TabDonutChart";
 const WIDTH = 720;
 const HEIGHT = 280;
 const PAD = { top: 16, right: 12, bottom: 28, left: 64 };
-
-interface Point {
-  x: number; // epoch ms
-  y: number;
-  xLabel: string;
-}
-
-interface Series {
-  name: string;
-  points: Point[];
-}
-
-function buildSeries(rows: Record<string, unknown>[], spec: TabChartSpec): Series[] {
-  const groups = new Map<string, Point[]>();
-  for (const row of rows) {
-    const rawX = row[spec.xField];
-    const rawY = row[spec.yField];
-    const x = typeof rawX === "string" || typeof rawX === "number" ? new Date(rawX).getTime() : NaN;
-    const y = typeof rawY === "number" ? rawY : Number(rawY);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-    const name = spec.seriesField ? String(row[spec.seriesField] ?? "") : "";
-    const list = groups.get(name) ?? [];
-    list.push({ x, y, xLabel: String(rawX) });
-    groups.set(name, list);
-  }
-  return [...groups.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([name, points]) => ({ name, points: points.sort((a, b) => a.x - b.x) }));
-}
 
 const formatDate = (ms: number) =>
   new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -80,7 +51,7 @@ export function TabChartView({ endpoint, spec }: { endpoint: string; spec: TabCh
 function TabLineChart({ rows, spec }: { rows: Record<string, unknown>[]; spec: TabChartSpec }) {
   const [hoverX, setHoverX] = useState<number | null>(null);
 
-  const allSeries = useMemo(() => buildSeries(rows, spec), [rows, spec]);
+  const allSeries = useMemo(() => buildLineSeries(rows, spec), [rows, spec]);
   const series = allSeries.slice(0, MAX_SERIES);
 
   if (series.length === 0 || series.every((s) => s.points.length === 0)) {
