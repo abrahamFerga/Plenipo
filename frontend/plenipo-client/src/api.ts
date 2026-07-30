@@ -1,4 +1,4 @@
-import { apiBase, clientConfig } from "./config";
+import { apiBase, clientConfig, normalizeApiBase } from "./config";
 
 /** Shape of the current user from GET /api/platform/me. */
 export interface Me {
@@ -6,6 +6,30 @@ export interface Me {
   displayName: string | null;
   tenantId: string | null;
   permissions: string[];
+  /** The signed-in subject (`sub`). Optional: older hosts don't send it. */
+  subject?: string | null;
+  /**
+   * False when the request authenticated but its TENANT did not resolve — the state where every
+   * permission check fails for a reason that has nothing to do with permissions. Optional: older
+   * hosts don't send it, and absent means "no reason to think otherwise".
+   */
+  tenantResolved?: boolean;
+  /** Why the tenant did not resolve, in words a person can act on. Null when it did. */
+  tenantProblem?: string | null;
+}
+
+/**
+ * How this deployment expects a client to authenticate, from the anonymous
+ * `GET /api/platform/auth-config`. Public OIDC client metadata only.
+ *
+ * `mode: "dev"` means no authority is configured, so the host's Development-only dev-auth headers
+ * are what it accepts; `mode: "oidc"` means a real IdP and the shell must present a bearer token.
+ */
+export interface AuthConfig {
+  mode: "oidc" | "dev";
+  authority?: string | null;
+  clientId?: string | null;
+  scopes?: string | null;
 }
 
 /** A column in a tab's server-driven data view. */
@@ -668,6 +692,35 @@ async function request(path: string, init: RequestInit & { headers?: Record<stri
     ...init,
     headers: { ...init.headers, ...(await authHeaders()) },
   });
+}
+
+/**
+ * Asks the host how to authenticate, BEFORE the client is configured to authenticate.
+ *
+ * Deliberately not routed through {@link request}: that attaches the configured credentials, which
+ * on a fresh start are the dev-auth headers — so the very probe that decides whether dev headers are
+ * appropriate would send them, which is exactly what a secured deployment must never see. Mirrors how
+ * the shell already fetches `/api/platform/branding` before any sign-in.
+ *
+ * Never throws: a host too old to serve the endpoint, or unreachable, answers `dev` — the historical
+ * behaviour, and the only answer that keeps a local no-IdP setup working with nothing configured.
+ */
+export async function fetchAuthConfig(baseUrl?: string): Promise<AuthConfig> {
+  const base = baseUrl === undefined ? clientConfig().baseUrl : normalizeApiBase(baseUrl);
+  try {
+    const res = await clientConfig().fetch(`${base}/api/platform/auth-config`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) {
+      return { mode: "dev" };
+    }
+
+    const config = (await res.json()) as AuthConfig;
+    return config?.mode === "oidc" ? config : { mode: "dev" };
+  } catch {
+    return { mode: "dev" };
+  }
 }
 
 /**
