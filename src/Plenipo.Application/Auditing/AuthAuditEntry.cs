@@ -38,6 +38,13 @@ public enum AuthAuditEventType
 
     /// <summary>A configured external agent security detector could not make a decision.</summary>
     AgentSecurityUnavailable = 15,
+
+    /// <summary>
+    /// The deployment's first tenant and operator were created from the <c>Bootstrap</c> configuration
+    /// section. Happens at most once per deployment. The NAME is what persists (the column is a string),
+    /// so it must never be renamed.
+    /// </summary>
+    PlatformBootstrapped = 16,
 }
 
 /// <summary>Append-only record of an identity / authorization event.</summary>

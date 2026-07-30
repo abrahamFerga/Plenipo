@@ -1,4 +1,5 @@
 using Plenipo.Application.Authorization;
+using Plenipo.Application.Bootstrap;
 using Plenipo.Core.Platform;
 using Plenipo.Infrastructure.Persistence;
 using Plenipo.Modules.Sdk;
@@ -51,6 +52,11 @@ public static class DatabaseInitializer
         {
             await SeedDevTenantAsync(platform, services, cancellationToken);
         }
+
+        // Outside Development nothing above creates a tenant, and permissions are only resolved after a
+        // tenant resolves — so an empty deployment has nobody who could create one. The Bootstrap section
+        // breaks that deadlock once, from configuration, and is inert as soon as an operator exists.
+        await services.GetRequiredService<IPlatformBootstrapper>().BootstrapAsync(cancellationToken);
     }
 
     /// <summary>Log category for startup database work — this class is static, so it cannot be one itself.</summary>

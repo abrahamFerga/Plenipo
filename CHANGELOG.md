@@ -53,7 +53,31 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   `Options: ["checking", "savings"]` is unchanged; an existing array spreads with
   `Options: [.. codes]`.
 
+### Added
+
+- **A `Bootstrap` configuration section creates the deployment's first tenant and its operator.**
+  Outside Development the platform seeded nothing, and because a request's permissions are resolved only
+  *after* its tenant resolves, every principal on a tenant-less deployment carried an empty permission
+  set — including one asserting `system_admin`. `POST /api/admin/tenants`, the endpoint that would have
+  fixed it, was therefore unreachable. That is a deadlock, not a permissions problem.
+
+  The section is consumed once at startup, is never exposed over HTTP, and no-ops the moment any
+  principal in the deployment holds an operator-reserved permission — deliberately not merely when a
+  tenant exists, since a commerce-provisioned tenant gets a `tenant_admin`, who cannot create tenants.
+  Every run is audited as `PlatformBootstrapped`. `Bootstrap:AdminSubject` is **required** when
+  `Bootstrap:AdminRoles` grants an operator-reserved permission: without it the roles bind through an
+  email-keyed invite, and email comes from an unverified token claim. The shipped Docker Compose
+  deployment — which defaults to `Production` — now carries the variables and tells you to remove them
+  after the first start.
+
 ### Fixed
+
+- **A request whose tenant does not resolve now says so.** `GET /api/platform/me` reports
+  `tenantResolved: false` with a `tenantProblem` naming the cause, the resulting 403 carries the same
+  explanation in its body, and the SignalR hub raises it as a `HubException`. Previously `/me` returned a
+  cheerful 200 while everything else returned a bare 403, so a client shell rendered normally and then
+  failed every call with nothing anywhere naming the cause — which, on a fresh deployment, is the entire
+  symptom of having no tenant at all. No status code and no authorization decision changed.
 
 - **A tenant with a pending approval and no eligible approver now logs a warning.** It was a debug
   line, so the state was effectively invisible: every approval-gated write parks until an operator

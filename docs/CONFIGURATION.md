@@ -93,7 +93,8 @@ and change without a deploy.
 | `Channels:Email` | `Enabled`, `Host`/`Port`/`UseSsl`, `Username`, `Password`, `Folder`, `ModuleId`, `TenantSlug`, `PollSeconds`, `ReplyEnabled`, `AllowedSenders`, `AllowUnknownSenders`, `MaxMessageBytes` | IMAP intake mailbox polled into agent turns (docs/INBOUND_CHANNELS.md); password via user-secrets/env; replies and unknown senders off by default |
 | `Email` | Outbound SMTP: `Enabled`, `Host`/`Port`/`UseStartTls`, `Username`, `Password`, `FromAddress`, `FromName` | Powers the email notification channel AND user invites; password via user-secrets/env. Unconfigured, invites still work (share the link manually) |
 | `Push` | Mobile push: `Enabled`, `IncludeContent`, `PlaceholderTitle`/`PlaceholderBody`, `ExpoEndpoint`, `ExpoAccessToken`, `MaxDevicesPerUser` | Nothing to configure for most deployments — the channel is inert until a device registers, and the built-in Expo transport needs no Apple/Google credentials. **`IncludeContent=false`** is the one to think about: see below |
-| `Auth` | `Authority`, `Audience`, `PermissionSource` (Database/Token) | Empty = dev-auth in Development only |
+| `Auth` | `Authority`, `Audience`, `PermissionSource` (Database/Token), `TenantClaim` (default `tenant`) | Empty = dev-auth in Development only |
+| `Bootstrap` | `TenantSlug`, `TenantName`, `AdminEmail`, `AdminSubject`, `AdminRoles` | **First run only** — creates the deployment's first tenant and its operator. Consumed at startup, never over HTTP, inert once any operator exists. See below |
 | `Secrets` | `Provider` (DataProtection/AzureKeyVault), `KeyVaultUri` | Where runtime-entered secrets rest |
 | `DataProtection:KeysPath` | Shared durable directory for the Data Protection key ring | Optional alternative to `plenipo-redis`; required outside Development when Redis is absent |
 | `Security:OutboundUrls` | `AllowHttp`, `AllowPrivateNetworks` | Both false by default; applies to tenant-configured webhooks, AI endpoints, OAuth and connector URLs |
@@ -214,6 +215,54 @@ and every user gets a per-category mute switch in the notification bell. A mute 
 category entirely for that user — the in-app row and every channel — without touching anyone
 else's notifications or any other category. No stored row means "on", so new categories need no
 backfill.
+
+## First run outside Development: the `Bootstrap` section
+
+Development seeds a `dev` tenant automatically. **Nothing else does.** So a fresh Production database
+starts empty — and because a request's permissions are only resolved *after* its tenant resolves, every
+principal on a tenant-less deployment carries an empty permission set. That includes one asserting
+`system_admin`, so `POST /api/admin/tenants` — the endpoint that would fix it — is unreachable. It is a
+deadlock, not a permissions problem.
+
+`Bootstrap` breaks it once, from configuration:
+
+```jsonc
+{
+  "Bootstrap": {
+    "TenantSlug":   "acme",              // required; lowercase letters, digits, hyphens
+    "TenantName":   "Acme Ltd",          // optional; defaults to the slug
+    "AdminEmail":   "admin@acme.test",   // required
+    "AdminSubject": "8f3c…",             // the `sub` your IdP will present for this person
+    "AdminRoles":   ["system_admin"]     // optional; this is the default
+  }
+}
+```
+
+In environment-variable form each array entry is its own key: `Bootstrap__AdminRoles__0=tenant_admin`.
+Setting any entry **replaces** the default rather than adding to it.
+
+What it does and does not do:
+
+- **Not an HTTP surface, ever.** An operator who can set configuration already controls the deployment;
+  naming the first admin adds no authority they did not have. There is no anonymous first-run door and no
+  default password.
+- **Self-disarming.** It no-ops the moment any principal in the deployment holds an operator-reserved
+  permission — not merely when a tenant exists, because a commerce-provisioned tenant gets a
+  `tenant_admin`, who deliberately cannot create tenants. **Remove the section after the first successful
+  start.**
+- **Audited** as `PlatformBootstrapped`, with the tenant, the admin and the roles granted.
+- **`AdminSubject` is required whenever `AdminRoles` grants an operator-reserved permission.** Without a
+  subject the roles are bound through a standing invite keyed on the email address, and the platform
+  matches email from an unverified token claim — fine for tenant-grade roles, not for cross-tenant control.
+- With `Auth:PermissionSource=Token` the tenant is still created, but the roles are inert: the IdP is the
+  only source of roles, and it must assert them. The host logs a warning saying so.
+
+**After bootstrapping**, the token's tenant claim (`Auth:TenantClaim`, default `tenant`) must carry the
+slug. A single-tenant deployment is resolved by fallback even without the claim, but the moment a second
+tenant exists that fallback stops working — configure the claim before you get there.
+
+If a request's tenant does not resolve, `GET /api/platform/me` reports `tenantResolved: false` with a
+`tenantProblem` naming the cause, and the resulting 403 carries the same explanation in its body.
 
 ## Where runtime configuration lives (admin console, per tenant)
 

@@ -1,5 +1,7 @@
 using Plenipo.Application.Ai;
 using Plenipo.Application.Files;
+using Plenipo.AspNetCore.Auth;
+using Plenipo.Infrastructure.Context;
 using Plenipo.Application.Modules;
 using Plenipo.Application.Skills;
 using Plenipo.Core.Identity;
@@ -40,11 +42,18 @@ public static class PlatformEndpoints
         })
         .WithName("Platform_GetModules");
 
-        group.MapGet("/me", (ICurrentUser user) => Results.Ok(new MeDto(
+        // Reports whether the caller's TENANT resolved, not just who they are. An authenticated principal
+        // whose tenant does not resolve used to get a cheerful 200 here and a bare 403 from everything
+        // else, so a client shell rendered normally and then failed every call with nothing to say about
+        // why. The permission set is still the authority; these two fields are purely diagnostic.
+        group.MapGet("/me", (ICurrentUser user, RequestContext context) => Results.Ok(new MeDto(
             user.UserId,
+            user.Subject,
             user.DisplayName,
             user.TenantId,
-            user.Permissions.OrderBy(p => p, StringComparer.Ordinal).ToArray())))
+            user.Permissions.OrderBy(p => p, StringComparer.Ordinal).ToArray(),
+            TenantResolved: context.Resolution == TenantResolution.Resolved,
+            TenantProblem: UnresolvedTenantProblem.Describe(context))))
         .WithName("Platform_GetMe");
 
         // The product's public identity, resolved at RUNTIME from host configuration
@@ -147,7 +156,14 @@ public static class PlatformEndpoints
     /// <summary>An entry in the chat's agent picker: a tenant profile or a module-shipped agent.</summary>
     private sealed record ModuleAgentDto(string Name, string? Description, bool IsDefault, string? Model);
 
-    private sealed record MeDto(Guid? UserId, string? DisplayName, Guid? TenantId, string[] Permissions);
+    private sealed record MeDto(
+        Guid? UserId,
+        string? Subject,
+        string? DisplayName,
+        Guid? TenantId,
+        string[] Permissions,
+        bool TenantResolved,
+        string? TenantProblem);
 
     /// <summary>The host's product identity; extensible (logo URL, accent color) without a breaking change.</summary>
     private sealed record BrandingDto(string Name);

@@ -263,6 +263,19 @@ public static class InfrastructureSetup
         services.Configure<Plenipo.Application.Commerce.CommerceOptions>(
             builder.Configuration.GetSection(Plenipo.Application.Commerce.CommerceOptions.SectionName));
         services.AddScoped<Plenipo.Application.Commerce.ITenantProvisioningService, Commerce.TenantProvisioningService>();
+
+        // First-run bootstrap of an empty deployment. Validated at REGISTRATION so a typo in the section
+        // fails startup, rather than producing a deployment that silently never bootstraps and 403s
+        // everything — the exact failure mode issue #70 reported.
+        services.Configure<Plenipo.Application.Bootstrap.BootstrapOptions>(
+            builder.Configuration.GetSection(Plenipo.Application.Bootstrap.BootstrapOptions.SectionName));
+        var bootstrapOptions = new Plenipo.Application.Bootstrap.BootstrapOptions();
+        builder.Configuration.GetSection(Plenipo.Application.Bootstrap.BootstrapOptions.SectionName).Bind(bootstrapOptions);
+        bootstrapOptions.ThrowIfInvalid(Plenipo.Application.Authorization.RoleBaseline.Merge(
+            services.Where(d => d.ServiceType == typeof(Plenipo.Application.Authorization.ProductRole))
+                .Select(d => d.ImplementationInstance)
+                .OfType<Plenipo.Application.Authorization.ProductRole>()));
+        services.AddScoped<Plenipo.Application.Bootstrap.IPlatformBootstrapper, Bootstrap.PlatformBootstrapper>();
         services.AddSingleton<Plenipo.Application.Commerce.IProductOfferingCatalog, Plenipo.Application.Commerce.ProductOfferingCatalog>();
         services.AddHttpClient(nameof(Commerce.GitHubDedicatedEnvironmentProvisioner));
         services.AddHttpClient(nameof(Commerce.StripeBillingMeter));

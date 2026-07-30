@@ -22,6 +22,14 @@ services:
       ASPNETCORE_ENVIRONMENT: ${PLENIPO_ENVIRONMENT:-Production}
       Auth__Authority: ${AUTH_AUTHORITY:-}
       Auth__Audience: ${AUTH_AUDIENCE:-}
+      # First run only: creates the deployment's first tenant and its operator. Outside Development
+      # nothing else does, and permissions resolve only after a tenant does — so without this an empty
+      # Production database has nobody who could create one. Inert once an operator exists; remove it
+      # after the first successful start. See docs/CONFIGURATION.md.
+      Bootstrap__TenantSlug: ${BOOTSTRAP_TENANT_SLUG:-}
+      Bootstrap__TenantName: ${BOOTSTRAP_TENANT_NAME:-}
+      Bootstrap__AdminEmail: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      Bootstrap__AdminSubject: ${BOOTSTRAP_ADMIN_SUBJECT:-}
       ConnectionStrings__plenipo-platform: Host=postgres;Port=5432;Database=plenipo_platform;Username=postgres;Password=${POSTGRES_PASSWORD:?create .env from .env.example}
       ConnectionStrings__plenipo-audit: Host=audit-postgres;Port=5432;Database=plenipo_audit;Username=postgres;Password=${AUDIT_POSTGRES_PASSWORD:?set a distinct audit password in .env}
       ConnectionStrings__plenipo-redis: redis:6379

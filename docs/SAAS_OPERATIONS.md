@@ -13,6 +13,17 @@ auto-provisioning) is planned in [COMMERCIALIZATION.md](COMMERCIALIZATION.md).
 | **Shared SaaS** | A **tenant** in our multi-tenant deployment | One deployment, row-level isolation (`TenantId` global query filters, enforced by construction) |
 | **Dedicated** | Their own infrastructure, provisioned on demand | A per-customer deployment from the same Terraform/compose artifacts |
 
+## First run: the deployment's own operator
+
+Before any of the below works, the deployment needs one operator. Development seeds a `dev` tenant;
+nothing else does, and permissions resolve only after a tenant does — so a fresh Production database has
+nobody who could create the first tenant, including a principal asserting `system_admin`.
+
+Set the `Bootstrap` section before the first start (`Bootstrap:TenantSlug`, `Bootstrap:AdminEmail`,
+`Bootstrap:AdminSubject`), start the host once, then **remove the section**. It is consumed at startup
+only, never exposed over HTTP, inert once any operator exists, and audited as `PlatformBootstrapped`. Full
+reference in [CONFIGURATION.md](CONFIGURATION.md#first-run-outside-development-the-bootstrap-section).
+
 ## Shared SaaS: license → tenant
 
 Buying a license maps to creating a **tenant** plus its first admin. Everything needed exists as

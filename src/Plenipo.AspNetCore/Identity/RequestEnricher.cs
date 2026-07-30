@@ -48,9 +48,14 @@ public sealed class RequestEnricher(
 
         requestContext.SetIdentity(subject, name);
 
-        var tenant = await ResolveTenantAsync(principal.FindFirstValue(authOptions.Value.TenantClaim), cancellationToken);
+        var requestedTenant = principal.FindFirstValue(authOptions.Value.TenantClaim);
+        var (tenant, resolution) = await ResolveTenantAsync(requestedTenant, cancellationToken);
         if (tenant is null)
         {
+            // The request is allowed to continue — a few endpoints legitimately answer without a tenant —
+            // but it carries an empty permission set, so everything gated will 403. Record WHY, so the
+            // 403 and /api/platform/me can name the cause instead of leaving a client to guess.
+            requestContext.SetTenantUnresolved(resolution, requestedTenant);
             return true;
         }
 
@@ -174,15 +179,19 @@ public sealed class RequestEnricher(
         return true;
     }
 
-    private async Task<Tenant?> ResolveTenantAsync(string? slug, CancellationToken cancellationToken)
+    private async Task<(Tenant? Tenant, TenantResolution Resolution)> ResolveTenantAsync(
+        string? slug, CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(slug))
         {
-            return await db.Tenants.FirstOrDefaultAsync(t => t.Slug == slug, cancellationToken);
+            var named = await db.Tenants.FirstOrDefaultAsync(t => t.Slug == slug, cancellationToken);
+            return (named, named is null ? TenantResolution.ClaimDidNotMatch : TenantResolution.Resolved);
         }
 
+        // No tenant claim: fall back to the single tenant when there is exactly one. A deployment with
+        // several needs Auth:TenantClaim configured so the token says which.
         return await db.Tenants.CountAsync(cancellationToken) == 1
-            ? await db.Tenants.FirstAsync(cancellationToken)
-            : null;
+            ? (await db.Tenants.FirstAsync(cancellationToken), TenantResolution.Resolved)
+            : (null, TenantResolution.NoClaimAndAmbiguous);
     }
 }
