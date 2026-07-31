@@ -16,6 +16,23 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
 
 ### Changed
 
+- **Retrieved passages cite the page they came from.** An answer can now say "p. 7" (or "pp. 3–4"
+  when a passage straddles a break) instead of only naming a file — the difference between a
+  citation a reader can check and one they have to hunt through. PdfPig already walked the document
+  page by page and the number was being discarded; `IDocumentReader.ExtractAsync` now returns the
+  text together with each page's character range, `TextChunker` returns chunks as contiguous slices
+  with offsets into that text, and the two are joined at ingest into `RagChunk.PageFrom`/`PageTo`.
+
+  Chunks being *slices* rather than paragraphs re-joined with `\n\n` is what makes the offsets
+  trustworthy — a chunk stitched from non-adjacent pieces could not honestly claim a page range —
+  and it preserves the source text verbatim as a side effect.
+
+  Sources with no pages, and OCR engines that cannot report them, stay null and cite the file alone:
+  a default of page 1 would be a fabricated citation, which is worse than none because it looks
+  checkable. `IOcrEngine.ExtractAsync` is default-implemented so existing engines are unaffected;
+  the Azure Document Intelligence engine overrides it using the page spans its API already returns,
+  so scanned documents get page citations too.
+
 - **Knowledge retrieval works outside English, filters by domain facets, and trims per user.**
   The RAG pipeline shipped with a `tsv` column generated as `to_tsvector('english', …)` — a
   generated column cannot vary per row, so every corpus in every deployment was stemmed as English.

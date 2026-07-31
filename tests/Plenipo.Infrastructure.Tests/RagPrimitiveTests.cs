@@ -51,12 +51,28 @@ public sealed class RagPrimitiveTests
         var chunks = TextChunker.Chunk(text, maxChars: 500);
 
         Assert.True(chunks.Count > 1);
-        Assert.All(chunks, c => Assert.True(c.Length <= 500, $"chunk of {c.Length} chars exceeds the target"));
+        Assert.All(chunks, c => Assert.True(c.Text.Length <= 500, $"chunk of {c.Text.Length} chars exceeds the target"));
         // No content lost: every paragraph marker survives exactly once across chunks.
-        var reassembled = string.Join("\n\n", chunks);
+        var reassembled = string.Join("\n\n", chunks.Select(c => c.Text));
         for (var i = 1; i <= 10; i++)
         {
             Assert.Contains($"Paragraph {i}.", reassembled);
+        }
+    }
+
+    [Fact]
+    public void Chunker_reports_offsets_that_slice_the_original_text()
+    {
+        var text = string.Join("\n\n", Enumerable.Range(1, 10).Select(i => $"Paragraph {i}. " + new string('x', 200)));
+
+        var chunks = TextChunker.Chunk(text, maxChars: 500);
+
+        // The offsets ARE the provenance: page attribution is only honest if every chunk is exactly
+        // the slice it claims to be, in order, without overlap.
+        Assert.All(chunks, c => Assert.Equal(c.Text, text[c.Start..c.End]));
+        for (var i = 1; i < chunks.Count; i++)
+        {
+            Assert.True(chunks[i].Start >= chunks[i - 1].End, "chunks must not overlap");
         }
     }
 
@@ -68,8 +84,8 @@ public sealed class RagPrimitiveTests
         var chunks = TextChunker.Chunk(text, maxChars: 200);
 
         Assert.True(chunks.Count > 1);
-        Assert.All(chunks, c => Assert.True(c.Length <= 200));
-        Assert.All(chunks, c => Assert.EndsWith(".", c)); // boundaries fall on sentence ends
+        Assert.All(chunks, c => Assert.True(c.Text.Length <= 200));
+        Assert.All(chunks, c => Assert.EndsWith(".", c.Text)); // boundaries fall on sentence ends
     }
 
     private static double Cosine(float[] a, float[] b)

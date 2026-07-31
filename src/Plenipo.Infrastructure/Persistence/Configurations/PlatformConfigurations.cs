@@ -427,6 +427,10 @@ internal sealed class RagChunkConfiguration : IEntityTypeConfiguration<RagChunk>
         b.Property(x => x.Principals).HasColumnType("text[]").IsRequired();
         b.Property(x => x.Metadata).HasColumnName("metadata").HasColumnType("jsonb")
             .HasConversion(JsonMaps.DictionaryConverter, JsonMaps.DictionaryComparer);
+        // Nullable on purpose: a source with no pages (plain text, an OCR engine that cannot report
+        // them) must cite the file alone rather than a made-up page.
+        b.Property(x => x.PageFrom);
+        b.Property(x => x.PageTo);
         // The pgvector `embedding` and `tsv` columns are added by the migration's raw SQL and are
         // deliberately NOT mapped — see RagChunk. Composite indexes lead with TenantId so the
         // hybrid query's predicates stay indexed.

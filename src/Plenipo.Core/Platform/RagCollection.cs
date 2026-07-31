@@ -88,6 +88,16 @@ public sealed class RagChunk : EntityBase, ITenantOwned
     public required string ContentHash { get; set; }
 
     /// <summary>
+    /// First and last page this passage covers, when the source was paginated and the extractor
+    /// could report page boundaries (a PDF text layer, or OCR from an engine that reports spans).
+    /// Null for plain text and for extractors that cannot tell — a citation then names the file
+    /// alone rather than inventing a page. A passage straddling a break has <c>PageFrom &lt; PageTo</c>.
+    /// </summary>
+    public int? PageFrom { get; set; }
+
+    public int? PageTo { get; set; }
+
+    /// <summary>
     /// The text-search configuration this chunk's <c>tsv</c> was built with — per chunk, because one
     /// case can hold documents in several languages and each needs its own stemmer.
     /// </summary>

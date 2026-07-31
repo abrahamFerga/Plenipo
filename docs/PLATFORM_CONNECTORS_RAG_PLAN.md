@@ -309,6 +309,7 @@ StoredFile → IDocumentReader.ExtractTextAsync (PdfPig / OCR seam — already b
 | **4** ✅ | `msgraph` (SharePoint/OneDrive) delegated connector + per-user OAuth flow + disable-revokes | **Shipped.** Platform-level delegated-auth machinery (`UserConnectorLogin` protected token sessions, auth-code+PKCE start/callback endpoints with data-protected state, transparent refresh, `IOAuthTokenClient` seam) + the `msgraph` connector (Graph v1.0 REST via `IGraphApiClient` seam — no Graph SDK dependency; `list_m365_files` / approval-gated `fetch_from_m365` ride the CURRENT user's token, so Graph enforces their own permissions). **Disable revokes every session**; re-enable forces re-auth. E2E-tested keylessly with a fake IdP + fake Graph while the platform flow stays real |
 | **5** ✅ | Lane B: connector sync jobs → RAG ingestion, `ConnectorBinding` scoped folders (Harvey-style), ACL snapshot sync | **Shipped** (ahead of 4 — keyless-testable). `IConnectorSyncSource` (SDK), `ConnectorBinding` (one per resource, rebind replaces), `platform.connector-sync` job (incremental via per-item stamps, fail-closed on every seam), `IConnectorSyncHandler` module seam; legal: `connect_matter_folder`/`sync_matter_folder` → files attach to the matter AND index into its collection. Deferred: scheduled auto-sync (manual/tool-triggered v1) |
 | **6** ✅ | Generic-RAG completion: multilingual retrieval, facet filters, per-chunk ACLs, agent knowledge scoping, the curator UI, scale, and the RLS backstop | **Shipped.** Detailed below |
+| **7** ✅ | Page-range citations: page-aware extraction (PDF text layer + OCR), offset-tracking chunker, `PageFrom`/`PageTo` through hits and the citation line | **Shipped.** See 4.7 |
 
 ---
 
@@ -410,10 +411,35 @@ published by `TenantSessionInterceptor` on every connection open. Two caveats st
 Tenant isolation does not depend on RLS — query filters, the explicit predicate in both arms, and
 the gates each enforce it. It exists because hybrid search is the one raw-SQL path in the platform.
 
-### 4.7 Still open
+### 4.7 Page-range citations
 
-- **Page-range provenance.** Citations are `file id` + chunk ordinal; `IDocumentReader` is not
-  page-aware, so `PageFrom`/`PageTo` need extraction work first.
+A passage now cites the page it came from — "p. 7", or "pp. 3–4" when it straddles a break. Three
+pieces had to line up:
+
+1. **Extraction keeps what it already knew.** PdfPig always walked the document page by page; the
+   page number was simply discarded. `IDocumentReader.ExtractAsync` returns
+   `DocumentText(Text, Pages)` where each `DocumentPage` is a half-open character range into the
+   text. `ExtractTextAsync` is unchanged and now delegates to it, so module code is untouched.
+2. **Chunks became contiguous slices.** `TextChunker` returns `TextChunk(Text, Start, End)` with
+   offsets into the source, and each chunk is now exactly `text[Start..End]` rather than paragraphs
+   re-joined with `\n\n`. That is what makes the offsets trustworthy — a chunk stitched from
+   non-adjacent pieces could not honestly claim a page range — and it preserves the source
+   verbatim as a side effect. The paragraph scanner handles `\n\n` and `\r\n\r\n` without
+   normalising, because normalising would shift every offset.
+3. **Nulls stay null.** `RagChunk.PageFrom`/`PageTo` are nullable, and a source with no pages
+   (plain text) or an extractor that cannot report them cites the file alone. A default of page 1
+   would be a fabricated citation — worse than no citation, because it looks checkable.
+
+Scanned documents are covered too: `IOcrEngine.ExtractAsync` is a default-implemented method that
+returns unpaged text, so existing engines keep working untouched, and the Azure Document
+Intelligence engine overrides it using the page spans its API already returns. That matters in
+document-heavy domains where most of the corpus arrives as scans.
+
+Half-open ranges throughout: a chunk ending exactly on a page boundary belongs to the page it came
+from, not the one it stops at — otherwise every chunk that ends at a break would over-cite.
+
+### 4.8 Still open
+
 - **No reranker.** Retrieval is hybrid + RRF at `ArmLimit = 50` per arm. A cross-encoder or
   LLM rerank stage is the next real precision win at case scale.
 - **Connectors report no ACLs yet.** `ConnectorSyncFile` now *carries* `Principals`/`Metadata` and

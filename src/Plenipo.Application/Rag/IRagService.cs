@@ -41,6 +41,11 @@ public sealed record RagIngestOptions
 }
 
 /// <summary>One retrieved passage with its provenance — everything a cited answer needs.</summary>
+/// <param name="PageFrom">
+/// First page of the passage, or null when the source was not paginated (plain text) or the
+/// extractor could not report page boundaries. Never guessed.
+/// </param>
+/// <param name="PageTo">Last page — equal to <paramref name="PageFrom"/> unless the passage straddles a break.</param>
 public sealed record RagHit(
     Guid ChunkId,
     Guid CollectionId,
@@ -49,7 +54,25 @@ public sealed record RagHit(
     string FileName,
     int Ordinal,
     string Text,
-    double Score);
+    double Score,
+    int? PageFrom = null,
+    int? PageTo = null)
+{
+    /// <summary>"p. 4", "pp. 3–4", or null when this passage has no page information to cite.</summary>
+    public string? PageCitation
+    {
+        get
+        {
+            if (PageFrom is not int from)
+            {
+                return null;
+            }
+
+            var to = PageTo ?? from;
+            return to > from ? $"pp. {from}–{to}" : $"p. {from}";
+        }
+    }
+}
 
 /// <summary>A collection as seen from outside: what it covers and what can be filtered on.</summary>
 public sealed record RagCollectionInfo(

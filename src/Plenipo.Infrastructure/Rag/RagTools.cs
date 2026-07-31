@@ -18,7 +18,7 @@ namespace Plenipo.Infrastructure.Rag;
 /// </summary>
 public sealed class RagTools(IRagService rag)
 {
-    [Description("Search the indexed knowledge collections (ingested documents) for relevant passages. Returns quoted excerpts with the source file name and file id — cite them for every claim. Use this to answer questions across many documents; use read_document to read one specific file in full.")]
+    [Description("Search the indexed knowledge collections (ingested documents) for relevant passages. Returns quoted excerpts with the source file name, file id, and page when the source is paginated — cite them for every claim. Use this to answer questions across many documents; use read_document to read one specific file in full.")]
     public async Task<string> SearchKnowledge(
         [Description("What to look for — a question or key phrases.")] string query,
         [Description("Optional collection name to search within (e.g. 'matter: Acme diligence'). Omit to search every collection you can access.")]
@@ -37,9 +37,12 @@ public sealed class RagTools(IRagService rag)
         var sb = new StringBuilder($"Top {hits.Count} passage(s):\n");
         foreach (var hit in hits)
         {
+            // The page goes immediately after the file, where a reader expects a citation to carry
+            // it. Omitted entirely when unknown — a missing page is better than a wrong one.
+            var page = hit.PageCitation is { } citation ? $", {citation}" : string.Empty;
             sb.AppendLine();
             sb.AppendLine($"\"{hit.Text}\"");
-            sb.AppendLine($"— source: {hit.FileName} (file id: {hit.FileId}), chunk {hit.Ordinal + 1}, collection: {hit.CollectionName}");
+            sb.AppendLine($"— source: {hit.FileName}{page} (file id: {hit.FileId}), chunk {hit.Ordinal + 1}, collection: {hit.CollectionName}");
         }
 
         return sb.ToString();

@@ -158,24 +158,46 @@ public sealed class DocumentTools(IFileStore files, IOcrEngine? ocr = null)
 
     /// <summary>Line-preserving PDF text extraction. Public alongside <see cref="BuildPdf"/> so
     /// module code can read what it (or a bank) generated without going through the tool.</summary>
-    public static string ExtractPdfText(Stream content)
+    public static string ExtractPdfText(Stream content) => ExtractPdfPages(content).Text;
+
+    /// <summary>
+    /// The same extraction, keeping the page boundaries PdfPig already hands us instead of throwing
+    /// them away — this is what lets a retrieved passage cite "p. 7". Offsets are into the returned
+    /// text, and line endings are normalised to <c>\n</c> so a downstream consumer never has to
+    /// re-normalise (which would shift every offset).
+    /// </summary>
+    public static DocumentText ExtractPdfPages(Stream content)
     {
         using var pdf = PdfDocument.Open(content);
         var sb = new StringBuilder();
+        var pages = new List<DocumentPage>();
+
         foreach (Page page in pdf.GetPages())
         {
             if (sb.Length >= MaxExtractChars)
             {
-                break;
+                break; // truncated: the recorded pages describe exactly what was emitted
             }
 
             // Reading-order extraction keeps the page's LINE structure ("date  description  amount"
             // stays one line). page.Text would concatenate every glyph run with no separators, which
             // destroys tables and statements for every consumer (read_document, RAG chunking, modules).
-            sb.AppendLine(ContentOrderTextExtractor.GetText(page));
+            var start = sb.Length;
+            sb.Append(ContentOrderTextExtractor.GetText(page).ReplaceLineEndings("\n")).Append('\n');
+            pages.Add(new DocumentPage(page.Number, start, sb.Length));
         }
 
-        return sb.ToString().Trim();
+        // Trimming the tail would invalidate the last page's End, so trim only the leading edge and
+        // clamp the pages to what survives.
+        var text = sb.ToString();
+        var trimmed = text.TrimEnd();
+        if (trimmed.Length != text.Length && pages.Count > 0)
+        {
+            var last = pages[^1];
+            pages[^1] = last with { End = Math.Max(last.Start, trimmed.Length) };
+        }
+
+        return new DocumentText(trimmed, pages);
     }
 
     private static string Truncate(string text) =>

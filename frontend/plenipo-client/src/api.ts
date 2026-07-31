@@ -550,6 +550,15 @@ export interface KnowledgeHit {
   ordinal: number;
   text: string;
   score: number;
+  /**
+   * First/last page the passage covers. Null when the source is not paginated (plain text) or the
+   * extractor could not report pages — never guessed, so a citation omits the page instead of
+   * inventing one. Equal values mean a single page; differing ones mean it straddles a break.
+   */
+  pageFrom?: number | null;
+  pageTo?: number | null;
+  /** "p. 4" / "pp. 3–4", or null when there is no page to cite. Server-formatted. */
+  pageCitation?: string | null;
 }
 
 /** A user with their roles and explicit permission grants. */

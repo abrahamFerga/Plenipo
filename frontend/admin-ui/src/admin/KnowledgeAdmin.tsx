@@ -367,7 +367,9 @@ function Hits({ hits }: { hits: KnowledgeHit[] }) {
         <li key={h.chunkId} className="rounded border border-slate-100 p-3 text-sm dark:border-slate-800">
           <p className="text-slate-700 dark:text-slate-300">{h.text}</p>
           <p className="mt-1 text-xs text-slate-400">
-            {h.fileName} · passage {h.ordinal + 1} · {h.collectionName} · score {h.score.toFixed(4)}
+            {h.fileName}
+            {h.pageCitation ? `, ${h.pageCitation}` : ""} · passage {h.ordinal + 1} · {h.collectionName} ·
+            score {h.score.toFixed(4)}
           </p>
         </li>
       ))}

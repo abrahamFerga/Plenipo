@@ -6,7 +6,10 @@ namespace Plenipo.Infrastructure.Documents;
 /// <summary>The extraction core shared by the <c>read_document</c> tool and module code.</summary>
 public sealed class DocumentReader(IFileStore files, IOcrEngine? ocr = null) : IDocumentReader
 {
-    public async Task<string?> ExtractTextAsync(Guid fileId, CancellationToken cancellationToken = default)
+    public async Task<string?> ExtractTextAsync(Guid fileId, CancellationToken cancellationToken = default) =>
+        (await ExtractAsync(fileId, cancellationToken))?.Text;
+
+    public async Task<DocumentText?> ExtractAsync(Guid fileId, CancellationToken cancellationToken = default)
     {
         var file = await files.FindAsync(fileId, cancellationToken);
         if (file is null)
@@ -22,16 +25,17 @@ public sealed class DocumentReader(IFileStore files, IOcrEngine? ocr = null) : I
 
         if (DocumentTools.IsPdf(file.ContentType, file.FileName))
         {
-            var text = DocumentTools.ExtractPdfText(content);
-            if (!string.IsNullOrWhiteSpace(text))
+            var extracted = DocumentTools.ExtractPdfPages(content);
+            if (!string.IsNullOrWhiteSpace(extracted.Text))
             {
-                return text;
+                return extracted;
             }
 
             if (ocr is not null)
             {
+                // A scan has no text layer; the OCR engine decides whether it can report pages.
                 content.Position = 0;
-                return await ocr.ExtractTextAsync(content, file.ContentType, cancellationToken);
+                return await ocr.ExtractAsync(content, file.ContentType, cancellationToken);
             }
 
             return null;
@@ -41,7 +45,10 @@ public sealed class DocumentReader(IFileStore files, IOcrEngine? ocr = null) : I
             file.ContentType is "application/json" or "application/xml")
         {
             using var reader = new StreamReader(content);
-            return await reader.ReadToEndAsync(cancellationToken);
+            var text = await reader.ReadToEndAsync(cancellationToken);
+            // Normalised here so offsets computed by any consumer stay valid — plain text has no
+            // pages, so the citation names the file alone.
+            return DocumentText.Unpaged(text.ReplaceLineEndings("\n"));
         }
 
         return null;

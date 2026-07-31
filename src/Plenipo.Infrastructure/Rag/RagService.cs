@@ -89,14 +89,16 @@ public sealed class RagService(
         var file = await files.FindAsync(fileId, cancellationToken)
             ?? throw new InvalidOperationException($"Stored file {fileId} does not exist.");
 
-        var text = await reader.ExtractTextAsync(fileId, cancellationToken);
+        // Page-aware extraction: the boundaries come back with the text so a passage can cite its page.
+        var extracted = await reader.ExtractAsync(fileId, cancellationToken);
+        var text = extracted?.Text;
 
         // Idempotent re-ingest: replace whatever this file contributed before.
         await db.RagChunks
             .Where(c => c.CollectionId == collection.Id && c.FileId == fileId)
             .ExecuteDeleteAsync(cancellationToken);
 
-        if (string.IsNullOrWhiteSpace(text))
+        if (extracted is null || string.IsNullOrWhiteSpace(text))
         {
             return 0;
         }
@@ -108,21 +110,29 @@ public sealed class RagService(
             : new Dictionary<string, string>(options.Metadata, StringComparer.Ordinal);
 
         var pieces = TextChunker.Chunk(text, ragOptions.Value.MaxChunkChars);
-        var embeddings = await embedder.GenerateAsync(pieces, cancellationToken: cancellationToken);
+        var embeddings = await embedder.GenerateAsync(pieces.Select(p => p.Text).ToList(), cancellationToken: cancellationToken);
 
-        var chunks = pieces.Select((piece, i) => new RagChunk
+        var chunks = pieces.Select((piece, i) =>
         {
-            TenantId = collection.TenantId,
-            CollectionId = collection.Id,
-            FileId = fileId,
-            FileName = file.FileName,
-            Ordinal = i,
-            Text = piece,
-            EmbeddingModel = ragOptions.Value.EmbeddingModel,
-            ContentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(piece))),
-            Language = language,
-            Principals = chunkPrincipals,
-            Metadata = chunkMetadata,
+            // The chunk is a contiguous slice, so its offsets map cleanly onto the page ranges the
+            // extractor reported. Unpaginated sources yield (null, null) and cite the file alone.
+            var (pageFrom, pageTo) = extracted.PagesFor(piece.Start, piece.End);
+            return new RagChunk
+            {
+                TenantId = collection.TenantId,
+                CollectionId = collection.Id,
+                FileId = fileId,
+                FileName = file.FileName,
+                Ordinal = i,
+                Text = piece.Text,
+                EmbeddingModel = ragOptions.Value.EmbeddingModel,
+                ContentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(piece.Text))),
+                Language = language,
+                Principals = chunkPrincipals,
+                Metadata = chunkMetadata,
+                PageFrom = pageFrom,
+                PageTo = pageTo,
+            };
         }).ToList();
 
         db.RagChunks.AddRange(chunks);
@@ -278,7 +288,9 @@ public sealed class RagService(
                 continue; // fail closed: unverifiable hits are dropped, never returned
             }
 
-            hits.Add(new RagHit(chunk.Id, chunk.CollectionId, collection.Name, chunk.FileId, chunk.FileName, chunk.Ordinal, chunk.Text, row.Score));
+            hits.Add(new RagHit(
+                chunk.Id, chunk.CollectionId, collection.Name, chunk.FileId, chunk.FileName,
+                chunk.Ordinal, chunk.Text, row.Score, chunk.PageFrom, chunk.PageTo));
         }
 
         return hits;
