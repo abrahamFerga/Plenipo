@@ -48,4 +48,41 @@ public sealed class RagOptions
     /// </summary>
     public int IndexThresholdChunks { get; set; } = 20_000;
 
+    /// <summary>
+    /// The precision pass over the retrieved shortlist. One of:
+    /// <list type="bullet">
+    /// <item><c>Mmr</c> (default) — maximal marginal relevance over the candidates' own vectors.
+    /// Keyless, deterministic, and costs nothing but arithmetic; it stops a window full of the same
+    /// boilerplate clause from crowding out the rest of the answer.</item>
+    /// <item><c>Llm</c> — the tenant's chat model scores each passage against the query
+    /// (cross-encoder). The most accurate option and the one every high-end stack uses, at the cost
+    /// of a model call and its latency on every search.</item>
+    /// <item><c>None</c> — fusion order, truncated. The behaviour before reranking existed.</item>
+    /// </list>
+    /// </summary>
+    public string Reranker { get; set; } = "Mmr";
+
+    /// <summary>
+    /// How many candidates to retrieve per requested hit before reranking. A reranker can only
+    /// re-order what retrieval fetched, so this is what gives it something to promote; the product
+    /// is capped by <see cref="MaxRerankCandidates"/>. Ignored when <c>Reranker=None</c>.
+    /// </summary>
+    public int RerankCandidateMultiplier { get; set; } = 5;
+
+    /// <summary>
+    /// MMR's relevance/diversity trade-off: 1.0 is pure relevance (equivalent to no reranking), 0.0
+    /// is pure diversity. The default leans hard toward relevance, so diversity only breaks ties
+    /// between passages that are genuinely near-duplicates.
+    /// </summary>
+    public double MmrLambda { get; set; } = 0.7;
+
+    /// <summary>Model for <c>Reranker=Llm</c>. Null/empty = the tenant's default chat model.</summary>
+    public string? RerankerModel { get; set; }
+
+    /// <summary>
+    /// Ceiling on the candidate shortlist. Bounds the LLM reranker's prompt and MMR's O(n²)
+    /// similarity work, both of which grow with the pool while the benefit flattens.
+    /// </summary>
+    public const int MaxRerankCandidates = 100;
+
 }

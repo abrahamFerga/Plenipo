@@ -25,6 +25,12 @@ namespace Plenipo.Infrastructure.Rag;
 /// and per-chunk principals trim within it — then the final hits are re-checked. The lexical arm is
 /// language-aware: one constant <c>plainto_tsquery</c> per configuration present in scope, which
 /// keeps the GIN index usable where a per-row <c>regconfig</c> would not.
+/// <para>
+/// Retrieval is recall-oriented and ranking is a separate, later step: the query fetches the deeper
+/// shortlist the configured <see cref="IRagReranker"/> asked for, and the reranker cuts it to the
+/// requested depth AFTER every access check has run. Reranking therefore only ever re-orders an
+/// already-authorised set.
+/// </para>
 /// </summary>
 public sealed class RagService(
     PlatformDbContext db,
@@ -35,6 +41,7 @@ public sealed class RagService(
     IEnumerable<IRagCollectionGate> gates,
     IRagPrincipalResolver principals,
     IAgentExecutionContext agentContext,
+    IRagReranker reranker,
     IOptions<RagOptions> ragOptions) : IRagService
 {
     /// <summary>Standard RRF dampening constant — rank 1 in one arm scores 1/61.</summary>
@@ -210,6 +217,12 @@ public sealed class RagService(
         var model = ragOptions.Value.EmbeddingModel;
         var top = Math.Clamp(topK ?? ragOptions.Value.TopK, 1, 50);
 
+        // Retrieval fetches the shortlist the reranker asked for, then the reranker cuts it to
+        // `top`. Both arms are widened to match, or asking for a deeper pool would just hit the
+        // arms' own ceiling and return the same candidates.
+        var candidateCount = Math.Clamp(reranker.CandidateCountFor(top), top, RagOptions.MaxRerankCandidates);
+        var armLimit = Math.Max(ArmLimit, candidateCount);
+
         // The caller's principals, and the languages actually present in the collections in scope.
         var callerPrincipals = (await principals.GetPrincipalsAsync(cancellationToken)).ToArray();
         var languages = allowed.Values
@@ -239,7 +252,7 @@ public sealed class RagService(
                   -- to infer a type from, and "$n IS NULL" alone fails to plan.
                   AND (CAST({filterJson} AS jsonb) IS NULL OR c.metadata @> CAST({filterJson} AS jsonb))
                 ORDER BY c.embedding <=> CAST({queryVector} AS vector)
-                LIMIT {ArmLimit}
+                LIMIT {armLimit}
             ),
             lex AS (
                 SELECT c."Id" AS id,
@@ -256,13 +269,13 @@ public sealed class RagService(
                   -- to infer a type from, and "$n IS NULL" alone fails to plan.
                   AND (CAST({filterJson} AS jsonb) IS NULL OR c.metadata @> CAST({filterJson} AS jsonb))
                 ORDER BY rank
-                LIMIT {ArmLimit}
+                LIMIT {armLimit}
             )
             SELECT COALESCE(vec.id, lex.id) AS "Id",
                    CAST(COALESCE(1.0 / ({RrfK} + vec.rank), 0) + COALESCE(1.0 / ({RrfK} + lex.rank), 0) AS double precision) AS "Score"
             FROM vec FULL OUTER JOIN lex ON vec.id = lex.id
             ORDER BY "Score" DESC
-            LIMIT {top}
+            LIMIT {candidateCount}
             """).ToListAsync(cancellationToken);
 
         if (ranked.Count == 0)
@@ -276,8 +289,11 @@ public sealed class RagService(
         var ids = ranked.Select(r => r.Id).ToArray();
         var chunks = await db.RagChunks.Where(c => ids.Contains(c.Id)).ToDictionaryAsync(c => c.Id, cancellationToken);
         var callerSet = new HashSet<string>(callerPrincipals, StringComparer.Ordinal);
+        var vectors = reranker.UsesEmbeddings
+            ? await ReadEmbeddingsAsync(ids, cancellationToken)
+            : [];
 
-        var hits = new List<RagHit>(ranked.Count);
+        var candidates = new List<RagCandidate>(ranked.Count);
         foreach (var row in ranked)
         {
             if (!chunks.TryGetValue(row.Id, out var chunk) ||
@@ -288,12 +304,77 @@ public sealed class RagService(
                 continue; // fail closed: unverifiable hits are dropped, never returned
             }
 
-            hits.Add(new RagHit(
+            var hit = new RagHit(
                 chunk.Id, chunk.CollectionId, collection.Name, chunk.FileId, chunk.FileName,
-                chunk.Ordinal, chunk.Text, row.Score, chunk.PageFrom, chunk.PageTo));
+                chunk.Ordinal, chunk.Text, row.Score, chunk.PageFrom, chunk.PageTo);
+            candidates.Add(new RagCandidate(hit, row.Score, vectors.GetValueOrDefault(chunk.Id, [])));
         }
 
-        return hits;
+        // Rerank AFTER every access check, never before: the reranker only re-orders and truncates a
+        // set that is already authorised, so it can never surface something the gates excluded.
+        return await reranker.RerankAsync(query, candidates, top, cancellationToken);
+    }
+
+    /// <summary>
+    /// Reads the candidates' vectors for a reranker that compares them. pgvector's text form is the
+    /// same shape ingestion writes, so this needs no extra driver mapping; the set is a few dozen
+    /// rows, already narrowed by every access predicate.
+    /// </summary>
+    private async Task<Dictionary<Guid, IReadOnlyList<float>>> ReadEmbeddingsAsync(
+        Guid[] ids, CancellationToken cancellationToken)
+    {
+        var rows = await db.Database.SqlQuery<EmbeddingRow>($"""
+            SELECT "Id" AS "Id", embedding::text AS "Vector"
+            FROM platform.rag_chunks
+            WHERE "Id" = ANY({ids}) AND embedding IS NOT NULL
+            """).ToListAsync(cancellationToken);
+
+        var vectors = new Dictionary<Guid, IReadOnlyList<float>>(rows.Count);
+        foreach (var row in rows)
+        {
+            var parsed = ParseVectorLiteral(row.Vector);
+            if (parsed.Count > 0)
+            {
+                vectors[row.Id] = parsed;
+            }
+        }
+
+        return vectors;
+    }
+
+    /// <summary>Parses pgvector's <c>[0.1,0.2,…]</c> text form. A malformed value yields nothing, never a throw.</summary>
+    private static List<float> ParseVectorLiteral(string? literal)
+    {
+        if (string.IsNullOrWhiteSpace(literal))
+        {
+            return [];
+        }
+
+        var span = literal.AsSpan().Trim().Trim('[').Trim(']');
+        if (span.IsEmpty)
+        {
+            return [];
+        }
+
+        var values = new List<float>(512);
+        var start = 0;
+        for (var i = 0; i <= span.Length; i++)
+        {
+            if (i != span.Length && span[i] != ',')
+            {
+                continue;
+            }
+
+            if (!float.TryParse(span[start..i], NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+            {
+                return []; // a value we cannot read makes the whole vector untrustworthy
+            }
+
+            values.Add(value);
+            start = i + 1;
+        }
+
+        return values;
     }
 
     public async Task<IReadOnlyList<RagCollectionInfo>> ListCollectionsAsync(CancellationToken cancellationToken = default)
@@ -451,5 +532,13 @@ public sealed class RagService(
         public Guid Id { get; set; }
 
         public double Score { get; set; }
+    }
+
+    /// <summary>A candidate's vector in pgvector's text form, for the reranker to compare.</summary>
+    private sealed class EmbeddingRow
+    {
+        public Guid Id { get; set; }
+
+        public string? Vector { get; set; }
     }
 }

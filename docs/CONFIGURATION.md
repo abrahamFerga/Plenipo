@@ -83,7 +83,7 @@ and change without a deploy.
 |---------|---------|-------|
 | `Ai` | The keyless DEPLOYMENT-DEFAULT chat provider: `Provider` (Mock/AzureOpenAI with managed identity/Ollama/None), `Model`, `Endpoint`, `Temperature`, `MaxOutputTokens`, `MaxConversationTokens`, `MaxMonthlyTokens` | `Mock` exercises the full pipeline. Commercial provider/model/key connections are configured per tenant in Admin → AI Settings; model catalogs are provider-discovered and keys are vaulted write-only. Agent profiles can pin a model. See [SAAS_OPERATIONS.md](SAAS_OPERATIONS.md). |
 | `AgentSecurity` | Plenipo-owned agent guardrails plus optional operator-owned Azure AI Content Safety augmentation | `Provider=None/AzureContentSafety`, `Endpoint`, optional `ApiKey`, `DefaultMode=Disabled/Audit/Enforce`, local prompt-attack detection, optional Azure harmful-content screening, sensitive-data handling, severity threshold, fail-closed behavior. Tenant admins choose nullable overrides in Admin → AI Settings. See [AGENT_SECURITY.md](AGENT_SECURITY.md). |
-| `Rag` | `Enabled`, `EmbeddingProvider`, `EmbeddingModel`, `DefaultLanguage`, `MaxChunkChars`, `TopK`, `IndexThresholdChunks` | Mock embedder is deterministic and keyless. `DefaultLanguage` is the Postgres text-search configuration new collections start with — see below. `IndexThresholdChunks` (default 20,000) is when a corpus is promoted from exact scan to an HNSW index |
+| `Rag` | `Enabled`, `EmbeddingProvider`, `EmbeddingModel`, `DefaultLanguage`, `MaxChunkChars`, `TopK`, `IndexThresholdChunks`, `Reranker`, `RerankCandidateMultiplier`, `MmrLambda`, `RerankerModel` | Mock embedder is deterministic and keyless. `DefaultLanguage` is the Postgres text-search configuration new collections start with — see below. `IndexThresholdChunks` (default 20,000) is when a corpus is promoted from exact scan to an HNSW index. `Reranker` defaults to `Mmr` — see below |
 | `Skills` | `Enabled`, `Path` | Deploy-time SKILL.md bundles shipped with the host — never tenant uploads |
 | `Mcp` | `Servers` — external MCP tool servers (name, transport, command/url, approval) | Deploy-time, like skills; each discovered tool is RBAC-gated as `tools.mcp.*` |
 | `Documents` | `Enabled` | Platform PDF/document tools |
@@ -163,6 +163,31 @@ recall, no index to maintain — and gets an HNSW index instead. The promotion h
 the ingest job that crossed the threshold, and it pins the vector column to the embedding
 dimension in use. Changing to an embedding model with different dimensions therefore means dropping
 the index and re-embedding, which is what a model migration already required.
+
+**`Rag:Reranker`** is the precision pass over the retrieved shortlist. Retrieval is deliberately
+recall-oriented — it casts a wide net and fuses two arms that disagree about what "similar" means —
+and reranking is what turns that shortlist into an ordering worth showing.
+
+| Value | Cost | What it does |
+|---|---|---|
+| `Mmr` (default) | arithmetic only | Maximal marginal relevance over the candidates' own vectors. Stops a window of eight results from being eight copies of the same boilerplate clause. Deterministic. |
+| `Llm` | one model call per search | The tenant's chat model scores each passage against the query (cross-encoder). The most accurate option; costs latency and tokens. |
+| `None` | none | Fusion order, truncated — the behaviour before reranking existed. |
+
+`RerankCandidateMultiplier` (default 5) sets how deep the shortlist is: a reranker can only promote
+what retrieval fetched, so `TopK=8` pulls 40 candidates and returns the best 8. The product is
+capped at 100. `MmrLambda` (default 0.7) is the relevance/diversity trade-off — 1.0 is pure
+relevance, 0.0 pure diversity. At 0.7 diversity only breaks near ties, so a merely *different*
+passage never outranks a much more relevant one.
+
+> Upgrading from a build before reranking existed changes result ordering, because `Mmr` is on by
+> default. Set `Rag:Reranker=None` to restore the previous ordering exactly.
+
+The `Llm` reranker fails soft in every direction — no provider, a refusal, malformed output — and
+falls back to retrieval order rather than failing the search, so enabling it cannot take retrieval
+down. It uses the tenant's own AI connection, so per-tenant metering and BYO keys apply to it the
+same way they apply to chat. Set `RerankerModel` to pin a cheaper/faster model than the tenant's
+chat default.
 
 **Row-level security is a real backstop only on a non-superuser connection.** The retrieval tables
 carry `FORCE ROW LEVEL SECURITY` policies keyed on the session's `plenipo.tenant_id`, which the

@@ -114,6 +114,24 @@ public static class InfrastructureSetup
         services.AddScoped<IRagService, RagService>();
         services.AddScoped<RagTools>();
         services.AddScoped<RagIndexMaintenance>();
+
+        // The precision pass over the retrieved shortlist. Provider swap is configuration, never
+        // code — same rule as the embedding generator and the chat client.
+        switch (ragOptions.Reranker?.Trim().ToLowerInvariant())
+        {
+            case "none":
+                services.TryAddScoped<IRagReranker, PassThroughReranker>();
+                break;
+            case "llm":
+                services.TryAddScoped<IRagReranker, LlmReranker>();
+                break;
+            case null or "" or "mmr":
+                services.TryAddScoped<IRagReranker, MmrReranker>();
+                break;
+            default:
+                throw new InvalidOperationException(
+                    $"Rag:Reranker '{ragOptions.Reranker}' is not supported. Use Mmr, Llm, or None.");
+        }
         // TryAdd: a module or connector that syncs source-system groups replaces this by registering
         // its own resolver first, without having to unregister the default.
         services.TryAddScoped<IRagPrincipalResolver, RagPrincipalResolver>();

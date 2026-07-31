@@ -16,6 +16,30 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
 
 ### Changed
 
+- **Retrieval now has a precision pass: results are reranked, not just fused.** Hybrid search is
+  recall-oriented by design — it casts a wide net and fuses two arms that disagree about what
+  "similar" means — and the top-K was being taken straight off that fusion. At corpus scale that
+  fails in a specific way: a firm's templates repeat the same clause across dozens of documents, so
+  a window of eight results becomes eight copies of one clause and the model sees one fact repeated
+  instead of eight facts.
+
+  `IRagReranker` receives the candidates and returns the final ordering. Retrieval asks it how deep
+  a shortlist it wants and widens both arms to match, so `TopK=8` now considers 40 candidates by
+  default. A reranker may only re-order and truncate, and it runs **after** every access check, so a
+  deeper pool can never surface something the agent scope, collection gate, chunk ACL or metadata
+  filter excluded.
+
+  `Rag:Reranker` defaults to **`Mmr`** — maximal marginal relevance over the candidates' own
+  vectors. Keyless, deterministic, and costs only arithmetic; at `MmrLambda=0.7` diversity breaks
+  near ties without ever letting a merely *different* passage outrank a much more relevant one.
+  `Llm` is opt-in and scores each passage against the query with the tenant's chat model
+  (cross-encoder) — the most accurate option, at a model call per search; it falls back to
+  retrieval order on any failure rather than failing the search. `None` restores the previous
+  behaviour.
+
+  **This changes result ordering on upgrade**, because `Mmr` is on by default. Set
+  `Rag:Reranker=None` to keep the old ordering exactly.
+
 - **Retrieved passages cite the page they came from.** An answer can now say "p. 7" (or "pp. 3–4"
   when a passage straddles a break) instead of only naming a file — the difference between a
   citation a reader can check and one they have to hunt through. PdfPig already walked the document

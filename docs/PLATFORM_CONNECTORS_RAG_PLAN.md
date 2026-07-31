@@ -310,6 +310,7 @@ StoredFile → IDocumentReader.ExtractTextAsync (PdfPig / OCR seam — already b
 | **5** ✅ | Lane B: connector sync jobs → RAG ingestion, `ConnectorBinding` scoped folders (Harvey-style), ACL snapshot sync | **Shipped** (ahead of 4 — keyless-testable). `IConnectorSyncSource` (SDK), `ConnectorBinding` (one per resource, rebind replaces), `platform.connector-sync` job (incremental via per-item stamps, fail-closed on every seam), `IConnectorSyncHandler` module seam; legal: `connect_matter_folder`/`sync_matter_folder` → files attach to the matter AND index into its collection. Deferred: scheduled auto-sync (manual/tool-triggered v1) |
 | **6** ✅ | Generic-RAG completion: multilingual retrieval, facet filters, per-chunk ACLs, agent knowledge scoping, the curator UI, scale, and the RLS backstop | **Shipped.** Detailed below |
 | **7** ✅ | Page-range citations: page-aware extraction (PDF text layer + OCR), offset-tracking chunker, `PageFrom`/`PageTo` through hits and the citation line | **Shipped.** See 4.7 |
+| **8** ✅ | Reranking: `IRagReranker` over a deeper candidate pool, MMR by default, opt-in LLM cross-encoder | **Shipped.** See 4.8 |
 
 ---
 
@@ -438,10 +439,43 @@ document-heavy domains where most of the corpus arrives as scans.
 Half-open ranges throughout: a chunk ending exactly on a page boundary belongs to the page it came
 from, not the one it stops at — otherwise every chunk that ends at a break would over-cite.
 
-### 4.8 Still open
+### 4.8 Reranking
 
-- **No reranker.** Retrieval is hybrid + RRF at `ArmLimit = 50` per arm. A cross-encoder or
-  LLM rerank stage is the next real precision win at case scale.
+Retrieval and ranking are now separate stages. Hybrid search is cheap and recall-oriented: it casts
+a wide net and fuses two arms that disagree about what "similar" means. Reranking is the precision
+pass over that shortlist — it can afford to be slower per candidate because there are only a few
+dozen of them.
+
+`IRagReranker` gets the candidates in fusion order and returns the final top-K. It may only
+**re-order and truncate**, and it runs **after every access check**, so a deeper candidate pool can
+never surface something the agent scope, collection gate, chunk ACL or metadata filter excluded.
+Retrieval asks the reranker how deep a shortlist it wants (`CandidateCountFor`) and widens both
+arms to match — otherwise asking for 40 candidates from arms capped at 50 would quietly return the
+same ones.
+
+| Provider | Cost | Why you'd pick it |
+|---|---|---|
+| `Mmr` **(default)** | arithmetic | Maximal marginal relevance over the candidates' own vectors. |
+| `Llm` | one model call | Cross-encoder scoring by the tenant's chat model. |
+| `None` | none | Fusion order — the pre-reranking behaviour. |
+
+**Why MMR is the default.** A case with thousands of documents contains the same boilerplate clause
+dozens of times, and pure relevance ranking fills the whole answer window with near-identical
+copies of it — the model then sees one fact repeated eight times instead of eight facts. MMR spends
+part of the window on the second-best *different* thing. It needs nothing the pipeline does not
+already have (the candidate vectors are read alongside the passages), it is deterministic — which
+matters when an answer has to be defensible — and at λ=0.7 diversity only breaks near ties, so a
+merely different passage never outranks a much more relevant one. Both halves of that contract are
+pinned by tests.
+
+**Why the LLM reranker exists.** Bi-encoder retrieval embeds query and passage separately, so it
+can only measure "these are about similar things". A cross-encoder reads them together and can
+judge whether the passage actually *answers* the question — most of the precision gap between a
+demo and a product. It uses the tenant's own AI connection, so metering and BYO keys apply
+unchanged, and it fails soft in every direction (no provider, refusal, malformed output) because a
+slightly worse ordering always beats a failed search.
+
+### 4.9 Still open
 - **Connectors report no ACLs yet.** `ConnectorSyncFile` now *carries* `Principals`/`Metadata` and
   the pipeline stamps them onto chunks, but no shipped source populates them —
   `msgraph` would need Graph's permissions API. The plumbing is done; the sources are not.
