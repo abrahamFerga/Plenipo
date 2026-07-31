@@ -32,10 +32,7 @@ function renderNav(
   opts: { onMore?: () => void; moreOpen?: boolean; at?: string } = {},
 ) {
   return render(
-    <MemoryRouter
-      initialEntries={[opts.at ?? "/"]}
-      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-    >
+    <MemoryRouter initialEntries={[opts.at ?? "/"]}>
       <BottomNav tabs={tabs} onMore={opts.onMore ?? (() => {})} moreOpen={opts.moreOpen} />
     </MemoryRouter>,
   );
