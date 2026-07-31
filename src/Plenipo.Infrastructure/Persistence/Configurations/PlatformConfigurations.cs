@@ -1,5 +1,8 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Plenipo.Application.Ai;
 using Plenipo.Core.Platform;
 using Plenipo.Infrastructure.Auditing;
@@ -400,6 +403,9 @@ internal sealed class RagCollectionConfiguration : IEntityTypeConfiguration<RagC
         b.Property(x => x.ResourceType).HasMaxLength(64);
         b.Property(x => x.Name).HasMaxLength(300).IsRequired();
         b.Property(x => x.EmbeddingModel).HasMaxLength(100).IsRequired();
+        b.Property(x => x.Language).HasMaxLength(32).IsRequired();
+        b.Property(x => x.Metadata).HasColumnName("metadata").HasColumnType("jsonb")
+            .HasConversion(JsonMaps.DictionaryConverter, JsonMaps.DictionaryComparer);
         b.HasIndex(x => new { x.TenantId, x.ModuleId, x.ResourceType, x.ResourceId });
         b.HasIndex(x => new { x.TenantId, x.Name });
     }
@@ -415,12 +421,39 @@ internal sealed class RagChunkConfiguration : IEntityTypeConfiguration<RagChunk>
         b.Property(x => x.Text).IsRequired();
         b.Property(x => x.EmbeddingModel).HasMaxLength(100).IsRequired();
         b.Property(x => x.ContentHash).HasMaxLength(64).IsRequired();
-        // The pgvector `embedding` and generated `tsv` columns are added by the migration's raw SQL
-        // and are deliberately NOT mapped — see RagChunk. Composite indexes lead with TenantId so
-        // the hybrid query's predicates stay indexed.
+        b.Property(x => x.Language).HasMaxLength(32).IsRequired();
+        // Principals map to text[] so the retrieval arms can use the `&&` overlap operator against
+        // the caller's principal array — one indexable predicate instead of a per-row join.
+        b.Property(x => x.Principals).HasColumnType("text[]").IsRequired();
+        b.Property(x => x.Metadata).HasColumnName("metadata").HasColumnType("jsonb")
+            .HasConversion(JsonMaps.DictionaryConverter, JsonMaps.DictionaryComparer);
+        // The pgvector `embedding` and `tsv` columns are added by the migration's raw SQL and are
+        // deliberately NOT mapped — see RagChunk. Composite indexes lead with TenantId so the
+        // hybrid query's predicates stay indexed.
         b.HasIndex(x => new { x.TenantId, x.CollectionId });
         b.HasIndex(x => new { x.CollectionId, x.FileId });
     }
+}
+
+/// <summary>
+/// Shared JSON mappings for small free-form dictionaries stored as jsonb. A converter plus an
+/// explicit comparer, because EF cannot track changes to a mutable reference type without one —
+/// without the comparer, editing a dictionary in place would silently not persist.
+/// </summary>
+internal static class JsonMaps
+{
+    private static readonly JsonSerializerOptions Options = JsonSerializerOptions.Web;
+
+    public static readonly ValueConverter<Dictionary<string, string>, string> DictionaryConverter =
+        new(
+            v => JsonSerializer.Serialize(v, Options),
+            v => JsonSerializer.Deserialize<Dictionary<string, string>>(v, Options) ?? new Dictionary<string, string>(StringComparer.Ordinal));
+
+    public static readonly ValueComparer<Dictionary<string, string>> DictionaryComparer =
+        new(
+            (a, b) => a != null && b != null && a.Count == b.Count && !a.Except(b).Any(),
+            v => v.Aggregate(0, (hash, kv) => HashCode.Combine(hash, kv.Key.GetHashCode(StringComparison.Ordinal), kv.Value.GetHashCode(StringComparison.Ordinal))),
+            v => new Dictionary<string, string>(v, StringComparer.Ordinal));
 }
 
 internal sealed class PendingApprovalConfiguration : IEntityTypeConfiguration<PendingApproval>

@@ -501,8 +501,55 @@ export interface AgentProfile {
    * Null/absent = every tool the caller's permissions allow. A selection only narrows RBAC.
    */
   toolNames?: string[] | null;
+  /**
+   * Knowledge-collection patterns this agent may retrieve from, as globs over
+   * `{moduleId}/{resourceType|-}/{name}` — e.g. `legal/matter/*` or `knowledge/-/ES employment law`.
+   * Null/absent = every collection the caller may already access. A selection only narrows.
+   */
+  collectionScopes?: string[] | null;
   /** Per-agent model within the tenant's provider. Null = the tenant/deployment default model. */
   model?: string | null;
+}
+
+/** A retrieval corpus, from GET /api/knowledge. */
+export interface KnowledgeCollection {
+  id: string;
+  moduleId: string;
+  /** Set when the collection is bound to a module resource (e.g. "matter"); null = curated. */
+  resourceType?: string | null;
+  resourceId?: string | null;
+  name: string;
+  /** Postgres text-search configuration used to index this corpus (e.g. "english", "simple"). */
+  language: string;
+  embeddingModel: string;
+  documentCount: number;
+  chunkCount: number;
+  /** Corpus-level facets (jurisdiction, practice area, …). */
+  metadata: Record<string, string>;
+  /** Facet keys present on this corpus's passages — the valid filter keys. */
+  filterKeys: string[];
+  /** False for module-owned, resource-bound collections: those are managed by their module. */
+  isEditable: boolean;
+}
+
+/** One indexed document inside a collection, from GET /api/knowledge/{id}/documents. */
+export interface KnowledgeDocument {
+  fileId: string;
+  fileName: string;
+  chunkCount: number;
+  language: string;
+}
+
+/** A retrieved passage, from POST /api/knowledge/search. */
+export interface KnowledgeHit {
+  chunkId: string;
+  collectionId: string;
+  collectionName: string;
+  fileId: string;
+  fileName: string;
+  ordinal: number;
+  text: string;
+  score: number;
 }
 
 /** A user with their roles and explicit permission grants. */
@@ -770,7 +817,7 @@ export async function apiAction(path: string, body?: unknown): Promise<string | 
 /** Fetch wrapper for mutations (POST / PUT / DELETE). Returns nothing; throws on non-2xx. */
 export async function apiSend(
   path: string,
-  method: "POST" | "PUT" | "DELETE",
+  method: "POST" | "PUT" | "PATCH" | "DELETE",
   body?: unknown,
 ): Promise<void> {
   const res = await request(path, {
@@ -971,6 +1018,45 @@ export const api = {
       apiSend(`/api/connectors/${encodeURIComponent(connectorId)}/login`, "DELETE"),
   },
 
+  /**
+   * Knowledge collections. Reads are gated exactly like retrieval, so this never shows a corpus the
+   * caller could not search; writes need `platform.knowledge.manage`.
+   */
+  knowledge: {
+    list: () => apiGet<KnowledgeCollection[]>("/api/knowledge"),
+    languages: () => apiGet<string[]>("/api/knowledge/languages"),
+    documents: (collectionId: string) =>
+      apiGet<KnowledgeDocument[]>(`/api/knowledge/${collectionId}/documents`),
+    /** A retrieval preview through the identical code path the agent uses. */
+    search: (body: {
+      query: string;
+      collection?: string | null;
+      topK?: number | null;
+      filters?: Record<string, string> | null;
+    }) => apiPost<KnowledgeHit[]>("/api/knowledge/search", body),
+    create: (body: { name: string; language?: string | null; metadata?: Record<string, string> | null }) =>
+      apiPost<{ id: string }>("/api/knowledge", body),
+    update: (
+      collectionId: string,
+      body: { name?: string | null; language?: string | null; metadata?: Record<string, string> | null },
+    ) => apiSend(`/api/knowledge/${collectionId}`, "PATCH", body),
+    remove: (collectionId: string) => apiSend(`/api/knowledge/${collectionId}`, "DELETE"),
+    /** Enqueues a background ingest; poll the returned jobId via api.jobs. */
+    indexDocuments: (
+      collectionId: string,
+      body: {
+        fileIds: string[];
+        principals?: string[] | null;
+        metadata?: Record<string, string> | null;
+        language?: string | null;
+      },
+    ) => apiPost<{ jobId: string; files: number }>(`/api/knowledge/${collectionId}/documents`, body),
+    removeDocument: (collectionId: string, fileId: string) =>
+      apiSend(`/api/knowledge/${collectionId}/documents/${fileId}`, "DELETE"),
+    reindex: (collectionId: string) =>
+      apiPost<{ jobId: string; files: number }>(`/api/knowledge/${collectionId}/reindex`, {}),
+  },
+
   admin: {
     securityCatalog: () => apiGet<SecurityCatalog>("/api/admin/security/catalog"),
     roles: () => apiGet<RoleInfo[]>("/api/admin/roles"),
@@ -1046,6 +1132,7 @@ export const api = {
       mode: "Append" | "Replace";
       isDefault: boolean;
       toolNames?: string[] | null;
+      collectionScopes?: string[] | null;
       model?: string | null;
     }) => apiSend("/api/admin/agent-profiles", "PUT", profile),
     deleteAgentProfile: (id: string) => apiSend(`/api/admin/agent-profiles/${id}`, "DELETE"),

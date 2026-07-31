@@ -113,6 +113,10 @@ public static class InfrastructureSetup
 
         services.AddScoped<IRagService, RagService>();
         services.AddScoped<RagTools>();
+        services.AddScoped<RagIndexMaintenance>();
+        // TryAdd: a module or connector that syncs source-system groups replaces this by registering
+        // its own resolver first, without having to unregister the default.
+        services.TryAddScoped<IRagPrincipalResolver, RagPrincipalResolver>();
         services.AddSingleton<IPlatformToolSource, RagToolSource>();
         services.AddSingleton<IJobHandler, RagIngestJobHandler>();
     }
@@ -185,6 +189,12 @@ public static class InfrastructureSetup
         services.AddScoped<RequestContext>();
         services.AddScoped<ICurrentUser>(sp => sp.GetRequiredService<RequestContext>());
         services.AddScoped<ITenantContext>(sp => sp.GetRequiredService<RequestContext>());
+
+        // What the running agent may reach, for the scope of one turn. Registered unconditionally
+        // (not behind Rag:Enabled) so consumers can depend on it without a null check; it simply
+        // carries no narrowing when no agent is running.
+        services.AddScoped<AgentExecutionContext>();
+        services.AddScoped<IAgentExecutionContext>(sp => sp.GetRequiredService<AgentExecutionContext>());
     }
 
     private static void AddPersistence(IHostApplicationBuilder builder)
@@ -192,13 +202,17 @@ public static class InfrastructureSetup
         var services = builder.Services;
 
         services.AddScoped<AuditInterceptor>();
+        services.AddScoped<TenantSessionInterceptor>();
 
         // Platform DB: registered explicitly so the scoped audit interceptor can be injected, then
-        // enriched with Aspire health checks + telemetry.
+        // enriched with Aspire health checks + telemetry. The tenant-session interceptor publishes
+        // the ambient tenant to the connection so the RLS backstop on the retrieval tables applies.
         services.AddDbContext<PlatformDbContext>((sp, options) =>
         {
             options.UseNpgsql(builder.Configuration.GetConnectionString(PlatformDbContext.ConnectionName));
-            options.AddInterceptors(sp.GetRequiredService<AuditInterceptor>());
+            options.AddInterceptors(
+                sp.GetRequiredService<AuditInterceptor>(),
+                sp.GetRequiredService<TenantSessionInterceptor>());
         });
         builder.EnrichNpgsqlDbContext<PlatformDbContext>();
 

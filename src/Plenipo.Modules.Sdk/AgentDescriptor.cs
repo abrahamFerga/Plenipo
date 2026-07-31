@@ -34,6 +34,13 @@ public sealed record AgentDescriptor
     public string? Model { get; init; }
 
     /// <summary>
+    /// Knowledge-collection patterns this agent may retrieve from, over the canonical path
+    /// <c>{moduleId}/{resourceType|-}/{name}</c> (e.g. <c>legal/matter/*</c>). Null/empty = every
+    /// collection the caller may already access. Narrows access, never grants it.
+    /// </summary>
+    public IReadOnlyList<string>? CollectionScopes { get; init; }
+
+    /// <summary>
     /// When true this agent applies when the user picks none — unless the tenant has its own
     /// default profile, which always wins.
     /// </summary>

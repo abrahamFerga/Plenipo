@@ -16,6 +16,40 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
 
 ### Changed
 
+- **Knowledge retrieval works outside English, filters by domain facets, and trims per user.**
+  The RAG pipeline shipped with a `tsv` column generated as `to_tsvector('english', …)` — a
+  generated column cannot vary per row, so every corpus in every deployment was stemmed as English.
+  A Spanish or German corpus lost recall on every keyword query. `tsv` is now written at ingest with
+  each chunk's own text-search configuration, detected per document (script first, then weighted
+  stop-word voting, declining to guess on thin evidence), and the lexical arm builds one constant
+  `plainto_tsquery` per configuration in scope so the GIN index still applies. Existing rows are
+  stamped `english` by the migration — what they were actually built with — rather than being
+  relabelled by the new `simple` default.
+
+  Retrieval now also narrows three ways instead of one, each failing closed and each able only to
+  narrow: an agent's `CollectionScopes` (globs over `{module}/{resourceType|-}/{name}`, applied
+  server-side so the model cannot escape them by choosing arguments), the existing per-resource
+  collection gate, and new per-chunk `Principals` for confidential material inside a shared corpus.
+  Free-form `metadata` on collections and chunks is filterable with jsonb containment inside both
+  arms — the platform never interprets the keys, which is what lets one design serve legal
+  (`jurisdiction=ES`), property, and finance without change.
+
+  Supporting work: `/api/knowledge` and an Admin → Knowledge page (create, configure, index,
+  re-index, delete, plus a retrieval preview that runs the agent's exact code path) so building a
+  corpus no longer means writing C#; a new `list_knowledge_collections` tool so an agent can
+  discover its own corpora and their filter keys; batched embedding writes via `unnest` replacing
+  one round trip per chunk; automatic HNSW promotion past `Rag:IndexThresholdChunks` with
+  `hnsw.iterative_scan` set database-wide; `ConnectorSyncFile` carrying source principals and
+  metadata through Lane B into chunks; and a `FORCE ROW LEVEL SECURITY` backstop on both retrieval
+  tables — effective only on a non-superuser connection, which
+  [docs/CONFIGURATION.md](docs/CONFIGURATION.md) now states explicitly and the integration test
+  proves by dropping privileges. See [docs/PLATFORM_CONNECTORS_RAG_PLAN.md](docs/PLATFORM_CONNECTORS_RAG_PLAN.md) Part 4.
+
+  Breaking for module authors: `IConnectorSyncHandler.OnFilesSyncedAsync` now receives
+  `IReadOnlyList<SyncedFile>` instead of `IReadOnlyList<Guid>`, and `IRagService`'s
+  `GetOrCreateCollectionAsync`/`IngestFileAsync` gained optional parameters before the
+  `CancellationToken` — pass it by name.
+
 - **Role baselines are now declaration-anchored: a tenant stores what it CHANGED, not the whole set.**
   A permission — or a whole role — that a product declares with `AddPlenipoRole` now reaches every
   tenant immediately, including tenants provisioned long before the declaration changed, with no

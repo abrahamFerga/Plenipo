@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using Plenipo.Application.Ai;
 using Plenipo.Application.Documents;
 using Plenipo.Application.Files;
 using Plenipo.Application.Rag;
@@ -15,13 +17,14 @@ namespace Plenipo.Infrastructure.Rag;
 
 /// <summary>
 /// The RAG pipeline over the platform database: pgvector + tsvector in the same Postgres, no extra
-/// service. Retrieval is hybrid — a vector arm and a full-text arm, each carrying the tenant and
-/// allowed-collection predicates (never filtered after fusion), merged with reciprocal rank fusion
-/// (rank-based, because cosine and ts_rank scores are not on comparable scales). Collection access
-/// resolves through <see cref="IRagCollectionGate"/>s and FAILS CLOSED: a resource-bound collection
-/// with no registered gate, or whose gate denies, is excluded before the query and re-checked on
-/// the final hits. The embedding column is SQL-only (written via raw SQL) so the entity model works
-/// on non-Postgres test providers; small collections use exact scan — perfect recall, no index.
+/// service. Retrieval is hybrid — a vector arm and a full-text arm, each carrying EVERY narrowing
+/// predicate (tenant, allowed collections, chunk ACL, metadata facets) so nothing is filtered after
+/// fusion, merged with reciprocal rank fusion (rank-based, because cosine and ts_rank scores are not
+/// on comparable scales). Access resolves in three layers and FAILS CLOSED at each: the agent's
+/// collection scope narrows, the module's <see cref="IRagCollectionGate"/> decides the collection,
+/// and per-chunk principals trim within it — then the final hits are re-checked. The lexical arm is
+/// language-aware: one constant <c>plainto_tsquery</c> per configuration present in scope, which
+/// keeps the GIN index usable where a per-row <c>regconfig</c> would not.
 /// </summary>
 public sealed class RagService(
     PlatformDbContext db,
@@ -30,7 +33,9 @@ public sealed class RagService(
     IFileStore files,
     ITenantContext tenant,
     IEnumerable<IRagCollectionGate> gates,
-    IOptions<RagOptions> options) : IRagService
+    IRagPrincipalResolver principals,
+    IAgentExecutionContext agentContext,
+    IOptions<RagOptions> ragOptions) : IRagService
 {
     /// <summary>Standard RRF dampening constant — rank 1 in one arm scores 1/61.</summary>
     private const int RrfK = 60;
@@ -38,8 +43,12 @@ public sealed class RagService(
     /// <summary>Depth each arm feeds into fusion.</summary>
     private const int ArmLimit = 50;
 
+    /// <summary>Embeddings written per round trip — see <see cref="StampEmbeddingsAsync"/>.</summary>
+    private const int EmbeddingBatchSize = 200;
+
     public async Task<Guid> GetOrCreateCollectionAsync(
         string moduleId, string? resourceType, Guid? resourceId, string name,
+        string? language = null, IReadOnlyDictionary<string, string>? metadata = null,
         CancellationToken cancellationToken = default)
     {
         var existing = resourceType is not null
@@ -61,14 +70,18 @@ public sealed class RagService(
             ResourceType = resourceType,
             ResourceId = resourceId,
             Name = name,
-            EmbeddingModel = options.Value.EmbeddingModel,
+            EmbeddingModel = ragOptions.Value.EmbeddingModel,
+            Language = RagLanguage.Normalize(language ?? ragOptions.Value.DefaultLanguage),
+            Metadata = metadata is null ? [] : new Dictionary<string, string>(metadata, StringComparer.Ordinal),
         };
         db.RagCollections.Add(collection);
         await db.SaveChangesAsync(cancellationToken);
         return collection.Id;
     }
 
-    public async Task<int> IngestFileAsync(Guid collectionId, Guid fileId, CancellationToken cancellationToken = default)
+    public async Task<int> IngestFileAsync(
+        Guid collectionId, Guid fileId, RagIngestOptions? options = null,
+        CancellationToken cancellationToken = default)
     {
         // Tenant-scoped lookups: a foreign tenant's ids behave like missing ones.
         var collection = await db.RagCollections.FirstOrDefaultAsync(c => c.Id == collectionId, cancellationToken)
@@ -88,7 +101,13 @@ public sealed class RagService(
             return 0;
         }
 
-        var pieces = TextChunker.Chunk(text, options.Value.MaxChunkChars);
+        var language = LanguageDetector.Detect(text, options?.Language, collection.Language);
+        var chunkPrincipals = options?.Principals?.Where(p => !string.IsNullOrWhiteSpace(p)).Distinct(StringComparer.Ordinal).ToList() ?? [];
+        var chunkMetadata = options?.Metadata is null
+            ? new Dictionary<string, string>(StringComparer.Ordinal)
+            : new Dictionary<string, string>(options.Metadata, StringComparer.Ordinal);
+
+        var pieces = TextChunker.Chunk(text, ragOptions.Value.MaxChunkChars);
         var embeddings = await embedder.GenerateAsync(pieces, cancellationToken: cancellationToken);
 
         var chunks = pieces.Select((piece, i) => new RagChunk
@@ -99,27 +118,70 @@ public sealed class RagService(
             FileName = file.FileName,
             Ordinal = i,
             Text = piece,
-            EmbeddingModel = options.Value.EmbeddingModel,
+            EmbeddingModel = ragOptions.Value.EmbeddingModel,
             ContentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(piece))),
+            Language = language,
+            Principals = chunkPrincipals,
+            Metadata = chunkMetadata,
         }).ToList();
 
         db.RagChunks.AddRange(chunks);
         await db.SaveChangesAsync(cancellationToken);
 
-        // The vector column is unmapped (see class doc) — stamp embeddings with raw SQL.
-        for (var i = 0; i < chunks.Count; i++)
-        {
-            var literal = ToVectorLiteral(embeddings[i].Vector.Span);
-            await db.Database.ExecuteSqlAsync(
-                $"""UPDATE platform.rag_chunks SET embedding = CAST({literal} AS vector) WHERE "Id" = {chunks[i].Id}""",
-                cancellationToken);
-        }
+        await StampEmbeddingsAsync(chunks, embeddings, language, cancellationToken);
+        await TrackIndexedLanguageAsync(collection, language, cancellationToken);
 
         return chunks.Count;
     }
 
+    /// <summary>
+    /// Writes the vector and the language-correct <c>tsv</c> for a document's chunks. Both columns
+    /// are SQL-only (see <see cref="RagChunk"/>), and both are written here in batches via
+    /// <c>unnest</c> — a case with thousands of documents makes per-chunk round trips the dominant
+    /// cost of ingestion, and a single statement per few hundred chunks removes it.
+    /// </summary>
+    private async Task StampEmbeddingsAsync(
+        List<RagChunk> chunks, GeneratedEmbeddings<Embedding<float>> embeddings, string language,
+        CancellationToken cancellationToken)
+    {
+        for (var offset = 0; offset < chunks.Count; offset += EmbeddingBatchSize)
+        {
+            var batch = chunks.Skip(offset).Take(EmbeddingBatchSize).ToList();
+            var ids = batch.Select(c => c.Id).ToArray();
+            var vectors = batch.Select((_, i) => ToVectorLiteral(embeddings[offset + i].Vector.Span)).ToArray();
+
+            // `language` is never interpolated: RagLanguage.Normalize has already reduced it to a
+            // known configuration name, and it travels as a parameter cast to regconfig.
+            await db.Database.ExecuteSqlAsync(
+                $"""
+                 UPDATE platform.rag_chunks AS c
+                 SET embedding = CAST(src.vec AS vector),
+                     tsv = to_tsvector(CAST({language} AS regconfig), c."Text")
+                 FROM (SELECT * FROM unnest({ids}, {vectors}) AS t(id, vec)) AS src
+                 WHERE c."Id" = src.id
+                 """,
+                cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Records that this collection now contains a configuration, so retrieval knows which
+    /// <c>plainto_tsquery</c> constants to build without scanning the chunks to find out.
+    /// </summary>
+    private async Task TrackIndexedLanguageAsync(RagCollection collection, string language, CancellationToken cancellationToken)
+    {
+        if (collection.IndexedLanguages.Contains(language, StringComparer.Ordinal))
+        {
+            return;
+        }
+
+        collection.IndexedLanguages = [.. collection.IndexedLanguages, language];
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<RagHit>> SearchAsync(
         string query, string? collectionName = null, int? topK = null,
+        IReadOnlyDictionary<string, string>? filters = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(query))
@@ -135,15 +197,25 @@ public sealed class RagService(
 
         var tenantId = tenant.RequireTenantId();
         var allowedIds = allowed.Keys.ToArray();
-        var model = options.Value.EmbeddingModel;
-        var top = Math.Clamp(topK ?? options.Value.TopK, 1, 50);
+        var model = ragOptions.Value.EmbeddingModel;
+        var top = Math.Clamp(topK ?? ragOptions.Value.TopK, 1, 50);
+
+        // The caller's principals, and the languages actually present in the collections in scope.
+        var callerPrincipals = (await principals.GetPrincipalsAsync(cancellationToken)).ToArray();
+        var languages = allowed.Values
+            .SelectMany(c => c.Languages)
+            .Distinct(StringComparer.Ordinal)
+            .DefaultIfEmpty(RagLanguage.Default)
+            .ToArray();
+        var filterJson = ToFilterJson(filters);
 
         var queryEmbedding = await embedder.GenerateAsync([query], cancellationToken: cancellationToken);
         var queryVector = ToVectorLiteral(queryEmbedding[0].Vector.Span);
 
-        // Both arms carry the tenant + allowed-collection predicates; fusion never widens access.
-        // The vector arm additionally pins the embedding model — vectors from a different model are
-        // not comparable and would poison the ranking during a re-embed migration.
+        // Both arms carry the tenant, collection, ACL and metadata predicates; fusion never widens
+        // access. The vector arm additionally pins the embedding model — vectors from a different
+        // model are not comparable and would poison the ranking during a re-embed migration. The
+        // lexical arm joins one constant tsquery per language in scope, so the GIN index applies.
         var ranked = await db.Database.SqlQuery<RankedChunk>($"""
             WITH vec AS (
                 SELECT c."Id" AS id, ROW_NUMBER() OVER (ORDER BY c.embedding <=> CAST({queryVector} AS vector)) AS rank
@@ -152,15 +224,27 @@ public sealed class RagService(
                   AND c."CollectionId" = ANY({allowedIds})
                   AND c.embedding IS NOT NULL
                   AND c."EmbeddingModel" = {model}
+                  AND (cardinality(c."Principals") = 0 OR c."Principals" && {callerPrincipals})
+                  -- Cast before the null test: a bare parameter placeholder gives Postgres nothing
+                  -- to infer a type from, and "$n IS NULL" alone fails to plan.
+                  AND (CAST({filterJson} AS jsonb) IS NULL OR c.metadata @> CAST({filterJson} AS jsonb))
                 ORDER BY c.embedding <=> CAST({queryVector} AS vector)
                 LIMIT {ArmLimit}
             ),
             lex AS (
-                SELECT c."Id" AS id, ROW_NUMBER() OVER (ORDER BY ts_rank_cd(c.tsv, plainto_tsquery('english', {query})) DESC) AS rank
+                SELECT c."Id" AS id,
+                       ROW_NUMBER() OVER (ORDER BY ts_rank_cd(c.tsv, plainto_tsquery(CAST(cfg AS regconfig), {query})) DESC) AS rank
                 FROM platform.rag_chunks c
+                -- One row per chunk: a chunk has exactly one language, so this joins 1:1 and binds
+                -- cfg per iteration, which keeps the tsquery constant for the inner index scan.
+                JOIN unnest({languages}) AS cfg ON cfg = c."Language"
                 WHERE c."TenantId" = {tenantId}
                   AND c."CollectionId" = ANY({allowedIds})
-                  AND c.tsv @@ plainto_tsquery('english', {query})
+                  AND c.tsv @@ plainto_tsquery(CAST(cfg AS regconfig), {query})
+                  AND (cardinality(c."Principals") = 0 OR c."Principals" && {callerPrincipals})
+                  -- Cast before the null test: a bare parameter placeholder gives Postgres nothing
+                  -- to infer a type from, and "$n IS NULL" alone fails to plan.
+                  AND (CAST({filterJson} AS jsonb) IS NULL OR c.metadata @> CAST({filterJson} AS jsonb))
                 ORDER BY rank
                 LIMIT {ArmLimit}
             )
@@ -177,56 +261,109 @@ public sealed class RagService(
         }
 
         // Hydrate through EF (the tenant query filter applies again — defense in depth) and
-        // fail-closed recheck: every hit's collection must still pass its gate right now.
+        // fail-closed recheck: every hit's collection must still pass its gate right now, and the
+        // chunk's own ACL is re-evaluated in managed code rather than trusted from the SQL arm.
         var ids = ranked.Select(r => r.Id).ToArray();
         var chunks = await db.RagChunks.Where(c => ids.Contains(c.Id)).ToDictionaryAsync(c => c.Id, cancellationToken);
+        var callerSet = new HashSet<string>(callerPrincipals, StringComparer.Ordinal);
 
         var hits = new List<RagHit>(ranked.Count);
         foreach (var row in ranked)
         {
             if (!chunks.TryGetValue(row.Id, out var chunk) ||
-                !allowed.TryGetValue(chunk.CollectionId, out var name) ||
+                !allowed.TryGetValue(chunk.CollectionId, out var collection) ||
+                !IsPrincipalAllowed(chunk, callerSet) ||
                 !await IsStillAllowedAsync(chunk.CollectionId, cancellationToken))
             {
                 continue; // fail closed: unverifiable hits are dropped, never returned
             }
 
-            hits.Add(new RagHit(chunk.Id, chunk.CollectionId, name, chunk.FileId, chunk.FileName, chunk.Ordinal, chunk.Text, row.Score));
+            hits.Add(new RagHit(chunk.Id, chunk.CollectionId, collection.Name, chunk.FileId, chunk.FileName, chunk.Ordinal, chunk.Text, row.Score));
         }
 
         return hits;
     }
 
+    public async Task<IReadOnlyList<RagCollectionInfo>> ListCollectionsAsync(CancellationToken cancellationToken = default)
+    {
+        var allowed = await ResolveAccessibleCollectionsAsync(null, cancellationToken);
+        if (allowed.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = allowed.Keys.ToArray();
+        var stats = await db.RagChunks
+            .Where(c => ids.Contains(c.CollectionId))
+            .GroupBy(c => c.CollectionId)
+            .Select(g => new
+            {
+                CollectionId = g.Key,
+                Chunks = g.Count(),
+                Documents = g.Select(c => c.FileId).Distinct().Count(),
+            })
+            .ToListAsync(cancellationToken);
+        var byCollection = stats.ToDictionary(s => s.CollectionId);
+
+        // Filter keys are discovered from the corpus rather than declared: whatever a module or
+        // connector stamped is what an agent can filter on, with no registry to keep in sync.
+        var filterKeys = await db.RagChunks
+            .Where(c => ids.Contains(c.CollectionId))
+            .Select(c => new { c.CollectionId, c.Metadata })
+            .Take(2000)
+            .ToListAsync(cancellationToken);
+        var keysByCollection = filterKeys
+            .GroupBy(x => x.CollectionId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<string>)g.SelectMany(x => x.Metadata.Keys).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList());
+
+        return [.. allowed.Values
+            .Select(c => new RagCollectionInfo(
+                c.Id, c.ModuleId, c.ResourceType, c.ResourceId, c.Name, c.Language, c.EmbeddingModel,
+                byCollection.GetValueOrDefault(c.Id)?.Documents ?? 0,
+                byCollection.GetValueOrDefault(c.Id)?.Chunks ?? 0,
+                c.Metadata,
+                keysByCollection.GetValueOrDefault(c.Id, [])))
+            .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)];
+    }
+
     /// <summary>
     /// The collections the caller may query right now: tenant-scoped (EF filter), optionally
-    /// narrowed by name, then gated — an unbound collection is module-level (the tool permission
-    /// suffices); a bound one needs its resource gate to exist AND allow.
+    /// narrowed by name, narrowed again by the active agent's collection scopes, then gated — an
+    /// unbound collection is module-level (the tool permission suffices); a bound one needs its
+    /// resource gate to exist AND allow.
     /// </summary>
-    private async Task<Dictionary<Guid, string>> ResolveAccessibleCollectionsAsync(
+    private async Task<Dictionary<Guid, AllowedCollection>> ResolveAccessibleCollectionsAsync(
         string? collectionName, CancellationToken cancellationToken)
     {
         var candidates = string.IsNullOrWhiteSpace(collectionName)
             ? await db.RagCollections.ToListAsync(cancellationToken)
             : await db.RagCollections.Where(c => EF.Functions.ILike(c.Name, collectionName.Trim())).ToListAsync(cancellationToken);
 
-        var allowed = new Dictionary<Guid, string>();
+        var scopes = agentContext.CollectionScopes;
+        var allowed = new Dictionary<Guid, AllowedCollection>();
         foreach (var collection in candidates)
         {
-            if (collection.ResourceType is null)
+            if (!AgentCollectionSelection.Matches(scopes, collection.ModuleId, collection.ResourceType, collection.Name))
             {
-                allowed[collection.Id] = collection.Name;
                 continue;
             }
 
-            var gate = gates.FirstOrDefault(g => string.Equals(g.ResourceType, collection.ResourceType, StringComparison.Ordinal));
-            if (gate is not null && collection.ResourceId is Guid resourceId &&
-                await gate.CanQueryAsync(resourceId, cancellationToken))
+            if (collection.ResourceType is null || await IsGateOpenAsync(collection, cancellationToken))
             {
-                allowed[collection.Id] = collection.Name;
+                allowed[collection.Id] = AllowedCollection.From(collection);
             }
         }
 
         return allowed;
+    }
+
+    private async Task<bool> IsGateOpenAsync(RagCollection collection, CancellationToken cancellationToken)
+    {
+        var gate = gates.FirstOrDefault(g => string.Equals(g.ResourceType, collection.ResourceType, StringComparison.Ordinal));
+        return gate is not null && collection.ResourceId is Guid resourceId &&
+               await gate.CanQueryAsync(resourceId, cancellationToken);
     }
 
     private async Task<bool> IsStillAllowedAsync(Guid collectionId, CancellationToken cancellationToken)
@@ -237,14 +374,35 @@ public sealed class RagService(
             return false;
         }
 
-        if (collection.ResourceType is null)
+        return collection.ResourceType is null || await IsGateOpenAsync(collection, cancellationToken);
+    }
+
+    /// <summary>
+    /// Chunk-level trimming: an empty principal list means "the collection gate already decided",
+    /// a non-empty one must overlap the caller's principals. Restriction is therefore opt-in per
+    /// document, while access to a restricted one is opt-in per principal.
+    /// </summary>
+    private static bool IsPrincipalAllowed(RagChunk chunk, HashSet<string> callerPrincipals) =>
+        chunk.Principals.Count == 0 || chunk.Principals.Any(callerPrincipals.Contains);
+
+    /// <summary>
+    /// Metadata filters become one jsonb containment test, so <c>{"jurisdiction":"ES"}</c> matches a
+    /// chunk carrying that pair among others. Null when there is nothing to filter — the SQL then
+    /// short-circuits instead of comparing against an empty object (which matches everything but
+    /// still costs a jsonb parse per row).
+    /// </summary>
+    private static string? ToFilterJson(IReadOnlyDictionary<string, string>? filters)
+    {
+        if (filters is null || filters.Count == 0)
         {
-            return true;
+            return null;
         }
 
-        var gate = gates.FirstOrDefault(g => string.Equals(g.ResourceType, collection.ResourceType, StringComparison.Ordinal));
-        return gate is not null && collection.ResourceId is Guid resourceId &&
-               await gate.CanQueryAsync(resourceId, cancellationToken);
+        var usable = filters
+            .Where(kv => !string.IsNullOrWhiteSpace(kv.Key))
+            .ToDictionary(kv => kv.Key.Trim(), kv => kv.Value ?? string.Empty, StringComparer.Ordinal);
+
+        return usable.Count == 0 ? null : JsonSerializer.Serialize(usable, JsonSerializerOptions.Web);
     }
 
     private static string ToVectorLiteral(ReadOnlySpan<float> vector)
@@ -262,6 +420,18 @@ public sealed class RagService(
         }
 
         return sb.Append(']').ToString();
+    }
+
+    /// <summary>A collection that passed every gate, kept so hits can be labelled without a re-query.</summary>
+    private sealed record AllowedCollection(
+        Guid Id, string ModuleId, string? ResourceType, Guid? ResourceId, string Name,
+        string Language, string EmbeddingModel, IReadOnlyList<string> Languages,
+        IReadOnlyDictionary<string, string> Metadata)
+    {
+        public static AllowedCollection From(RagCollection c) => new(
+            c.Id, c.ModuleId, c.ResourceType, c.ResourceId, c.Name, c.Language, c.EmbeddingModel,
+            c.IndexedLanguages.Count > 0 ? c.IndexedLanguages : [c.Language],
+            c.Metadata);
     }
 
     private sealed class RankedChunk

@@ -52,7 +52,7 @@ public sealed class ConnectorSyncJobHandler : IJobHandler
             ? new Dictionary<string, SyncedItem>(StringComparer.Ordinal)
             : JsonSerializer.Deserialize<Dictionary<string, SyncedItem>>(binding.SyncedItemsJson) ?? [];
 
-        var imported = new List<Guid>();
+        var imported = new List<SyncedFile>();
         for (var i = 0; i < listed.Count; i++)
         {
             await context.ReportProgressAsync(
@@ -76,7 +76,11 @@ public sealed class ConnectorSyncJobHandler : IJobHandler
                 item.Name, item.ContentType, content,
                 source: $"connector:{binding.ConnectorId}", cancellationToken);
             state[item.Id] = new SyncedItem(stored.Id, item.ContentStamp);
-            imported.Add(stored.Id);
+
+            // Carry the source's access and facets forward. They are re-stamped on every re-import,
+            // so an ACL change at the source propagates on the next sync of that item — the
+            // denormalised copy is a cache with a defined refresh, not a fork.
+            imported.Add(new SyncedFile(stored.Id, item.Principals, item.Metadata));
         }
 
         if (imported.Count > 0)

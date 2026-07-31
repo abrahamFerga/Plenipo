@@ -83,7 +83,7 @@ and change without a deploy.
 |---------|---------|-------|
 | `Ai` | The keyless DEPLOYMENT-DEFAULT chat provider: `Provider` (Mock/AzureOpenAI with managed identity/Ollama/None), `Model`, `Endpoint`, `Temperature`, `MaxOutputTokens`, `MaxConversationTokens`, `MaxMonthlyTokens` | `Mock` exercises the full pipeline. Commercial provider/model/key connections are configured per tenant in Admin → AI Settings; model catalogs are provider-discovered and keys are vaulted write-only. Agent profiles can pin a model. See [SAAS_OPERATIONS.md](SAAS_OPERATIONS.md). |
 | `AgentSecurity` | Plenipo-owned agent guardrails plus optional operator-owned Azure AI Content Safety augmentation | `Provider=None/AzureContentSafety`, `Endpoint`, optional `ApiKey`, `DefaultMode=Disabled/Audit/Enforce`, local prompt-attack detection, optional Azure harmful-content screening, sensitive-data handling, severity threshold, fail-closed behavior. Tenant admins choose nullable overrides in Admin → AI Settings. See [AGENT_SECURITY.md](AGENT_SECURITY.md). |
-| `Rag` | `Enabled`, `EmbeddingProvider`, `EmbeddingModel` | Mock embedder is deterministic and keyless |
+| `Rag` | `Enabled`, `EmbeddingProvider`, `EmbeddingModel`, `DefaultLanguage`, `MaxChunkChars`, `TopK`, `IndexThresholdChunks` | Mock embedder is deterministic and keyless. `DefaultLanguage` is the Postgres text-search configuration new collections start with — see below. `IndexThresholdChunks` (default 20,000) is when a corpus is promoted from exact scan to an HNSW index |
 | `Skills` | `Enabled`, `Path` | Deploy-time SKILL.md bundles shipped with the host — never tenant uploads |
 | `Mcp` | `Servers` — external MCP tool servers (name, transport, command/url, approval) | Deploy-time, like skills; each discovered tool is RBAC-gated as `tools.mcp.*` |
 | `Documents` | `Enabled` | Platform PDF/document tools |
@@ -139,6 +139,45 @@ The host-filesystem `local-folder` connector has an additional deployment bounda
 must never grant arbitrary server reads. It is not registered until the operator enables it, and every
 tenant-selected root must be contained by one of the operator-owned `AllowedRoots`. Reparse points and
 symlinks are refused while walking the tree.
+
+### Knowledge (RAG): language, scale, and the RLS caveat
+
+`Rag:Enabled` is off by default and the whole subsystem is opt-in — a deployment that doesn't need
+retrieval registers nothing and offers no tool. Once on, three settings matter beyond the embedding
+provider.
+
+**`Rag:DefaultLanguage`** is the Postgres text-search configuration new collections start with. It
+defaults to `simple`, which stems nothing and stops nothing: slightly weaker recall, but never the
+*wrong* language's stemmer — the right default for a deployment serving several countries. A
+single-language deployment should set its own (`english`, `spanish`, `german`, …). Every collection
+can override it in Admin → Knowledge, and each document is language-detected at index time, so a
+mixed-language corpus indexes each file with its own stemmer. Only configurations bundled with a
+stock Postgres are accepted; anything unknown falls back to `simple` rather than failing.
+
+> CJK corpora index as `simple` on purpose. Postgres ships no CJK segmenter, so a configuration
+> would produce one enormous token; keyword matching degrades and the vector arm carries those
+> corpora. Deployments that need CJK keyword search should add `pgroonga` or `pg_bigm`.
+
+**`Rag:IndexThresholdChunks`** (default 20,000) is where a corpus stops using exact scan — perfect
+recall, no index to maintain — and gets an HNSW index instead. The promotion happens once, inside
+the ingest job that crossed the threshold, and it pins the vector column to the embedding
+dimension in use. Changing to an embedding model with different dimensions therefore means dropping
+the index and re-embedding, which is what a model migration already required.
+
+**Row-level security is a real backstop only on a non-superuser connection.** The retrieval tables
+carry `FORCE ROW LEVEL SECURITY` policies keyed on the session's `plenipo.tenant_id`, which the
+platform publishes on every connection open. PostgreSQL **superusers bypass RLS entirely**, `FORCE`
+included — so a deployment whose connection string uses a superuser (the default for a local
+container, and for some small managed instances) gets no protection from this layer. Connect as an
+ordinary role that owns nothing to make it effective. Tenant isolation does not *depend* on this:
+EF's global query filters, the explicit tenant predicate inside both retrieval arms, and the
+collection gates all enforce it independently. RLS exists because hybrid search is the one place
+the platform writes raw SQL, and a mistake there would be cross-tenant.
+
+The policies are permissive when `plenipo.tenant_id` is unset, so migrations, ops tooling, and
+background scopes that legitimately span tenants are unaffected. That is deliberate: a fail-closed
+policy would turn any code path that forgot to publish the session tenant into an outage rather
+than a defence-in-depth layer.
 
 ### Product identity (Branding)
 

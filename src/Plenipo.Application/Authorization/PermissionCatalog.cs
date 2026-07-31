@@ -36,6 +36,8 @@ public static class PermissionCatalog
         new("tools.documents.list_documents", FilesCategory, "Agent tool: list the caller's stored files."),
         new("tools.documents.ocr_document", FilesCategory, "Agent tool: OCR a scanned document (requires a configured OCR engine)."),
         new("tools.knowledge.search_knowledge", FilesCategory, "Agent tool: search indexed knowledge collections for cited passages (requires Rag:Enabled)."),
+        new("tools.knowledge.list_knowledge_collections", FilesCategory, "Agent tool: list the knowledge collections the caller can search, with their sizes and filter keys (requires Rag:Enabled)."),
+        new(Permissions.ManageKnowledge, PlatformCategory, "Create, configure, index, and delete knowledge collections (admin surface)."),
         new("tools.skills.load_skill", ChatCategory, "Agent tool: load an installed skill's instructions on demand (requires Skills:Enabled)."),
         new("tools.skills.read_skill_resource", ChatCategory, "Agent tool: read a resource file bundled with an installed skill."),
         new("tools.skills.run_skill_script", ChatCategory, "Agent tool: run a script bundled with an installed skill (side-effecting; approval-gated)."),

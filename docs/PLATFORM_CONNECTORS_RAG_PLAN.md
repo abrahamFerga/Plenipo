@@ -303,11 +303,122 @@ StoredFile → IDocumentReader.ExtractTextAsync (PdfPig / OCR seam — already b
 
 | Phase | Slice | Why first |
 |---|---|---|
-| **1** ✅ | RAG core: `RagCollection`/`RagChunk` + pgvector, ingestion job, hybrid+RRF query with tenant/collection filters + fail-closed recheck, `search_knowledge` tool, `MockEmbeddingGenerator`, matter-scoped collections in Legal | **Shipped.** `IRagService`/`IRagCollectionGate` (Application seams), raw-SQL hybrid RRF with the embedding-model pin, `platform.rag-ingest` job, `tools.knowledge.search_knowledge` platform tool, legal `index_matter_documents` + matter walls (`restrict_matter_access` / `open_matter_access` — item 10), pgvector images in AppHosts/compose/Testcontainers. Deferred within phase 1: RLS backstop (needs session-variable plumbing), per-chunk source-ACL snapshots (arrives with Lane B), page-range provenance (extraction is not page-aware yet) |
+| **1** ✅ | RAG core: `RagCollection`/`RagChunk` + pgvector, ingestion job, hybrid+RRF query with tenant/collection filters + fail-closed recheck, `search_knowledge` tool, `MockEmbeddingGenerator`, matter-scoped collections in Legal | **Shipped.** `IRagService`/`IRagCollectionGate` (Application seams), raw-SQL hybrid RRF with the embedding-model pin, `platform.rag-ingest` job, `tools.knowledge.search_knowledge` platform tool, legal `index_matter_documents` + matter walls (`restrict_matter_access` / `open_matter_access` — item 10), pgvector images in AppHosts/compose/Testcontainers. Deferred within phase 1 → **all closed in phase 6** except page-range provenance (extraction is still not page-aware) |
 | **2** ✅ | Connector SDK + enablement: `Plenipo.Connectors.Sdk`, `TenantConnector`/`ITenantConnectorStore`, admin Integrations page, `azure-blob` + `local-folder` connectors (Lane A) | **Shipped.** `IConnector`/`ConnectorManifest`/`IConnectorToolSource`/`IConnectorSettings` (SDK package), default-OFF per-tenant enablement consulted by the agent runner (`IConnectorToolCatalog` — a disabled connector's tools are never built), `/api/admin/connectors` with schema-driven settings (secrets write-only + DataProtection at rest), admin-ui Integrations page, `AddPlenipoConnector<T>()`, `tools.connectors.{id}.{tool}` permissions in the security catalog, fetch-lands-in-`IFileStore` convention. Deferred within phase 2: per-user OAuth (`UserConnectorLogin`, disable-revokes-tokens) — arrives with `msgraph` in phase 4 |
 | **3** ✅ | `plenipo init` wizard (QuickStart + non-interactive), catalogs driven by manifests | **Shipped.** `Plenipo.Cli` dotnet tool (`plenipo init`): stepped wizard (AI/RAG/documents/channels/storage/auth) + full `--non-interactive` flag surface; writes one declarative `plenipo.settings.json` the platform layers between appsettings.json and the environment file; re-runs are non-destructive; secrets never written — the wizard prints the `dotnet user-secrets` commands. Deferred within phase 3: prerequisite checks, health-check boot, and install-on-select (connectors/modules are per-tenant runtime toggles in the admin console, which the wizard points at) |
 | **4** ✅ | `msgraph` (SharePoint/OneDrive) delegated connector + per-user OAuth flow + disable-revokes | **Shipped.** Platform-level delegated-auth machinery (`UserConnectorLogin` protected token sessions, auth-code+PKCE start/callback endpoints with data-protected state, transparent refresh, `IOAuthTokenClient` seam) + the `msgraph` connector (Graph v1.0 REST via `IGraphApiClient` seam — no Graph SDK dependency; `list_m365_files` / approval-gated `fetch_from_m365` ride the CURRENT user's token, so Graph enforces their own permissions). **Disable revokes every session**; re-enable forces re-auth. E2E-tested keylessly with a fake IdP + fake Graph while the platform flow stays real |
-| **5** ✅ | Lane B: connector sync jobs → RAG ingestion, `ConnectorBinding` scoped folders (Harvey-style), ACL snapshot sync | **Shipped** (ahead of 4 — keyless-testable). `IConnectorSyncSource` (SDK), `ConnectorBinding` (one per resource, rebind replaces), `platform.connector-sync` job (incremental via per-item stamps, fail-closed on every seam), `IConnectorSyncHandler` module seam; legal: `connect_matter_folder`/`sync_matter_folder` → files attach to the matter AND index into its collection. Deferred: source-ACL snapshots onto chunks (needs an ACL-bearing source, i.e. phase 4's msgraph), scheduled auto-sync (manual/tool-triggered v1) |
+| **5** ✅ | Lane B: connector sync jobs → RAG ingestion, `ConnectorBinding` scoped folders (Harvey-style), ACL snapshot sync | **Shipped** (ahead of 4 — keyless-testable). `IConnectorSyncSource` (SDK), `ConnectorBinding` (one per resource, rebind replaces), `platform.connector-sync` job (incremental via per-item stamps, fail-closed on every seam), `IConnectorSyncHandler` module seam; legal: `connect_matter_folder`/`sync_matter_folder` → files attach to the matter AND index into its collection. Deferred: scheduled auto-sync (manual/tool-triggered v1) |
+| **6** ✅ | Generic-RAG completion: multilingual retrieval, facet filters, per-chunk ACLs, agent knowledge scoping, the curator UI, scale, and the RLS backstop | **Shipped.** Detailed below |
 
-Phase 1 is recommended as the next implementation slice: it's self-contained, keyless-testable,
-and both later lanes (connector sync, matter Q&A at scale) land on top of it.
+---
+
+## Part 4 — Phase 6: what "generic, for any domain and any country" required
+
+Phase 1 built the right *shape* — scoped collections, hybrid retrieval, fail-closed gates. Phase 6
+closed the gaps that shape left open once you point it at a real global product (a legal system
+serving many countries, thousands of documents per case, confidential material inside shared
+matters).
+
+### 4.1 Retrieval is multilingual now
+
+`tsv` shipped as a GENERATED column pinned to `to_tsvector('english', …)`. A generated column cannot
+vary per row, so *every* corpus was stemmed as English — Spanish contracts lost recall on every
+keyword query, and the product could not honestly claim to work outside English.
+
+- `RagCollection.Language` is the corpus default; `RagChunk.Language` is what each chunk's `tsv` was
+  actually built with, because one case holds documents in several languages.
+- `tsv` is now written at ingest with the chunk's own configuration (`LanguageDetector`: script
+  first — decisive for Cyrillic/Greek/Arabic — then weighted stop-word voting for Latin script).
+  It **declines to guess** on thin evidence and falls back to the collection default, then to
+  `simple`: a wrong stemmer costs recall on every future query, so not guessing is the better error.
+- The lexical arm joins `unnest(languages)` on the chunk's language, giving one *constant*
+  `plainto_tsquery` per configuration in scope — a per-row `regconfig` would defeat the GIN index.
+- `RagLanguage.Normalize` is the injection guard: only names from the supported set ever reach a
+  `regconfig` cast.
+- The migration stamps pre-existing rows `english` — what they were genuinely built with — rather
+  than letting the new `simple` default silently relabel them.
+
+### 4.2 Three narrowing layers, each fail-closed
+
+| Layer | Mechanism | Answers |
+|---|---|---|
+| Agent scope | `AgentProfile.CollectionScopes`, globs over `{module}/{resourceType\|-}/{name}` | "this assistant answers from the Spanish employment library and this matter, nothing else" |
+| Collection gate | `IRagCollectionGate` per resource type (phase 1) | "who may query this matter's corpus at all" |
+| Chunk ACL | `RagChunk.Principals`, set overlap inside **both** arms | "the partner-only memo inside a matter everyone else can see" |
+
+All three only ever *narrow*. Agent scope is applied server-side in `ResolveAccessibleCollectionsAsync`,
+so it cannot be escaped by the model choosing a `collection` argument — naming an out-of-scope
+collection returns nothing, and enumeration hides it too. Chunk ACLs are opt-in per document (empty
+means "the gate already decided") and are re-verified in managed code after fusion.
+
+Principals are opaque strings — `user:`, `role:`, `group:` — compared as a set and never parsed, so
+a connector can contribute a source system's own group ids without the retrieval path learning
+anything about either identity system. `IRagPrincipalResolver` is the seam; the default contributes
+the platform user and their roles. Deliberately **not** permissions: a permission says what you may
+do, a principal says who you are, and stamping documents with permissions would make "who can read
+this memo" drift every time a role baseline is edited.
+
+### 4.3 Facets are what make it domain-agnostic
+
+`Metadata` (jsonb) on both collection and chunk, filtered with containment inside both arms and
+indexed `GIN (metadata jsonb_path_ops)`. The platform never interprets the keys — it only filters on
+them. That is the whole trick behind "works for any domain": legal stamps `jurisdiction`/`lawArea`,
+property stamps `building`/`unit`, finance stamps `entity`/`fiscalYear`, and retrieval code is
+identical.
+
+Filter keys are **discovered from the corpus** rather than declared, so there is no registry to keep
+in sync, and `list_knowledge_collections` reports them — an agent asks what it can filter on instead
+of guessing.
+
+> Design note: one shared library filtered by `jurisdiction` beats one collection per country.
+> Cross-border questions stay answerable in a single query, and a 190-collection fan-out never
+> happens.
+
+### 4.4 Scale
+
+- Embeddings and `tsv` are written in batches of 200 via `unnest`, replacing one `UPDATE`
+  round-trip *per chunk*. A 3,000-document case is ~60K chunks; the old path was ~60K round trips.
+- `RagIndexMaintenance` promotes the table to HNSW once it crosses `Rag:IndexThresholdChunks`
+  (default 20,000), pinning the vector column to the dimension in use. Best-effort: an index is an
+  optimisation, so a failure is logged and ingestion still succeeds.
+- `hnsw.iterative_scan = relaxed_order` is set database-wide by the migration. Without it, an HNSW
+  index combined with the tenant/collection/ACL predicates silently loses recall.
+
+### 4.5 The curator surface
+
+Until phase 6, building a corpus meant writing C#. `/api/knowledge` + Admin → Knowledge give a
+non-engineer create / configure / index / re-index / delete, a document list, and — most usefully —
+a **retrieval preview that runs the identical code path the agent runs**, same gates, same ACLs,
+same ranking. Reads are gated exactly like retrieval, so the screen can never show a corpus the
+viewer could not search; writes need the new `platform.knowledge.manage`, kept separate from
+`platform.ai.manage` because a knowledge curator is a different job from an AI administrator.
+Module-owned, resource-bound collections are listed read-only — their lifecycle belongs to their
+resource.
+
+### 4.6 RLS, honestly
+
+`FORCE ROW LEVEL SECURITY` policies on both tables, keyed on a `plenipo.tenant_id` session variable
+published by `TenantSessionInterceptor` on every connection open. Two caveats stated plainly:
+
+1. **Superusers bypass RLS entirely**, `FORCE` included. A deployment connecting as a superuser
+   gets nothing from this layer. The integration test proves the property by dropping to a
+   non-superuser role, which is how production must be configured.
+2. The policies are **permissive when the setting is unset**, so migrations and cross-tenant
+   background scopes are unaffected. A fail-closed policy would be stronger but would turn any path
+   that forgot to publish the tenant into an outage instead of a safety net.
+
+Tenant isolation does not depend on RLS — query filters, the explicit predicate in both arms, and
+the gates each enforce it. It exists because hybrid search is the one raw-SQL path in the platform.
+
+### 4.7 Still open
+
+- **Page-range provenance.** Citations are `file id` + chunk ordinal; `IDocumentReader` is not
+  page-aware, so `PageFrom`/`PageTo` need extraction work first.
+- **No reranker.** Retrieval is hybrid + RRF at `ArmLimit = 50` per arm. A cross-encoder or
+  LLM rerank stage is the next real precision win at case scale.
+- **Connectors report no ACLs yet.** `ConnectorSyncFile` now *carries* `Principals`/`Metadata` and
+  the pipeline stamps them onto chunks, but no shipped source populates them —
+  `msgraph` would need Graph's permissions API. The plumbing is done; the sources are not.
+- **Scheduled auto-sync** is still manual/tool-triggered.
+- **Freshness/supersession.** A repealed statute ranks like a current one. Facets can express
+  `effectiveTo`, but nothing ranks on it.

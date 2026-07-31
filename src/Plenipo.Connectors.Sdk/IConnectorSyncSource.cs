@@ -8,7 +8,27 @@ namespace Plenipo.Connectors.Sdk;
 /// Change detector — hash, ETag, or last-modified ticks. Sync re-imports an item only when its
 /// stamp changed, so re-running a sync is cheap and never duplicates.
 /// </param>
-public sealed record ConnectorSyncFile(string Id, string Name, string ContentType, string ContentStamp);
+/// <param name="Principals">
+/// Who may retrieve this file's content, in the source's own terms — typically
+/// <c>group:{externalId}</c> for each principal on the source ACL. Null or empty means the source
+/// reports no per-item restriction, and the resource's own gate is the only control.
+/// <para>
+/// This is a CACHE of the source's ACL, not the source of truth: it is as fresh as the last sync,
+/// which is why it narrows within a gate rather than replacing one. A source that can report ACLs
+/// should; one that cannot returns null and loses nothing it previously had.
+/// </para>
+/// </param>
+/// <param name="Metadata">
+/// Source-reported facets to stamp on the file's passages (site, library, author, classification).
+/// Becomes filterable at retrieval time without the platform interpreting any of the keys.
+/// </param>
+public sealed record ConnectorSyncFile(
+    string Id,
+    string Name,
+    string ContentType,
+    string ContentStamp,
+    IReadOnlyList<string>? Principals = null,
+    IReadOnlyDictionary<string, string>? Metadata = null);
 
 /// <summary>
 /// The sync lane (Lane B) of a connector: enumerate and open files under an admin/tool-chosen

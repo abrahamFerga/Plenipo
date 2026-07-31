@@ -52,4 +52,16 @@ public sealed class AgentProfile : EntityBase, ITenantOwned
     /// the tenant's (or deployment's) provider. Null = the tenant/deployment default model.
     /// </summary>
     public string? Model { get; set; }
+
+    /// <summary>
+    /// Which knowledge collections this agent may retrieve from, as patterns over a collection's
+    /// canonical path <c>{moduleId}/{resourceType|-}/{name}</c> — e.g. <c>legal/matter/*</c> for
+    /// "any matter the user can see", or <c>legal/-/ES employment law</c> for one statute library.
+    /// Null or empty = every collection the caller's RBAC already allows (the pre-scoping behaviour).
+    /// Like <see cref="ToolNames"/> this can only NARROW: the collection gate still runs, so a scope
+    /// never exposes a corpus the user could not otherwise reach. This is what makes a purpose-built
+    /// agent ("the Spanish employment-law assistant") answer from the right corpus by policy rather
+    /// than by trusting the model to pass the right collection argument.
+    /// </summary>
+    public List<string>? CollectionScopes { get; set; }
 }

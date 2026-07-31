@@ -32,4 +32,20 @@ public sealed class RagOptions
 
     /// <summary>Default number of passages a search returns.</summary>
     public int TopK { get; set; } = 8;
+
+    /// <summary>
+    /// Default Postgres text-search configuration for new collections when none is given. "simple"
+    /// (no stemming, no stop-words) is the safe default for a deployment serving many countries: it
+    /// under-retrieves slightly rather than applying the wrong language's stemmer. A single-language
+    /// deployment should set its own ("english", "spanish", …), and any collection can override.
+    /// </summary>
+    public string DefaultLanguage { get; set; } = "simple";
+
+    /// <summary>
+    /// Chunk count past which a collection gets its own approximate vector index instead of relying
+    /// on exact scan. Below it, exact scan gives perfect recall for free; above it, latency grows
+    /// linearly and an HNSW index is worth its build and maintenance cost.
+    /// </summary>
+    public int IndexThresholdChunks { get; set; } = 20_000;
+
 }

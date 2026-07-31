@@ -9,6 +9,7 @@ import { IntegrationsAdmin } from "./IntegrationsAdmin";
 import { TenantsAdmin } from "./TenantsAdmin";
 import { AiSettingsAdmin } from "./AiSettingsAdmin";
 import { AgentProfilesAdmin } from "./AgentProfilesAdmin";
+import { KnowledgeAdmin } from "./KnowledgeAdmin";
 import { UsageDashboard } from "./UsageDashboard";
 import { AuditLog } from "./AuditLog";
 import { OpsView } from "./OpsView";
@@ -22,6 +23,7 @@ const SECTIONS = [
   { to: "/tenants", label: "Tenants", end: false },
   { to: "/ai", label: "AI Settings", end: false },
   { to: "/agents", label: "Agent Profiles", end: false },
+  { to: "/knowledge", label: "Knowledge", end: false },
   { to: "/usage", label: "Token Usage", end: false },
   { to: "/audit", label: "Audit Log", end: false },
   { to: "/ops", label: "Operations", end: false },
@@ -91,6 +93,7 @@ export function AdminPage() {
             <Route path="users" element={<UsersAdmin />} />
             <Route path="modules" element={<ModulesAdmin />} />
             <Route path="integrations" element={<IntegrationsAdmin />} />
+            <Route path="knowledge" element={<KnowledgeAdmin />} />
             <Route path="tenants" element={<TenantsAdmin />} />
             <Route path="ai" element={<AiSettingsAdmin />} />
             <Route path="agents" element={<AgentProfilesAdmin />} />
