@@ -21,7 +21,7 @@ function renderTopBar(branding: PlenipoBranding = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <MemoryRouter>
         <ActiveModuleContext.Provider
           value={{ modules: [], activeModule: undefined, activeModuleId: undefined, setActiveModuleId: () => {} }}
         >

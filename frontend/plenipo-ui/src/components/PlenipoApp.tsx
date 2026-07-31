@@ -81,8 +81,7 @@ export function PlenipoApp({ moduleUi, branding, queryClient, config }: PlenipoA
     // (A module tab's own crash is contained closer in by TabErrorBoundary and never reaches this.)
     <AppErrorBoundary>
       <QueryClientProvider client={client}>
-        {/* Opt into the React Router v7 behaviors (matches the dev harness); the shell uses absolute links. */}
-        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <BrowserRouter>
           <AppShell moduleUi={moduleUi} branding={branding} />
         </BrowserRouter>
       </QueryClientProvider>
