@@ -13,4 +13,17 @@ public interface IOcrEngine
 
     /// <summary>Extracts text from a scanned PDF or image. Null when the content can't be processed.</summary>
     public Task<string?> ExtractTextAsync(Stream content, string contentType, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Page-aware extraction, for engines whose API reports where each page's text sits. The default
+    /// returns the flat text with no page information, so an existing engine keeps working unchanged
+    /// and simply yields passages that cite a file without a page — the same result as before this
+    /// existed. Override it when the engine can do better.
+    /// </summary>
+    public async Task<DocumentText?> ExtractAsync(
+        Stream content, string contentType, CancellationToken cancellationToken = default)
+    {
+        var text = await ExtractTextAsync(content, contentType, cancellationToken);
+        return text is null ? null : DocumentText.Unpaged(text);
+    }
 }

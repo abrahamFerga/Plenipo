@@ -243,7 +243,8 @@ public sealed class MatterTools(
         }
 
         var collectionId = await rag.GetOrCreateCollectionAsync(
-            LegalModule.Id, MatterRagGate.MatterResourceType, matter.Id, $"matter: {matter.Name}", cancellationToken);
+            LegalModule.Id, MatterRagGate.MatterResourceType, matter.Id, $"matter: {matter.Name}",
+            cancellationToken: cancellationToken);
         var jobId = await jobs.EnqueueAsync(
             LegalModule.Id, RagIngestJob.Kind, new RagIngestArgs(collectionId, fileIds), cancellationToken);
 

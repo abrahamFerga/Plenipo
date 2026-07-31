@@ -17,6 +17,13 @@ public static class Permissions
     public const string ManageNotifications = "platform.notifications.manage";
     public const string ViewAuditLog = "platform.audit.view";
 
+    /// <summary>
+    /// Build and curate knowledge collections. Separate from <see cref="ManageAiSettings"/> because
+    /// a knowledge curator (a librarian, a knowledge-management lead) is a different job from an AI
+    /// administrator, and shipping them fused would force tenants to over-grant one to get the other.
+    /// </summary>
+    public const string ManageKnowledge = "platform.knowledge.manage";
+
     // Chat / agent surface
     public const string UseChat = "chat.use";
     public const string ViewConversations = "chat.conversations.view";

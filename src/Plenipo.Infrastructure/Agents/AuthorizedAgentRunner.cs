@@ -50,6 +50,7 @@ public sealed class AuthorizedAgentRunner(
     ISkillCatalog skillCatalog,
     ICurrentUser currentUser,
     IAgentSecurityService agentSecurity,
+    Plenipo.Infrastructure.Context.AgentExecutionContext agentExecution,
     IOptions<AiOptions> aiOptions,
     ILogger<AuthorizedAgentRunner> logger) : IAuthorizedAgentRunner
 {
@@ -154,6 +155,11 @@ public sealed class AuthorizedAgentRunner(
         {
             profile = await agentProfiles.ResolveActiveAsync(request.ModuleId, cancellationToken);
         }
+
+        // Publish the agent's knowledge scope for the turn, so retrieval narrows by policy rather
+        // than by trusting the model to pass the right collection argument. Set before any tool can
+        // run; like the tool selection it only ever narrows what RBAC and the gates already allow.
+        agentExecution.SetCollectionScopes(profile?.CollectionScopes);
 
         // Per-turn model pick (Claude-Code-style): honoured only from the advertised list, so a
         // client can never steer the turn onto an arbitrary model string. Beats the agent's pin.

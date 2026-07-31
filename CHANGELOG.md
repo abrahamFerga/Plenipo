@@ -16,6 +16,81 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
 
 ### Changed
 
+- **Retrieval now has a precision pass: results are reranked, not just fused.** Hybrid search is
+  recall-oriented by design — it casts a wide net and fuses two arms that disagree about what
+  "similar" means — and the top-K was being taken straight off that fusion. At corpus scale that
+  fails in a specific way: a firm's templates repeat the same clause across dozens of documents, so
+  a window of eight results becomes eight copies of one clause and the model sees one fact repeated
+  instead of eight facts.
+
+  `IRagReranker` receives the candidates and returns the final ordering. Retrieval asks it how deep
+  a shortlist it wants and widens both arms to match, so `TopK=8` now considers 40 candidates by
+  default. A reranker may only re-order and truncate, and it runs **after** every access check, so a
+  deeper pool can never surface something the agent scope, collection gate, chunk ACL or metadata
+  filter excluded.
+
+  `Rag:Reranker` defaults to **`Mmr`** — maximal marginal relevance over the candidates' own
+  vectors. Keyless, deterministic, and costs only arithmetic; at `MmrLambda=0.7` diversity breaks
+  near ties without ever letting a merely *different* passage outrank a much more relevant one.
+  `Llm` is opt-in and scores each passage against the query with the tenant's chat model
+  (cross-encoder) — the most accurate option, at a model call per search; it falls back to
+  retrieval order on any failure rather than failing the search. `None` restores the previous
+  behaviour.
+
+  **This changes result ordering on upgrade**, because `Mmr` is on by default. Set
+  `Rag:Reranker=None` to keep the old ordering exactly.
+
+- **Retrieved passages cite the page they came from.** An answer can now say "p. 7" (or "pp. 3–4"
+  when a passage straddles a break) instead of only naming a file — the difference between a
+  citation a reader can check and one they have to hunt through. PdfPig already walked the document
+  page by page and the number was being discarded; `IDocumentReader.ExtractAsync` now returns the
+  text together with each page's character range, `TextChunker` returns chunks as contiguous slices
+  with offsets into that text, and the two are joined at ingest into `RagChunk.PageFrom`/`PageTo`.
+
+  Chunks being *slices* rather than paragraphs re-joined with `\n\n` is what makes the offsets
+  trustworthy — a chunk stitched from non-adjacent pieces could not honestly claim a page range —
+  and it preserves the source text verbatim as a side effect.
+
+  Sources with no pages, and OCR engines that cannot report them, stay null and cite the file alone:
+  a default of page 1 would be a fabricated citation, which is worse than none because it looks
+  checkable. `IOcrEngine.ExtractAsync` is default-implemented so existing engines are unaffected;
+  the Azure Document Intelligence engine overrides it using the page spans its API already returns,
+  so scanned documents get page citations too.
+
+- **Knowledge retrieval works outside English, filters by domain facets, and trims per user.**
+  The RAG pipeline shipped with a `tsv` column generated as `to_tsvector('english', …)` — a
+  generated column cannot vary per row, so every corpus in every deployment was stemmed as English.
+  A Spanish or German corpus lost recall on every keyword query. `tsv` is now written at ingest with
+  each chunk's own text-search configuration, detected per document (script first, then weighted
+  stop-word voting, declining to guess on thin evidence), and the lexical arm builds one constant
+  `plainto_tsquery` per configuration in scope so the GIN index still applies. Existing rows are
+  stamped `english` by the migration — what they were actually built with — rather than being
+  relabelled by the new `simple` default.
+
+  Retrieval now also narrows three ways instead of one, each failing closed and each able only to
+  narrow: an agent's `CollectionScopes` (globs over `{module}/{resourceType|-}/{name}`, applied
+  server-side so the model cannot escape them by choosing arguments), the existing per-resource
+  collection gate, and new per-chunk `Principals` for confidential material inside a shared corpus.
+  Free-form `metadata` on collections and chunks is filterable with jsonb containment inside both
+  arms — the platform never interprets the keys, which is what lets one design serve legal
+  (`jurisdiction=ES`), property, and finance without change.
+
+  Supporting work: `/api/knowledge` and an Admin → Knowledge page (create, configure, index,
+  re-index, delete, plus a retrieval preview that runs the agent's exact code path) so building a
+  corpus no longer means writing C#; a new `list_knowledge_collections` tool so an agent can
+  discover its own corpora and their filter keys; batched embedding writes via `unnest` replacing
+  one round trip per chunk; automatic HNSW promotion past `Rag:IndexThresholdChunks` with
+  `hnsw.iterative_scan` set database-wide; `ConnectorSyncFile` carrying source principals and
+  metadata through Lane B into chunks; and a `FORCE ROW LEVEL SECURITY` backstop on both retrieval
+  tables — effective only on a non-superuser connection, which
+  [docs/CONFIGURATION.md](docs/CONFIGURATION.md) now states explicitly and the integration test
+  proves by dropping privileges. See [docs/PLATFORM_CONNECTORS_RAG_PLAN.md](docs/PLATFORM_CONNECTORS_RAG_PLAN.md) Part 4.
+
+  Breaking for module authors: `IConnectorSyncHandler.OnFilesSyncedAsync` now receives
+  `IReadOnlyList<SyncedFile>` instead of `IReadOnlyList<Guid>`, and `IRagService`'s
+  `GetOrCreateCollectionAsync`/`IngestFileAsync` gained optional parameters before the
+  `CancellationToken` — pass it by name.
+
 - **Role baselines are now declaration-anchored: a tenant stores what it CHANGED, not the whole set.**
   A permission — or a whole role — that a product declares with `AddPlenipoRole` now reaches every
   tenant immediately, including tenants provisioned long before the declaration changed, with no

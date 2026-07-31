@@ -10,6 +10,13 @@ public interface IDocumentReader
 {
     /// <summary>The file's text, or null when the file doesn't exist or isn't a readable document.</summary>
     public Task<string?> ExtractTextAsync(Guid fileId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The same extraction, plus page boundaries when the source is paginated and the extractor can
+    /// report them. Retrieval uses this so a cited passage can name its page; callers that only need
+    /// the text should keep using <see cref="ExtractTextAsync"/>.
+    /// </summary>
+    public Task<DocumentText?> ExtractAsync(Guid fileId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

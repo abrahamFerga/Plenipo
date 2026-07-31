@@ -57,6 +57,7 @@ public sealed class AgentProfileResolver(PlatformDbContext db, IModuleCatalog mo
         Instructions = d.Instructions,
         Mode = d.ReplaceInstructions ? AgentProfileMode.Replace : AgentProfileMode.Append,
         ToolNames = d.ToolNames?.ToList(),
+        CollectionScopes = d.CollectionScopes?.ToList(),
         Model = d.Model,
         IsDefault = d.IsDefault,
     };

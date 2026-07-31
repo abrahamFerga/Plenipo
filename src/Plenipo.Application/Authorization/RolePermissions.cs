@@ -23,6 +23,7 @@ public static class RolePermissions
             Permissions.ManageModules,
             Permissions.ManageConnectors,
             Permissions.ManageAiSettings,
+            Permissions.ManageKnowledge,
             Permissions.ManageNotifications,
             Permissions.ViewAuditLog,
             "chat.*",
@@ -49,6 +50,7 @@ public static class RolePermissions
             "tools.documents.list_documents",
             "tools.documents.ocr_document",
             "tools.knowledge.search_knowledge",
+            "tools.knowledge.list_knowledge_collections",
         ],
 
         // guest is read-only.

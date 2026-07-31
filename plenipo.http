@@ -331,7 +331,18 @@ X-Dev-Subject: {{subject}}
 X-Dev-Tenant: {{tenant}}
 X-Dev-Roles: {{roles}}
 
-{ "moduleId": "legal", "name": "Litigation voice", "instructions": "Answer tersely, litigation posture.", "mode": "Append", "isDefault": true, "toolNames": null, "model": null }
+{ "moduleId": "legal", "name": "Litigation voice", "instructions": "Answer tersely, litigation posture.", "mode": "Append", "isDefault": true, "toolNames": null, "collectionScopes": null, "model": null }
+
+### Agent profiles — a knowledge-scoped agent (retrieval bound to one library + any matter)
+# collectionScopes are globs over "{moduleId}/{resourceType|-}/{name}". They intersect with the
+# collection gates, so this narrows what the agent can retrieve and can never widen it.
+PUT {{baseUrl}}/api/admin/agent-profiles
+Content-Type: application/json
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+{ "moduleId": "legal", "name": "Spanish employment", "instructions": "Answer only from Spanish employment law; cite file ids.", "mode": "Append", "isDefault": false, "toolNames": ["search_knowledge", "list_knowledge_collections"], "collectionScopes": ["knowledge/-/ES *", "legal/matter/*"], "model": null }
 
 ### Agent profiles — delete
 DELETE {{baseUrl}}/api/admin/agent-profiles/00000000-0000-0000-0000-000000000000
@@ -457,6 +468,84 @@ X-Dev-Roles: {{roles}}
 
 ### Playbook rules (the review standard; POST/DELETE are library-manage-gated)
 GET {{baseUrl}}/api/legal/playbook
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+# ── Knowledge (opt-in RAG) ──────────────────────────────────────────────────
+# Requires Rag:Enabled — otherwise every call here returns 503 with an explanation.
+# Reads are gated exactly like retrieval: you only see corpora you could search yourself.
+# Writes need platform.knowledge.manage.
+
+### Collections you can search, with sizes and the facet keys you may filter on
+GET {{baseUrl}}/api/knowledge
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### The text-search configurations this deployment can index with (drives the language picker)
+GET {{baseUrl}}/api/knowledge/languages
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Create a curated library (unbound — module-owned, resource-bound corpora are read-only here)
+POST {{baseUrl}}/api/knowledge
+Content-Type: application/json
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+{ "name": "ES employment law", "language": "spanish", "metadata": { "jurisdiction": "ES", "lawArea": "employment" } }
+
+### Index stored files into it. Principals restrict the passages; metadata makes them filterable.
+# Returns a jobId — ingestion is a background job (extraction + embedding are too slow for a request).
+POST {{baseUrl}}/api/knowledge/00000000-0000-0000-0000-000000000000/documents
+Content-Type: application/json
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+{ "fileIds": ["00000000-0000-0000-0000-000000000000"], "principals": ["role:equity-partner"], "metadata": { "jurisdiction": "ES", "effectiveYear": "2026" }, "language": null }
+
+### Documents in a collection (file, passage count, detected language)
+GET {{baseUrl}}/api/knowledge/00000000-0000-0000-0000-000000000000/documents
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Retrieval preview — the identical path the agent takes (same gates, ACLs, ranking)
+POST {{baseUrl}}/api/knowledge/search
+Content-Type: application/json
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+{ "query": "notice period for termination", "collection": null, "topK": 5, "filters": { "jurisdiction": "ES" } }
+
+### Rename / relanguage / retag a curated collection (language applies to FUTURE documents)
+PATCH {{baseUrl}}/api/knowledge/00000000-0000-0000-0000-000000000000
+Content-Type: application/json
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+{ "name": "ES employment law (2026)", "language": null, "metadata": { "jurisdiction": "ES" } }
+
+### Re-index everything — what you run after changing the language or the embedding model
+POST {{baseUrl}}/api/knowledge/00000000-0000-0000-0000-000000000000/reindex
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Drop one document's passages (the source file stays in the file store)
+DELETE {{baseUrl}}/api/knowledge/00000000-0000-0000-0000-000000000000/documents/00000000-0000-0000-0000-000000000000
+X-Dev-Subject: {{subject}}
+X-Dev-Tenant: {{tenant}}
+X-Dev-Roles: {{roles}}
+
+### Delete a curated collection and all its passages (409 for module-owned ones)
+DELETE {{baseUrl}}/api/knowledge/00000000-0000-0000-0000-000000000000
 X-Dev-Subject: {{subject}}
 X-Dev-Tenant: {{tenant}}
 X-Dev-Roles: {{roles}}

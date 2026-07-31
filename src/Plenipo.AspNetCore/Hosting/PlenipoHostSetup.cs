@@ -174,6 +174,7 @@ public static class PlenipoHostSetup
         app.MapChatEndpoints();
         app.MapFileEndpoints();
         app.MapJobEndpoints();
+        app.MapKnowledgeEndpoints();
         app.MapApprovalEndpoints();
         app.MapDisclosureEndpoints();
         app.MapNotificationEndpoints();

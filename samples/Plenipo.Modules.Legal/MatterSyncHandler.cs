@@ -16,13 +16,13 @@ namespace Plenipo.Modules.Legal;
 /// </summary>
 public sealed class MatterSyncHandler(
     LegalDbContext db,
-    IFileStore files,
+    IFileStore fileStore,
     ICurrentUser currentUser,
     IRagService? rag = null) : IConnectorSyncHandler
 {
     public string ResourceType => MatterRagGate.MatterResourceType;
 
-    public async Task OnFilesSyncedAsync(Guid resourceId, IReadOnlyList<Guid> fileIds, CancellationToken cancellationToken = default)
+    public async Task OnFilesSyncedAsync(Guid resourceId, IReadOnlyList<SyncedFile> files, CancellationToken cancellationToken = default)
     {
         var matter = await db.Matters.FirstOrDefaultAsync(m => m.Id == resourceId, cancellationToken);
         if (matter is null || !matter.IsAccessibleTo(currentUser.UserId))
@@ -30,23 +30,23 @@ public sealed class MatterSyncHandler(
             throw new InvalidOperationException("The bound matter no longer exists or is behind an ethical wall.");
         }
 
-        foreach (var fileId in fileIds)
+        foreach (var synced in files)
         {
-            var file = await files.FindAsync(fileId, cancellationToken);
+            var file = await fileStore.FindAsync(synced.FileId, cancellationToken);
             if (file is null)
             {
                 continue;
             }
 
             var attached = await db.MatterDocuments
-                .AnyAsync(d => d.MatterId == matter.Id && d.FileId == fileId, cancellationToken);
+                .AnyAsync(d => d.MatterId == matter.Id && d.FileId == synced.FileId, cancellationToken);
             if (!attached)
             {
                 db.MatterDocuments.Add(new MatterDocument
                 {
                     TenantId = matter.TenantId,
                     MatterId = matter.Id,
-                    FileId = fileId,
+                    FileId = synced.FileId,
                     FileName = file.FileName,
                     Note = "synced from connector",
                 });
@@ -58,10 +58,16 @@ public sealed class MatterSyncHandler(
         if (rag is not null)
         {
             var collectionId = await rag.GetOrCreateCollectionAsync(
-                LegalModule.Id, MatterRagGate.MatterResourceType, matter.Id, $"matter: {matter.Name}", cancellationToken);
-            foreach (var fileId in fileIds)
+                LegalModule.Id, MatterRagGate.MatterResourceType, matter.Id, $"matter: {matter.Name}",
+                cancellationToken: cancellationToken);
+            foreach (var synced in files)
             {
-                await rag.IngestFileAsync(collectionId, fileId, cancellationToken);
+                // The source's own ACL and facets ride along, so a document that was restricted in
+                // SharePoint stays restricted once it is a retrievable passage here.
+                await rag.IngestFileAsync(
+                    collectionId, synced.FileId,
+                    new RagIngestOptions { Principals = synced.Principals, Metadata = synced.Metadata },
+                    cancellationToken);
             }
         }
     }

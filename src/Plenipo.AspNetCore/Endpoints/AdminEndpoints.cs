@@ -193,7 +193,7 @@ public static class AdminEndpoints
 
             var profiles = await query
                 .OrderBy(p => p.ModuleId).ThenBy(p => p.Name)
-                .Select(p => new AgentProfileDto(p.Id, p.ModuleId, p.Name, p.Instructions, p.Mode.ToString(), p.IsDefault, p.ToolNames, p.Model))
+                .Select(p => new AgentProfileDto(p.Id, p.ModuleId, p.Name, p.Instructions, p.Mode.ToString(), p.IsDefault, p.ToolNames, p.CollectionScopes, p.Model))
                 .ToListAsync(ct);
             return Results.Ok(profiles);
         })
@@ -254,6 +254,34 @@ public static class AdminEndpoints
                 }
             }
 
+            // Knowledge scoping: null/empty = every collection the caller may already access.
+            // Patterns are globs over "{moduleId}/{resourceType|-}/{name}", and collection names are
+            // free text, so validation bounds the size rather than the alphabet — the patterns only
+            // ever narrow a set the gates already approved, so a malformed one costs recall, not safety.
+            List<string>? collectionScopes = null;
+            if (body.CollectionScopes is { Count: > 0 })
+            {
+                collectionScopes = body.CollectionScopes
+                    .Select(t => t?.Trim() ?? "")
+                    .Where(t => t.Length > 0)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList();
+                if (collectionScopes.Count > 100)
+                {
+                    return Results.BadRequest("collectionScopes: at most 100 patterns.");
+                }
+
+                if (collectionScopes.Any(t => t.Length > 400))
+                {
+                    return Results.BadRequest("collectionScopes: each entry must be 400 characters or fewer.");
+                }
+
+                if (collectionScopes.Count == 0)
+                {
+                    collectionScopes = null;
+                }
+            }
+
             var profileModel = string.IsNullOrWhiteSpace(body.Model) ? null : body.Model.Trim();
             if (profileModel is { Length: > 200 })
             {
@@ -283,6 +311,7 @@ public static class AdminEndpoints
                     Mode = mode,
                     IsDefault = body.IsDefault,
                     ToolNames = toolNames,
+                    CollectionScopes = collectionScopes,
                     Model = profileModel,
                 };
                 db.AgentProfiles.Add(profile);
@@ -293,11 +322,12 @@ public static class AdminEndpoints
                 profile.Mode = mode;
                 profile.IsDefault = body.IsDefault;
                 profile.ToolNames = toolNames;
+                profile.CollectionScopes = collectionScopes;
                 profile.Model = profileModel;
             }
 
             await db.SaveChangesAsync(ct);
-            return Results.Ok(new AgentProfileDto(profile.Id, profile.ModuleId, profile.Name, profile.Instructions, profile.Mode.ToString(), profile.IsDefault, profile.ToolNames, profile.Model));
+            return Results.Ok(new AgentProfileDto(profile.Id, profile.ModuleId, profile.Name, profile.Instructions, profile.Mode.ToString(), profile.IsDefault, profile.ToolNames, profile.CollectionScopes, profile.Model));
         })
         .RequireAuthorization(PermissionRequirement.PolicyName(Permissions.ManageAiSettings))
         .WithName("Admin_UpsertAgentProfile");
@@ -1463,12 +1493,12 @@ public static class AdminEndpoints
 
     private sealed record AgentProfileDto(
         Guid Id, string ModuleId, string Name, string Instructions, string Mode, bool IsDefault,
-        IReadOnlyList<string>? ToolNames, string? Model);
+        IReadOnlyList<string>? ToolNames, IReadOnlyList<string>? CollectionScopes, string? Model);
 
     /// <summary>Create or update a named agent profile for a module (matched by moduleId + name).</summary>
     private sealed record AgentProfileRequest(
         string? ModuleId, string? Name, string? Instructions, string? Mode, bool IsDefault,
-        IReadOnlyList<string>? ToolNames, string? Model);
+        IReadOnlyList<string>? ToolNames, IReadOnlyList<string>? CollectionScopes, string? Model);
 
     private sealed record InstructionSnapshotDto(string Hash, string Instructions, DateTimeOffset FirstSeenAt);
 

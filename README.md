@@ -32,7 +32,7 @@ ship it. It unifies the patterns proven in two earlier apps — **NutriForge** (
 | **Tool security before the model call** | The agent runner filters tools by the caller's permissions **before** building the request — the LLM never sees the schema of a tool the user may not call. |
 | **Agent guardrails** | Tenant admins can run prompt-attack, harmful-content, and sensitive-data controls in audit or enforcement mode across user input, tool calls, tool responses, and final output. See [docs/AGENT_SECURITY.md](docs/AGENT_SECURITY.md). |
 | **Documents built in** | Every module's agent gets platform **document tools** — read PDFs (PdfPig, Apache-2.0), generate PDFs, list files, pluggable OCR — over a tenant-scoped file store with chat attachments in the UI. See [docs/DOCUMENT_TOOLS.md](docs/DOCUMENT_TOOLS.md). |
-| **Knowledge search (opt-in RAG)** | Documents index into **scoped collections** (per matter/project); `search_knowledge` retrieves hybrid (pgvector + full-text, RRF) with per-passage citations, gated per collection through the owning module and **failing closed**. Keyless in dev via a deterministic Mock embedder. See [docs/PLATFORM_CONNECTORS_RAG_PLAN.md](docs/PLATFORM_CONNECTORS_RAG_PLAN.md). |
+| **Knowledge search (opt-in RAG)** | Documents index into **scoped collections** (per matter/project, or curated libraries built in Admin → Knowledge); `search_knowledge` retrieves hybrid (pgvector + full-text, RRF), **reranked** (MMR by default, optional LLM cross-encoder) so repeated boilerplate can't crowd out the answer, with per-passage citations **down to the page** (`p. 7`) for paginated sources. Narrowed at three levels, each failing closed: the **agent's** collection scope, the owning module's **collection gate**, and **per-chunk principal** trimming. **Language-aware** (per-document stemming, not English-only) and **facet-filterable** (`jurisdiction=ES`), which is what lets one design serve any domain and any country. Keyless in dev via a deterministic Mock embedder. See [docs/PLATFORM_CONNECTORS_RAG_PLAN.md](docs/PLATFORM_CONNECTORS_RAG_PLAN.md). |
 | **Agent composition (profiles + skills + MCP)** | Tenant admins compose chatbots Foundry/Copilot-Studio-style without code: **agent profiles** set a module agent's instructions *and which tools it may use* (selection only narrows RBAC); **skills** (SKILL.md bundles) ship with the host; **MCP servers** configured by the operator (`Mcp:Servers`) surface external tools through the same spine — RBAC-gated (`tools.mcp.*`, granted to no role by default), audited, approval-gated by default. |
 | **Connectors** | A manifest-first **connector SDK** bridges agents to where tenant data already lives (Azure Blob ships; a keyless local-folder connector powers dev/CI). **Default-off per tenant** — an admin enables each on the console's Integrations page; secrets are write-only and protected at rest; fetches are approval-gated and land in the file store. |
 | **Audit everything** | Every tool invocation, data change, and token spend is written to a separate, append-only audit database. |
@@ -329,9 +329,9 @@ green, and the React frontend has vitest unit tests (permission/API/chat-client 
 Open items: provision the Entra External ID tenant + user flows (the app registrations are already
 Terraform-managed, and the publish-on-release workflow is wired — it just needs a tagged release).
 
-Next platform capabilities — **data-source connectors** (SharePoint/M365, Azure Blob, …; per-tenant
-enable/disable), an **OpenClaw-style `plenipo init` install wizard**, and an opt-in **permission-aware
-RAG pipeline** (per-matter/per-project collections, hybrid retrieval, ACL-trimmed) — are designed in
+Data-source connectors, the `plenipo init` wizard, and the permission-aware RAG pipeline have all
+shipped; their design and the remaining open items (connector-reported source ACLs, scheduled sync,
+freshness ranking) are in
 [docs/PLATFORM_CONNECTORS_RAG_PLAN.md](docs/PLATFORM_CONNECTORS_RAG_PLAN.md).
 
 Also queued, driven by a consuming product's v2 plan — **richer chart kinds** (donut/bar,

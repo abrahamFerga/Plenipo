@@ -13,6 +13,11 @@ interface EditorState {
   isDefault: boolean;
   /** null = every permitted tool; a list = only those tools (narrows RBAC, never widens it). */
   toolNames: string[] | null;
+  /**
+   * Newline-separated collection patterns; blank = every collection the caller can already reach.
+   * Kept as raw text in the editor so a curator can paste a list without fighting a tag widget.
+   */
+  collectionScopes: string;
   /** Per-agent model within the tenant's provider; "" = inherit the tenant/deployment model. */
   model: string;
 }
@@ -24,6 +29,7 @@ const emptyEditor = (moduleId: string): EditorState => ({
   mode: "Append",
   isDefault: true,
   toolNames: null,
+  collectionScopes: "",
   model: "",
 });
 
@@ -46,7 +52,12 @@ export function AgentProfilesAdmin() {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["admin", "agent-profiles"] });
   const save = useMutation({
-    mutationFn: (p: EditorState) => api.admin.upsertAgentProfile({ ...p, model: p.model.trim() || null }),
+    mutationFn: (p: EditorState) =>
+      api.admin.upsertAgentProfile({
+        ...p,
+        model: p.model.trim() || null,
+        collectionScopes: splitScopes(p.collectionScopes),
+      }),
     onSuccess: () => {
       setEditor(null);
       invalidate();
@@ -128,7 +139,14 @@ export function AgentProfilesAdmin() {
               <div className="flex shrink-0 gap-2">
                 <button
                   type="button"
-                  onClick={() => setEditor({ ...p, toolNames: p.toolNames ?? null, model: p.model ?? "" })}
+                  onClick={() =>
+                    setEditor({
+                      ...p,
+                      toolNames: p.toolNames ?? null,
+                      collectionScopes: (p.collectionScopes ?? []).join("\n"),
+                      model: p.model ?? "",
+                    })
+                  }
                   className="focus-ring rounded border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 dark:border-slate-600 dark:text-slate-300"
                 >
                   Edit
@@ -249,6 +267,24 @@ export function AgentProfilesAdmin() {
             onChange={(toolNames) => setEditor({ ...editor, toolNames })}
             catalog={catalog.data}
           />
+
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Knowledge scope</span>
+            <p className="mb-1 text-xs text-slate-500 dark:text-slate-400">
+              Which knowledge collections this agent may retrieve from — one pattern per line, over{" "}
+              <code className="font-mono">{"{module}/{resourceType|-}/{name}"}</code>. For example{" "}
+              <code className="font-mono">legal/matter/*</code> for any matter the user can see, or{" "}
+              <code className="font-mono">knowledge/-/Spanish employment law</code> for one library.
+              Leave blank for every collection the user can already reach. This only ever narrows.
+            </p>
+            <textarea
+              rows={3}
+              value={editor.collectionScopes}
+              onChange={(e) => setEditor({ ...editor, collectionScopes: e.target.value })}
+              placeholder={"legal/matter/*\nknowledge/-/Spanish employment law"}
+              className="focus-ring w-full rounded border border-slate-300 px-2 py-1.5 font-mono text-xs dark:border-slate-600 dark:bg-slate-800"
+            />
+          </label>
 
           {save.isError && <p className="text-xs text-red-600">{(save.error as Error).message}</p>}
 
@@ -378,4 +414,13 @@ function ToolPicker({
       )}
     </div>
   );
+}
+
+/** Newline/comma separated patterns → the array the API expects; blank means "no narrowing". */
+function splitScopes(raw: string): string[] | null {
+  const scopes = raw
+    .split(/[\n,]/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  return scopes.length > 0 ? scopes : null;
 }

@@ -26,6 +26,17 @@ public interface IConnectorBindingService
 }
 
 /// <summary>
+/// One file the platform just imported, with whatever access and facet information the source
+/// reported alongside it. Handlers pass <see cref="Principals"/> and <see cref="Metadata"/> straight
+/// through to ingestion so a synced document keeps its source's restrictions instead of becoming
+/// readable by everyone who can see the resource.
+/// </summary>
+public sealed record SyncedFile(
+    Guid FileId,
+    IReadOnlyList<string>? Principals = null,
+    IReadOnlyDictionary<string, string>? Metadata = null);
+
+/// <summary>
 /// The module side of a sync: after the platform imports a binding's new/changed files into the
 /// tenant file store, the handler for the binding's resource type takes over — attach them to the
 /// resource, index them into its knowledge collection, whatever the domain needs. No handler for a
@@ -36,6 +47,6 @@ public interface IConnectorSyncHandler
     /// <summary>The <c>ConnectorBinding.ResourceType</c> this handler covers (e.g. "matter").</summary>
     public string ResourceType { get; }
 
-    /// <summary>Called with the file-store ids of newly imported (new or changed) files.</summary>
-    public Task OnFilesSyncedAsync(Guid resourceId, IReadOnlyList<Guid> fileIds, CancellationToken cancellationToken = default);
+    /// <summary>Called with the newly imported (new or changed) files and their source-reported access.</summary>
+    public Task OnFilesSyncedAsync(Guid resourceId, IReadOnlyList<SyncedFile> files, CancellationToken cancellationToken = default);
 }

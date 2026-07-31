@@ -19,7 +19,7 @@ namespace Plenipo.Infrastructure.Persistence.Migrations.Platform
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("platform")
-                .HasAnnotation("ProductVersion", "10.0.9")
+                .HasAnnotation("ProductVersion", "10.0.10")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -28,6 +28,9 @@ namespace Plenipo.Infrastructure.Persistence.Migrations.Platform
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
+
+                    b.PrimitiveCollection<List<string>>("CollectionScopes")
+                        .HasColumnType("text[]");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -557,8 +560,28 @@ namespace Plenipo.Infrastructure.Persistence.Migrations.Platform
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
 
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Metadata")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("metadata");
+
                     b.Property<int>("Ordinal")
                         .HasColumnType("integer");
+
+                    b.Property<int?>("PageFrom")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PageTo")
+                        .HasColumnType("integer");
+
+                    b.PrimitiveCollection<List<string>>("Principals")
+                        .IsRequired()
+                        .HasColumnType("text[]");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
@@ -597,6 +620,20 @@ namespace Plenipo.Infrastructure.Persistence.Migrations.Platform
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.PrimitiveCollection<List<string>>("IndexedLanguages")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Metadata")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("metadata");
 
                     b.Property<string>("ModuleId")
                         .IsRequired()

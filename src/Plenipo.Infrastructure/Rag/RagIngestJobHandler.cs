@@ -24,6 +24,12 @@ public sealed class RagIngestJobHandler : IJobHandler
         }
 
         var rag = context.ScopedServices.GetRequiredService<IRagService>();
+        var options = new RagIngestOptions
+        {
+            Principals = args.Principals,
+            Metadata = args.Metadata,
+            Language = args.Language,
+        };
 
         var chunks = 0;
         var unreadable = 0;
@@ -34,7 +40,7 @@ public sealed class RagIngestJobHandler : IJobHandler
                 $"{i}/{args.FileIds.Count} documents indexed",
                 cancellationToken);
 
-            var stored = await rag.IngestFileAsync(args.CollectionId, args.FileIds[i], cancellationToken);
+            var stored = await rag.IngestFileAsync(args.CollectionId, args.FileIds[i], options, cancellationToken);
             chunks += stored;
             if (stored == 0)
             {
@@ -43,6 +49,12 @@ public sealed class RagIngestJobHandler : IJobHandler
         }
 
         await context.ReportProgressAsync(100, $"{args.FileIds.Count}/{args.FileIds.Count} documents indexed", cancellationToken);
+
+        // Once the corpus outgrows exact scan, promote it — here rather than at query time, because
+        // building an index belongs in the background job that just made it necessary.
+        await context.ScopedServices.GetRequiredService<RagIndexMaintenance>()
+            .EnsureVectorIndexAsync(cancellationToken);
+
         return JsonSerializer.Serialize(
             new { files = args.FileIds.Count, chunks, unreadable },
             JsonSerializerOptions.Web);
