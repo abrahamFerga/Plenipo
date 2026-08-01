@@ -249,4 +249,76 @@ public sealed class MockChatClientTests
 
         return Assert.Single(calls);
     }
+
+    // ── Refusals must not be summarized as completions ───────────────────────
+    //
+    // When a side-effecting tool is parked for approval, or a call trips the agent security policy,
+    // ToolInvocationMiddleware returns prose INSTEAD of a tool result — and the approval refusal
+    // explicitly instructs the model not to claim the action completed. A real provider reads and obeys
+    // that instruction. The mock has to be told, or it renders the refusal as the return value of a
+    // sentence that has already declared the write done.
+
+    /// <summary>The text ToolInvocationMiddleware returns in place of a result for an approval-gated tool.</summary>
+    private const string ApprovalRefusal =
+        "The action 'record_transaction' requires human approval before it can run, so it was NOT executed. " +
+        "Tell the user this action is pending their approval and do not claim it was completed. " +
+        "When a human approves or rejects it, the outcome will arrive in a later turn as an " +
+        "'[Approval outcomes]' note — that note supersedes this message.";
+
+    /// <summary>The text it returns when the agent security policy blocks the call.</summary>
+    private const string SecurityRefusal =
+        "The tool call was not executed because it violates the configured agent security policy.";
+
+    [Theory]
+    [InlineData(ApprovalRefusal)]
+    [InlineData(SecurityRefusal)]
+    public async Task Streaming_DoesNotClaimCompletion_WhenTheToolWasRefused(string refusal)
+    {
+        var client = new MockChatClient();
+        var options = new ChatOptions { Tools = [AIFunctionFactory.Create(RecordTransaction, name: "record_transaction")] };
+        var history = new List<ChatMessage>
+        {
+            new(ChatRole.User, "Record a 55 MXN expense called PREAMBLE"),
+            new(ChatRole.Assistant, [new FunctionCallContent("mock-record_transaction", "record_transaction", null)]),
+            new(ChatRole.Tool, [new FunctionResultContent("mock-record_transaction", refusal)]),
+        };
+
+        var text = string.Empty;
+        await foreach (var update in client.GetStreamingResponseAsync(history, options))
+        {
+            text += update.Text;
+        }
+
+        var opening = text.TrimStart();
+        Assert.False(
+            opening.StartsWith("Done", StringComparison.Ordinal),
+            $"the reply opened by claiming completion for a call that never ran: {Trim(opening)}");
+        // It must still say what happened, so the user knows to look for the approval card.
+        Assert.Contains("not executed", text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Streaming_StillClaimsCompletion_WhenTheToolActuallyRan()
+    {
+        // The guard above must not swallow the ordinary success summary.
+        var client = new MockChatClient();
+        var options = new ChatOptions { Tools = [AIFunctionFactory.Create(SummarizeSpending)] };
+        var history = new List<ChatMessage>
+        {
+            new(ChatRole.User, "Please use a tool."),
+            new(ChatRole.Assistant, [new FunctionCallContent("mock-SummarizeSpending", nameof(SummarizeSpending), null)]),
+            new(ChatRole.Tool, [new FunctionResultContent("mock-SummarizeSpending", "You spent $42 on groceries.")]),
+        };
+
+        var text = string.Empty;
+        await foreach (var update in client.GetStreamingResponseAsync(history, options))
+        {
+            text += update.Text;
+        }
+
+        Assert.StartsWith("Done", text.TrimStart(), StringComparison.Ordinal);
+        Assert.Contains("groceries", text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string Trim(string value) => value.Length <= 90 ? value : value[..90] + "…";
 }
