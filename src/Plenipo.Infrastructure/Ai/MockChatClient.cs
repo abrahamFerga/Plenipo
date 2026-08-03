@@ -147,7 +147,22 @@ public sealed class MockChatClient : IChatClient
             .SelectMany(m => m.Contents)
             .OfType<FunctionCallContent>()
             .FirstOrDefault(c => c.CallId == result.CallId)?.Name ?? "a tool";
-        var resultText = Trim(result.Result?.ToString() ?? "(no output)", 400);
+        var raw = result.Result?.ToString() ?? "(no output)";
+        var resultText = Trim(raw, 400);
+
+        // A parked or refused call is NOT an execution. ToolInvocationMiddleware returns prose in place of
+        // a result, and the approval refusal explicitly instructs the model not to claim the action
+        // completed. A real provider reads and obeys that; the mock must branch on it, or the canned
+        // opening below asserts a write that has not happened — and the refusal text then reads as the
+        // return value of a call the sentence already declared done.
+        if (IsRefusal(raw))
+        {
+            var refused = new StringBuilder();
+            refused.Append("Not done — the ").Append(name).Append(" tool was not executed. ");
+            refused.Append(resultText).Append(' ');
+            refused.Append("(Mock mode — configure a real AI provider for genuine reasoning over these tools.)");
+            return refused.ToString();
+        }
 
         var sb = new StringBuilder();
         sb.Append("Done — I called the ").Append(name).Append(" tool. ");
@@ -157,6 +172,16 @@ public sealed class MockChatClient : IChatClient
         sb.Append("(Mock mode — configure a real AI provider for genuine reasoning over these tools.)");
         return sb.ToString();
     }
+
+    /// <summary>
+    /// True when the "result" is one of the refusals <c>ToolInvocationMiddleware</c> substitutes for a real
+    /// tool result: an approval park ("… so it was NOT executed.") or a security block ("The tool call was
+    /// not executed because …"). Matched on the sentinel wording to keep this client dependency-free — if
+    /// those strings move, this predicate must move with them.
+    /// </summary>
+    private static bool IsRefusal(string resultText) =>
+        resultText.Contains("was NOT executed", StringComparison.Ordinal)
+        || resultText.Contains("was not executed because", StringComparison.Ordinal);
 
     // ── Tool selection + argument synthesis ──────────────────────────────────
 
