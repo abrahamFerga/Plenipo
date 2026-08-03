@@ -1,0 +1,26 @@
+{
+  "name": "plenipo",
+  "stage": "platform",
+  "github": {
+    "repo": "abrahamFerga/Plenipo",
+    "visibility": "public"
+  },
+  "autonomy": {
+    "level": 3,
+    "maxOpenPRs": 3,
+    "maxMergesPerTick": 2,
+    "readyFloor": 3,
+    "maxIssuesPerSweep": 8,
+    "maxNewCapabilities": 5
+  },
+  "skills": {
+    "external": [
+      {
+        "marketplace": "plenipo-agents",
+        "repo": "abrahamFerga/plenipo-agents",
+        "plugins": ["plenipo", "harness", "scout", "define", "shape", "deliver"],
+        "reason": "The loop verbs plus the Plenipo harness: platform contract, runbook, and the verification ladder."
+      }
+    ]
+  }
+}

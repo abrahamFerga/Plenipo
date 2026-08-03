@@ -1,0 +1,44 @@
+# Deterministic pull-request gates. No AI, no secrets, no third-party actions.
+#
+# This is the workflow that makes unattended merging safe: `/plenipo:ship` can be talked out of an
+# opinion, and a required status check cannot. Make it a REQUIRED check on the default branch or it
+# gates nothing.
+#
+# `edited` and `labeled` are in the trigger list on purpose: the PR body is one of the gates, and
+# `human-approved` is the documented override, so both must re-run the check.
+name: Agent gates
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    name: PR gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      # --unified=0 keeps context lines out of the removal scan, so an unchanged HasQueryFilter
+      # sitting next to an edit does not read as an edit to it.
+      - name: Compute the diff
+        run: |
+          git fetch --no-tags origin "${{ github.base_ref }}"
+          git diff --unified=0 "origin/${{ github.base_ref }}...HEAD" > "$RUNNER_TEMP/pr.diff"
+
+      # Values arrive as env, never interpolated into the shell — a PR body is untrusted input.
+      - name: Evaluate gates
+        run: node .github/scripts/pr-gates.mjs "$RUNNER_TEMP/pr.diff"
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}

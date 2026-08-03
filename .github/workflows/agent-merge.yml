@@ -1,0 +1,49 @@
+# The merger, on a schedule. Deterministic — no AI, no secrets, no third-party actions.
+#
+# Runs the same `merge-gate.mjs` that `/plenipo:ship` runs locally, so merging keeps working when the
+# machine that wrote the code is asleep, and so there is exactly ONE implementation of the gate list.
+#
+# It merges nothing until `autonomy.level` in workflow.json is >= 1, and it can never merge a PR that
+# lacks the `agent:approved` label — which only a review can add. Turn the whole thing off with the
+# repository variable AGENT_AUTOMERGE=off (Settings -> Variables), no commit required.
+#
+# Deliberately NOT `pull_request`-triggered: a schedule re-reads the world instead of trusting an
+# event payload, so a check that turns red after the review still blocks the merge.
+name: Agent merge
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: agent-merge
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    name: Merge what passes every gate
+    if: vars.AGENT_AUTOMERGE != 'off'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      # Dry run first, so the log always records what WOULD have happened even when the merge step
+      # is skipped or fails. `--merge` re-evaluates every gate before touching anything.
+      - name: Evaluate the gates
+        run: node .github/scripts/merge-gate.mjs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Merge
+        run: node .github/scripts/merge-gate.mjs --merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

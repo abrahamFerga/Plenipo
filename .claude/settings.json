@@ -1,0 +1,44 @@
+{
+  "//": "Product repo .claude/settings.json. Replace abrahamFerga. Every plugin is enabled because an unattended run cannot reload its own plugin set mid-flight; the cost is each skill's ~250-token description, and nothing else until a skill is invoked.",
+
+  "extraKnownMarketplaces": {
+    "plenipo-agents": {
+      "source": { "source": "github", "repo": "abrahamFerga/plenipo-agents" }
+    }
+  },
+
+  "enabledPlugins": {
+    "plenipo@plenipo-agents": true,
+    "harness@plenipo-agents": true,
+    "scout@plenipo-agents": true,
+    "define@plenipo-agents": true,
+    "shape@plenipo-agents": true,
+    "deliver@plenipo-agents": true,
+    "steward@plenipo-agents": false
+  },
+
+  "permissions": {
+    "//": "Allow what a build/sweep tick genuinely needs, so a timer never blocks on a prompt nobody is there to answer.",
+    "allow": [
+      "Bash(gh:*)",
+      "Bash(git:*)",
+      "Bash(dotnet:*)",
+      "Bash(docker:*)",
+      "Bash(aspire:*)",
+      "Bash(node:*)",
+      "Bash(npx:*)",
+      "Bash(npm:*)",
+      "Bash(curl:*)"
+    ],
+    "//deny": "Deny beats allow, and these are the difference between a loop that can only propose and one that can destroy. Note what deny can and cannot see: it matches the Bash string, so it stops an improvised `gh pr merge` but NOT the merge inside `node .github/scripts/merge-gate.mjs --merge`. The authoritative control on merging is autonomy.level in workflow.json, which that script reads and refuses to exceed. Treat this list as the belt, not the braces, and remove nothing from it.",
+    "deny": [
+      "Bash(gh pr merge:*)",
+      "Bash(gh pr review:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(gh repo delete:*)",
+      "Bash(gh api --method DELETE:*)",
+      "Bash(docker volume rm:*)"
+    ]
+  }
+}
