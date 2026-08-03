@@ -14,7 +14,7 @@
     <PackageVersion Include="Aspire.Hosting.Azure.KeyVault" Version="13.4.6" />
     <!-- JavaScript hosting (AddViteApp/WithPnpm) — the 13.x successor to Aspire.Hosting.NodeJs. -->
     <PackageVersion Include="Aspire.Hosting.JavaScript" Version="13.4.6" />
-    <PackageVersion Include="AWSSDK.S3" Version="4.0.101.5" />
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.101.6" />
     <PackageVersion Include="Azure.AI.DocumentIntelligence" Version="1.0.0" />
     <PackageVersion Include="Azure.Security.KeyVault.Secrets" Version="4.11.0" />
     <PackageVersion Include="MailKit" Version="4.17.0" />
@@ -31,10 +31,10 @@
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
   </ItemGroup>
   <ItemGroup Label="AI — Microsoft.Extensions.AI + Agent Framework">
-    <PackageVersion Include="Microsoft.Extensions.AI" Version="10.8.1" />
-    <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.8.1" />
-    <PackageVersion Include="Microsoft.Agents.AI" Version="1.15.0" />
-    <PackageVersion Include="Microsoft.Agents.AI.OpenAI" Version="1.15.0" />
+    <PackageVersion Include="Microsoft.Extensions.AI" Version="10.8.3" />
+    <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.8.3" />
+    <PackageVersion Include="Microsoft.Agents.AI" Version="1.16.0" />
+    <PackageVersion Include="Microsoft.Agents.AI.OpenAI" Version="1.16.0" />
     <!-- Official MCP C# SDK (MIT); Core = client + protocol without the hosting extras. -->
     <PackageVersion Include="ModelContextProtocol.Core" Version="1.4.1" />
     <!-- Anthropic (Claude) chat client (MIT) — implements Microsoft.Extensions.AI's IChatClient. -->
