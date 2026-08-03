@@ -123,7 +123,7 @@ jobs:
       # ------------------------------------------------------------------------
       - name: Setup pnpm
         if: github.event_name == 'release'
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@v6.0.9
         with:
           version: 11.9.0
 
