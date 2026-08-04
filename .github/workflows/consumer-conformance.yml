@@ -1,0 +1,133 @@
+# .github/workflows/consumer-conformance.yml — install into the PLATFORM repo.
+#
+# The gate that stops one platform change from silently breaking every product built on it.
+# Consumer-driven contract testing, in the shape this stack allows: pack the platform at a
+# release-candidate version, then build and test each registered consumer against those packages.
+#
+# WHAT THIS DOES NOT COVER — state it plainly, because a green check here reads as "safe":
+#   * The CSP hash. A product may pin a sha256 of platform-authored INLINE HTML. Change that HTML
+#     and the product's SPA white-screens. No managed-API check sees it, and neither does this job
+#     unless the consumer has a browser smoke test. It is the highest-risk break and it is invisible.
+#   * Static asset and bundle shape changes, for the same reason.
+#   * Behavioural drift that still compiles and still passes the consumer's own tests — this gate is
+#     only as strong as the consumer suite it runs.
+#   * Consumers not registered below, and any marked conformance:false.
+# Treat a green result as "the registered consumers still build and pass their own tests", not as
+# "this release is safe".
+#
+# REQUIRES the consumer to centralize its platform version in one MSBuild property, so the whole
+# swap is `-p:PlenipoVersion=<rc>`:
+#
+#   <!-- consumer's Directory.Build.props -->
+#   <PropertyGroup><PlenipoVersion>0.1.0-alpha.28</PlenipoVersion></PropertyGroup>
+#   <!-- every csproj -->
+#   <PackageReference Include="Plenipo.Core" Version="$(PlenipoVersion)" />
+#
+# Without that property the version is repeated in every csproj and this job has to rewrite files
+# instead of passing a flag — brittle, and the first thing to fix in a consumer that lags.
+
+name: Consumer conformance
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ["src/**", "Directory.Packages.props", "Directory.Build.props"]
+  workflow_dispatch:
+    inputs:
+      consumer:
+        description: "Limit to a single consumer repo (owner/name). Blank = all registered."
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    name: Read the consumer registry
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.read.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - id: read
+        # consumers.json is the platform's list of what it must not break. A product that is not
+        # in it gets no protection — which is the incentive to register.
+        run: |
+          filter='${{ inputs.consumer }}'
+          if [ -n "$filter" ]; then
+            jq -c --arg r "$filter" '{include: [.consumers[] | select(.repo == $r)]}' consumers.json >> out.json
+          else
+            jq -c '{include: [.consumers[] | select(.conformance != false)]}' consumers.json >> out.json
+          fi
+          echo "matrix=$(cat out.json)" >> "$GITHUB_OUTPUT"
+          cat out.json
+
+  conformance:
+    name: ${{ matrix.repo }}
+    needs: discover
+    if: needs.discover.outputs.matrix != ''
+    runs-on: ubuntu-latest
+    # One red consumer must not hide the others: the whole point is knowing HOW MANY broke.
+    continue-on-error: ${{ matrix.required == false }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
+    steps:
+      - name: Check out the platform
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          path: platform
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Pack the platform as a release candidate
+        id: pack
+        working-directory: platform
+        run: |
+          RC="0.0.0-rc.${GITHUB_RUN_ID}"
+          echo "rc=$RC" >> "$GITHUB_OUTPUT"
+          dotnet pack Plenipo.slnx -c Release -p:Version=$RC -o "$GITHUB_WORKSPACE/rc-packages"
+          ls "$GITHUB_WORKSPACE/rc-packages"
+
+      - name: Check out the consumer
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          repository: ${{ matrix.repo }}
+          ref: ${{ matrix.ref || 'main' }}
+          path: consumer
+
+      - name: Swap in the release candidate
+        working-directory: consumer
+        run: |
+          # The consumer vendors platform packages into .packages and pins them from its own feed,
+          # so replacing the folder contents is the whole substitution.
+          rm -f .packages/Plenipo.*.nupkg
+          cp "$GITHUB_WORKSPACE"/rc-packages/*.nupkg .packages/
+
+      - name: Build the consumer against the candidate
+        working-directory: consumer
+        run: dotnet build ${{ matrix.solution }} -c Release -p:PlenipoVersion=${{ steps.pack.outputs.rc }}
+
+      - name: Test the consumer against the candidate
+        working-directory: consumer
+        # Docker is available on the runner, so the consumer's Testcontainers E2E suite runs here
+        # too — a compile-clean break in the approval gate or RBAC surfaces only at this rung.
+        run: dotnet test ${{ matrix.solution }} -c Release -p:PlenipoVersion=${{ steps.pack.outputs.rc }}
+
+  verdict:
+    name: Conformance verdict
+    needs: conformance
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if a required consumer broke
+        run: |
+          if [ "${{ needs.conformance.result }}" != "success" ]; then
+            echo "A registered consumer failed against this change."
+            echo "That is the signal this gate exists for: fix the change, or make the break"
+            echo "deliberate and coordinate the upgrade with the affected products."
+            exit 1
+          fi
+          echo "All registered consumers build and pass against this change."

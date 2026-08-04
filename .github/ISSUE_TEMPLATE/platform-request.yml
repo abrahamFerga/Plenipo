@@ -1,21 +1,31 @@
-# An issue form rather than free-form prose: requesting agents and the platform triage workflow
-# need the same fields to make a capability request actionable.
+# .github/ISSUE_TEMPLATE/platform-request.yml — install into the PLATFORM repo.
+#
+# An issue form rather than a markdown template on purpose: the fields are a contract both a
+# requesting agent and the steward parse. Free-form prose requests are what makes a platform
+# request queue unsurvivable once several products are filing into it.
 name: Platform request
-description: A product needs something the Plenipo platform does not yet do.
+description: A product needs something the platform does not yet do.
 title: "[platform-request] "
 labels: ["platform-request", "needs-triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Before filing, check the source for an existing seam and apply a product-local shim if one
-        can carry the work. Filing a request must not stop the product loop.
+        **Before filing, climb the ladder.** Most requests resolve before this form:
+        0. Is it already there? (read the source, not the docs)
+        1. Does a product seam cover it — your module, a **product-owned connector**, a provisioning
+           hook, a notification channel, product-wide platform tools, a declared role, or one of the
+           swappable services?
+        2. Can a local shim carry it for now?
+
+        Filing this issue **must not block you.** Apply the shim, tag it `TODO(plenipo#<this issue>)`,
+        and keep going.
 
   - type: input
     id: product
     attributes:
       label: Requesting product
-      description: Repository and the Plenipo version currently pinned.
+      description: The repo, and the platform version it currently pins.
       placeholder: "networthy — Plenipo 0.1.0-alpha.28"
     validations:
       required: true
@@ -23,16 +33,20 @@ body:
   - type: textarea
     id: capability
     attributes:
-      label: Capability needed
-      description: State the need in one sentence, not a proposed implementation.
+      label: The capability needed
+      description: One sentence, stated as a need rather than a solution.
+      placeholder: "A module needs to contribute a column to the admin console's user list."
     validations:
       required: true
 
   - type: textarea
     id: seam-tried
     attributes:
-      label: Seam tried
-      description: Name the source-backed platform seam evaluated and why it does not fit.
+      label: Which seam you tried, and why it doesn't fit
+      description: >
+        Name the specific seam and what happened. "None of them" is not an answer — say which you
+        evaluated. This field is what keeps the queue survivable, and a request without it is
+        usually answered `already-possible`.
     validations:
       required: true
 
@@ -40,7 +54,7 @@ body:
     id: repro
     attributes:
       label: Minimal reproduction
-      description: Include the smallest failing call, code, or observable behaviour.
+      description: The code that won't compile, the call that 403s, or the smallest failing example. The steward must be able to see it without cloning your product.
       render: csharp
     validations:
       required: true
@@ -48,8 +62,10 @@ body:
   - type: textarea
     id: shim
     attributes:
-      label: Local workaround
-      description: Say where the temporary shim and TODO(plenipo#N) are, or why no shim is possible.
+      label: Local workaround applied
+      description: >
+        What you did to keep moving, and where the `TODO(plenipo#N)` tag lives. If you are blocked
+        instead of shimmed, say so explicitly — that changes the priority.
     validations:
       required: true
 
@@ -57,7 +73,22 @@ body:
     id: acceptance
     attributes:
       label: Acceptance test
-      description: A test the requesting product will run when the capability lands.
+      description: >
+        The test you will run when this lands. The platform adopts it as a conformance test, so the
+        reason for the change stays defended after everyone has forgotten it.
+      placeholder: "Given a module declaring X, when an admin opens /admin/users, then the column appears and is gated on <permission>."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: blast-radius
+    attributes:
+      label: Would other products want this?
+      description: Your assessment. The steward verifies it against the real queue — two products asking outranks one product arguing.
+      options:
+        - "Probably only us — but it feels like a platform primitive"
+        - "Likely several products"
+        - "Every product will hit this"
     validations:
       required: true
 
@@ -66,5 +97,7 @@ body:
     attributes:
       label: Invariants
       options:
-        - label: This request does not bypass RBAC, tenant isolation, approvals, or audit.
+        - label: This does not ask for a way to bypass RBAC, the approval gate, tenant isolation, or the audit log.
           required: true
+        - label: I am not blocked — a shim is in place and my loop continued.
+          required: false

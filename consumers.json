@@ -1,5 +1,11 @@
 {
-  "$comment": "Registered consumers for release-impact routing. Add a consumer only after its GitHub App installation and label taxonomy are ready.",
+  "$comment": [
+    "The platform's list of what it must not break — consumer-conformance.yml builds and tests",
+    "each entry against every platform PR touching src/**. A product that is not registered here",
+    "gets no protection, which is the incentive to register. Keep it small and honest: every entry",
+    "costs CI minutes on every platform PR, so mark a consumer 'conformance': false with a note",
+    "rather than deleting the signal that it exists."
+  ],
   "consumers": [
     {
       "repo": "abrahamFerga/networthy",
@@ -7,7 +13,34 @@
       "ref": "main",
       "module": "finance",
       "required": true,
-      "note": "Reference product for module, role, approval, document, and RAG seams."
+      "note": "Reference product for module, role, approval, document, and RAG seams. Consumes Plenipo.* alpha.28 from the vendored .packages feed."
+    },
+    {
+      "repo": "abrahamFerga/auditworthy",
+      "solution": "Auditworthy.slnx",
+      "ref": "main",
+      "module": "compliance",
+      "required": false,
+      "conformance": false,
+      "note": "Real Plenipo.* consumer (alpha.28) but repeats the platform version per csproj — the conformance swap needs a central PlenipoVersion property first. Enable after that one-file fix lands."
+    },
+    {
+      "repo": "abrahamFerga/casewell",
+      "solution": "Casewell.slnx",
+      "ref": "main",
+      "module": "legal",
+      "required": false,
+      "conformance": false,
+      "note": "Stale — still consumes pre-rename Cortex.* packages (alpha.14). Re-enable once it upgrades; until then it would fail for reasons unrelated to any platform change."
+    },
+    {
+      "repo": "abrahamFerga/rentwell",
+      "solution": "Rentwell.slnx",
+      "ref": "main",
+      "module": "tbd",
+      "required": false,
+      "conformance": false,
+      "note": "Not yet a consumer on main — the foundations bootstrap is still on a feature branch. Flip conformance on once src/ with Plenipo.* references lands on main."
     }
   ]
 }
