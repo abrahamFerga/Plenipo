@@ -14,9 +14,15 @@ public interface IDocumentReader
     /// <summary>
     /// The same extraction, plus page boundaries when the source is paginated and the extractor can
     /// report them. Retrieval uses this so a cited passage can name its page; callers that only need
-    /// the text should keep using <see cref="ExtractTextAsync"/>.
+    /// the text should keep using <see cref="ExtractTextAsync"/>. The default wraps
+    /// <see cref="ExtractTextAsync"/> with no page information, so implementations written before
+    /// this member existed keep compiling and behave as an unpaginated source.
     /// </summary>
-    public Task<DocumentText?> ExtractAsync(Guid fileId, CancellationToken cancellationToken = default);
+    public async Task<DocumentText?> ExtractAsync(Guid fileId, CancellationToken cancellationToken = default)
+    {
+        var text = await ExtractTextAsync(fileId, cancellationToken);
+        return text is null ? null : DocumentText.Unpaged(text);
+    }
 }
 
 /// <summary>
