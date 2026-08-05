@@ -22,7 +22,7 @@
       "module": "compliance",
       "required": false,
       "conformance": false,
-      "note": "Real Plenipo.* consumer (alpha.28) but repeats the platform version per csproj — the conformance swap needs a central PlenipoVersion property first. Enable after that one-file fix lands."
+      "note": "Real Plenipo.* consumer (alpha.28), blocked on two prerequisites, both fixed in auditworthy#27: it repeated the platform version per csproj (the swap needs a central PlenipoVersion property), and it pinned Microsoft.Extensions.AI 10.7.0 while platform main requires >= 10.8.1, which is 12 NU1605 downgrade errors. Flip conformance on once auditworthy#27 merges."
     },
     {
       "repo": "abrahamFerga/casewell",
@@ -31,7 +31,7 @@
       "module": "legal",
       "required": false,
       "conformance": false,
-      "note": "Stale — still consumes pre-rename Cortex.* packages (alpha.14). Re-enable once it upgrades; until then it would fail for reasons unrelated to any platform change."
+      "note": "Stale — still consumes pre-rename Cortex.* packages (alpha.14), so it would fail for reasons unrelated to any platform change. Upgrade tracked in casewell#40; re-enable once it lands."
     },
     {
       "repo": "abrahamFerga/rentwell",
