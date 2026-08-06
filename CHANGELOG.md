@@ -130,6 +130,28 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
 
 ### Added
 
+- **Built-in sign-in: `Auth:Mode=Local` makes the host its own OpenID Connect issuer (ADR 0003).**
+  On-prem and mini-PC deployments were left choosing between standing up Entra External ID — the
+  single biggest install-time cliff — or bundling a Keycloak-class sidecar that duplicates the
+  users, invites, roles and seat limits the platform database already owns. Now the host itself can
+  issue the tokens: embedded OpenIddict (authorization code + PKCE + rotating refresh tokens),
+  a server-rendered branded login page with forced-password-change and TOTP steps, credentials on
+  the existing platform `User` (PBKDF2, per-credential lockout, a security stamp that ends every
+  outstanding session on any reset), per-deployment signing keys stored Data-Protection-protected,
+  and a daily prune of expired protocol state.
+
+  What deliberately does not fork: the API surface stays bearer-JWT through the identical JwtBearer →
+  `RequestEnricher` → RBAC path; the SPA runs its unchanged PKCE flow (`/api/platform/auth-config`
+  answers `oidc` with the host's own origin as authority); `Auth:RequireMfa` composes (the issuer
+  emits `amr: ["otp"]`); and unset `Auth:Mode` behaves exactly as before — Local is explicit opt-in,
+  never a weakened default. User management completes in Admin → Users ("Local sign-in accounts"):
+  create-with-temporary-password (the no-SMTP path), reset, unlock, remove MFA — behind the existing
+  `platform.users.manage` / `platform.roles.manage` permissions, answering 409 on external-IdP
+  deployments. `Bootstrap` gains `AdminInitialPassword` (absent → a temporary one is printed once at
+  first startup); `plenipo init` offers the choice as step 6; the Compose profile carries `AUTH_MODE`.
+  Redirect URIs validate same-host-by-path, because a mini PC is legitimately reached by hostname,
+  mDNS name, and LAN IP at once — foreign hosts stay refused.
+
 - **The web shell can obtain a real bearer token.** Server-side auth was complete, but the shipped web
   client had no way to get a token — no sign-in route, no authority redirect, no callback handler, no
   token store, no refresh, no 401 recovery. `PlenipoClientConfig.authHeaders` was the right seam, but

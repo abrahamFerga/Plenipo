@@ -93,8 +93,8 @@ and change without a deploy.
 | `Channels:Email` | `Enabled`, `Host`/`Port`/`UseSsl`, `Username`, `Password`, `Folder`, `ModuleId`, `TenantSlug`, `PollSeconds`, `ReplyEnabled`, `AllowedSenders`, `AllowUnknownSenders`, `MaxMessageBytes` | IMAP intake mailbox polled into agent turns (docs/INBOUND_CHANNELS.md); password via user-secrets/env; replies and unknown senders off by default |
 | `Email` | Outbound SMTP: `Enabled`, `Host`/`Port`/`UseStartTls`, `Username`, `Password`, `FromAddress`, `FromName` | Powers the email notification channel AND user invites; password via user-secrets/env. Unconfigured, invites still work (share the link manually) |
 | `Push` | Mobile push: `Enabled`, `IncludeContent`, `PlaceholderTitle`/`PlaceholderBody`, `ExpoEndpoint`, `ExpoAccessToken`, `MaxDevicesPerUser` | Nothing to configure for most deployments — the channel is inert until a device registers, and the built-in Expo transport needs no Apple/Google credentials. **`IncludeContent=false`** is the one to think about: see below |
-| `Auth` | `Authority`, `Audience`, `ClientId`, `Scopes`, `PermissionSource` (Database/Token), `TenantClaim` (default `tenant`) | Empty = dev-auth in Development only. `ClientId`/`Scopes` are what the BROWSER signs in with — see below |
-| `Bootstrap` | `TenantSlug`, `TenantName`, `AdminEmail`, `AdminSubject`, `AdminRoles` | **First run only** — creates the deployment's first tenant and its operator. Consumed at startup, never over HTTP, inert once any operator exists. See below |
+| `Auth` | `Mode` (unset/Oidc/**Local**), `Authority`, `Audience`, `ClientId`, `Scopes`, `PermissionSource` (Database/Token), `TenantClaim` (default `tenant`), `RequireHttpsMetadata`, `RequireMfa` | Empty = dev-auth in Development only. `Mode=Local` makes the host its own issuer (built-in sign-in, no external IdP — see below). `ClientId`/`Scopes` are what the BROWSER signs in with |
+| `Bootstrap` | `TenantSlug`, `TenantName`, `AdminEmail`, `AdminSubject`, `AdminRoles`, `AdminInitialPassword` (Local mode) | **First run only** — creates the deployment's first tenant and its operator. Consumed at startup, never over HTTP, inert once any operator exists. See below |
 | `Secrets` | `Provider` (DataProtection/AzureKeyVault), `KeyVaultUri` | Where runtime-entered secrets rest |
 | `DataProtection:KeysPath` | Shared durable directory for the Data Protection key ring | Optional alternative to `plenipo-redis`; required outside Development when Redis is absent |
 | `Security:OutboundUrls` | `AllowHttp`, `AllowPrivateNetworks` | Both false by default; applies to tenant-configured webhooks, AI endpoints, OAuth and connector URLs |
@@ -279,6 +279,34 @@ and every user gets a per-category mute switch in the notification bell. A mute 
 category entirely for that user — the in-app row and every channel — without touching anyone
 else's notifications or any other category. No stored row means "on", so new categories need no
 backfill.
+
+## Built-in sign-in (`Auth:Mode=Local`) — no external identity provider
+
+For on-premises and mini-PC deployments where standing up Entra External ID (or any IdP) is the
+install-time cliff, set **`Auth:Mode=Local`** and the host becomes its own OpenID Connect issuer
+(ADR 0003): it serves discovery, `/connect/authorize|token|logout`, and a branded login page;
+credentials live in the platform database (PBKDF2, per-credential lockout, optional TOTP); and users
+are managed in **Admin → Users → Local sign-in accounts** — create an account and hand over the
+generated temporary password (no SMTP required; a change is forced at first sign-in).
+
+```jsonc
+{
+  "Auth": { "Mode": "Local" },
+  "Bootstrap": {                       // first run: who the deployment's first admin is
+    "TenantSlug": "main",
+    "AdminEmail": "owner@example.com"  // temp password printed ONCE in the startup log,
+  }                                    // or set Bootstrap:AdminInitialPassword via env/user-secrets
+}
+```
+
+What deliberately does NOT change: the API surface stays bearer-JWT through the identical validation
+path, the SPA runs its normal PKCE flow (`auth-config` simply answers with the host's own origin as
+the authority), `Auth:RequireMfa` keeps working (the local issuer emits `amr: ["otp"]` after a
+verified TOTP code), and `Auth:PermissionSource` must stay `Database` — the only role authority IS
+this database. `Auth:Mode=Local` and `Auth:Authority` are mutually exclusive; on a plain-HTTP LAN
+set `Auth:RequireHttpsMetadata=false` deliberately. Self-service lives under `/api/auth/*`
+(change password, TOTP enroll/confirm/disable); recovery is administrative (reset password / remove
+MFA in the admin console) — there are no recovery codes to lose.
 
 ## Signing in from a browser
 

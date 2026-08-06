@@ -69,8 +69,10 @@ public sealed class PlatformAuthConfigTests : IDisposable
 
         var body = await client.GetFromJsonAsync<JsonElement>("/api/platform/auth-config");
 
+        // "local" joined deliberately with ADR 0003: a boolean deployment-shape flag for the admin
+        // console's credential panels — public by definition, secret-free by construction.
         Assert.Equal(
-            ["authority", "clientId", "mode", "scopes"],
+            ["authority", "clientId", "local", "mode", "scopes"],
             body.EnumerateObject().Select(p => p.Name).OrderBy(n => n, StringComparer.Ordinal));
 
         Assert.Equal("oidc", body.GetProperty("mode").GetString());
@@ -111,6 +113,23 @@ public sealed class PlatformAuthConfigTests : IDisposable
 
         Assert.Equal("oidc", body.GetProperty("mode").GetString());
         Assert.Equal(JsonValueKind.Null, body.GetProperty("clientId").ValueKind);
+    }
+
+    [Fact]
+    public async Task Local_mode_publishes_the_host_itself_as_the_authority()
+    {
+        // ADR 0003: the shell's existing PKCE flow must work unchanged, so the mode stays "oidc",
+        // the authority is the origin the browser provably reached, and offline_access makes
+        // refresh tokens flow. The built-in client id is public metadata like any other.
+        using var client = Factory(("Auth:Mode", "Local")).CreateClient();
+
+        var body = await client.GetFromJsonAsync<JsonElement>("/api/platform/auth-config");
+
+        Assert.Equal("oidc", body.GetProperty("mode").GetString());
+        Assert.Equal("http://localhost", body.GetProperty("authority").GetString());
+        Assert.Equal("plenipo-web", body.GetProperty("clientId").GetString());
+        Assert.Equal("offline_access", body.GetProperty("scopes").GetString());
+        Assert.True(body.GetProperty("local").GetBoolean());
     }
 
     [Fact]

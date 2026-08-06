@@ -5,6 +5,16 @@ public sealed class AuthOptions
 {
     public const string SectionName = "Auth";
 
+    /// <summary>
+    /// Unset (auto: a configured Authority means external OIDC, else the Development fallback),
+    /// <c>Oidc</c> (the external-authority choice made explicit), or <c>Local</c> — the host is its
+    /// own OpenID Connect issuer with a built-in login page and credentials in the platform database
+    /// (ADR 0003). <c>Local</c> is explicit opt-in only, so the fail-fast-when-unconfigured default
+    /// never silently weakens. Mirrors <c>AuthModeOptions</c>, which binds the same section for the
+    /// infrastructure layer.
+    /// </summary>
+    public string? Mode { get; set; }
+
     /// <summary>OIDC authority (e.g. https://&lt;tenant&gt;.ciamlogin.com/&lt;tenant-id&gt;/v2.0). Empty disables JWT validation.</summary>
     public string? Authority { get; set; }
 
@@ -57,4 +67,10 @@ public sealed class AuthOptions
     /// <summary>True when a partial JWT configuration was supplied and must fail fast.</summary>
     public bool IsPartiallyConfigured =>
         !string.IsNullOrWhiteSpace(Authority) ^ !string.IsNullOrWhiteSpace(Audience);
+
+    /// <summary>True when the host runs as its own issuer (<c>Auth:Mode=Local</c>, ADR 0003).</summary>
+    public bool IsLocalMode => string.Equals(Mode, "Local", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>True when the operator explicitly pinned external OIDC (<c>Auth:Mode=Oidc</c>).</summary>
+    public bool IsExplicitOidcMode => string.Equals(Mode, "Oidc", StringComparison.OrdinalIgnoreCase);
 }

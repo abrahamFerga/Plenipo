@@ -20,6 +20,13 @@ public static class RateLimitingSetup
     /// <summary>Named policy for anonymous PUBLIC endpoints (checkout) — partitioned by client IP.</summary>
     public const string PublicPolicy = "plenipo-public";
 
+    /// <summary>
+    /// Named policy for the local-auth surface (login POSTs, token endpoint) — partitioned by client
+    /// IP. Wide enough for a NAT'd office of users refreshing tokens, tight enough that credential
+    /// stuffing runs into it immediately; per-credential lockout is enforced besides.
+    /// </summary>
+    public const string AuthPolicy = "plenipo-auth";
+
     public static IServiceCollection AddPlenipoRateLimiting(this IServiceCollection services, IConfiguration configuration)
     {
         var options = configuration.GetSection(RateLimitOptions.SectionName).Get<RateLimitOptions>() ?? new RateLimitOptions();
@@ -56,6 +63,16 @@ public static class RateLimitingSetup
                 return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
                 {
                     PermitLimit = 10,
+                    Window = TimeSpan.FromMinutes(1),
+                });
+            });
+
+            limiter.AddPolicy(AuthPolicy, httpContext =>
+            {
+                var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+                return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 30,
                     Window = TimeSpan.FromMinutes(1),
                 });
             });

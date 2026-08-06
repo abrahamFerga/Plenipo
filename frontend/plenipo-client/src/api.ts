@@ -30,6 +30,12 @@ export interface AuthConfig {
   authority?: string | null;
   clientId?: string | null;
   scopes?: string | null;
+  /**
+   * True when the host is its own issuer (Auth:Mode=Local): sign-in still runs the plain `oidc`
+   * flow against `authority`, but credential management (passwords, TOTP) lives on this host —
+   * which is what the admin console's local-users panel keys on.
+   */
+  local?: boolean;
 }
 
 /** A column in a tab's server-driven data view. */
@@ -952,7 +958,47 @@ export async function uploadFile(file: UploadableFile): Promise<StoredFileInfo> 
   return (await res.json()) as StoredFileInfo;
 }
 
+/** One user's built-in-sign-in state, from GET /api/admin/users/local (Auth:Mode=Local only). */
+export interface LocalUserAdmin {
+  userId: string;
+  email: string;
+  displayName?: string | null;
+  isActive: boolean;
+  mustChangePassword: boolean;
+  /** Lockout horizon after repeated failures; null or past means not locked. */
+  lockedUntil?: string | null;
+  totpEnabled: boolean;
+  lastSignInAt?: string | null;
+}
+
+/** The one response that ever carries a temporary password — show it, offer copy, never store it. */
+export interface LocalUserCreated {
+  userId: string;
+  email: string;
+  temporaryPassword: string;
+  message: string;
+}
+
+/** The caller's own built-in-sign-in state, from GET /api/auth/local-status. */
+export interface LocalAuthStatus {
+  hasCredential: boolean;
+  totpEnabled: boolean;
+  mustChangePassword: boolean;
+}
+
 export const api = {
+  // Built-in sign-in self-service (Auth:Mode=Local): the caller's own credential.
+  // 409 on external-IdP deployments — check auth-config's `local` before surfacing UI.
+  localAuth: {
+    status: () => apiGet<LocalAuthStatus>("/api/auth/local-status"),
+    changePassword: (currentPassword: string, newPassword: string) =>
+      apiPost<{ message: string }>("/api/auth/password", { currentPassword, newPassword }),
+    totpEnroll: () =>
+      apiPost<{ secret: string; otpauthUri: string; message: string }>("/api/auth/totp/enroll", {}),
+    totpConfirm: (code: string) => apiPost<{ message: string }>("/api/auth/totp/confirm", { code }),
+    totpDisable: (code: string) => apiPost<{ message: string }>("/api/auth/totp/disable", { code }),
+  },
+
   me: () => apiGet<Me>("/api/platform/me"),
   modules: () => apiGet<Module[]>("/api/platform/modules"),
   info: () => apiGet<PlatformInfo>("/api/platform/info"),
@@ -1093,6 +1139,19 @@ export const api = {
     modules: () => apiGet<ModuleAdmin[]>("/api/admin/modules"),
     // Module-contributed admin console pages (ModuleManifest.AdminTabs), permission-filtered.
     extensions: () => apiGet<AdminExtension[]>("/api/admin/extensions"),
+
+    // Built-in sign-in (Auth:Mode=Local): the credential lifecycle next to the users it belongs to.
+    // Answers 409 on external-IdP deployments. Temporary passwords appear in exactly one response.
+    localUsers: () => apiGet<LocalUserAdmin[]>("/api/admin/users/local"),
+    createLocalUser: (email: string, displayName: string | null, roles: string[]) =>
+      apiPost<LocalUserCreated>("/api/admin/users/local", { email, displayName, roles }),
+    resetLocalPassword: (userId: string) =>
+      apiPost<{ temporaryPassword: string; message: string }>(
+        `/api/admin/users/local/${userId}/reset-password`,
+        {},
+      ),
+    unlockLocalUser: (userId: string) => apiSend(`/api/admin/users/local/${userId}/unlock`, "POST"),
+    resetLocalTotp: (userId: string) => apiSend(`/api/admin/users/local/${userId}/totp`, "DELETE"),
 
     // Standing email invites: roles apply at the invited address's first sign-in.
     invites: () => apiGet<UserInviteAdmin[]>("/api/admin/users/invites"),

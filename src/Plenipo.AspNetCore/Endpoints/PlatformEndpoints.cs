@@ -72,8 +72,23 @@ public static class PlatformEndpoints
         // to get one, and everything here is public OIDC client metadata by definition (an authority URL
         // and a public client id, both visible in the browser's address bar during any sign-in).
         // NOTHING secret may ever be added to this DTO.
-        group.MapGet("/auth-config", (IOptions<AuthOptions> auth) =>
+        group.MapGet("/auth-config", (IOptions<AuthOptions> auth, HttpContext http) =>
             {
+                // Local mode (ADR 0003): the host IS the authority, so the mode stays "oidc" — the
+                // shell's existing PKCE flow needs no new branch — and the authority is this request's
+                // own origin, which is the one origin the browser provably reached. offline_access is
+                // requested so refreshes work; Local=true is for surfaces (admin console) that manage
+                // credentials, not for the sign-in flow.
+                if (auth.Value.IsLocalMode)
+                {
+                    return Results.Ok(new AuthConfigDto(
+                        Mode: "oidc",
+                        Authority: $"{http.Request.Scheme}://{http.Request.Host}",
+                        ClientId: NullIfBlank(auth.Value.ClientId) ?? Auth.Local.LocalAuthDefaults.ClientId,
+                        Scopes: "offline_access",
+                        Local: true));
+                }
+
                 // In dev mode the OIDC fields are meaningless — and an empty-string authority read as a
                 // value would send a shell redirecting to nowhere. Answer null so "no IdP" is unambiguous.
                 var configured = auth.Value.IsConfigured;
@@ -81,7 +96,8 @@ public static class PlatformEndpoints
                     Mode: configured ? "oidc" : "dev",
                     Authority: configured ? auth.Value.Authority : null,
                     ClientId: configured ? NullIfBlank(auth.Value.ClientId) : null,
-                    Scopes: configured ? NullIfBlank(auth.Value.Scopes) : null));
+                    Scopes: configured ? NullIfBlank(auth.Value.Scopes) : null,
+                    Local: false));
             })
             .AllowAnonymous()
             .WithName("Platform_AuthConfig");
@@ -178,10 +194,12 @@ public static class PlatformEndpoints
     private sealed record ModuleAgentDto(string Name, string? Description, bool IsDefault, string? Model);
 
     /// <summary>
-    /// Public OIDC client metadata. <c>Mode</c> is <c>"oidc"</c> when a real authority is configured and
-    /// <c>"dev"</c> otherwise — which is what tells a shell whether the dev-auth headers are live or inert.
+    /// Public OIDC client metadata. <c>Mode</c> is <c>"oidc"</c> when a real authority is configured
+    /// (including Local mode, where the host is its own authority) and <c>"dev"</c> otherwise — which
+    /// is what tells a shell whether the dev-auth headers are live or inert. <c>Local</c> flags the
+    /// embedded issuer for credential-management surfaces; the sign-in flow never needs it.
     /// </summary>
-    private sealed record AuthConfigDto(string Mode, string? Authority, string? ClientId, string? Scopes);
+    private sealed record AuthConfigDto(string Mode, string? Authority, string? ClientId, string? Scopes, bool Local);
 
     /// <summary>Configuration binds an unset key to "", which a client would read as a value.</summary>
     private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;

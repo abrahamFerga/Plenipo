@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ConfirmDialog, type AdminUser } from "@plenipo/ui";
 import { InvitesPanel } from "./InvitesPanel";
+import { LocalUsersPanel } from "./LocalUsersPanel";
 
 function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
@@ -189,6 +190,7 @@ export function UsersAdmin() {
         </p>
       </header>
 
+      <LocalUsersPanel allRoles={allRoles} />
       <InvitesPanel allRoles={allRoles} />
 
       <div className="grid gap-3 lg:grid-cols-2">
