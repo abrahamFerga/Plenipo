@@ -188,6 +188,33 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
 
 ### Fixed
 
+- **A failed turn now says which problem it hit, so the administrator who can fix it learns what to
+  fix.** Every exception from the provider's streaming enumerator collapsed to
+  `"The assistant could not complete the request."` — the same sentence for a rejected API key, an
+  exhausted quota, a model the connection does not carry, and a provider outage. Three of those the
+  tenant's own administrator resolves in a minute, and the real reason went only to
+  `logger.LogError`, which on a hosted deployment is the operator's log and not theirs. The reported
+  symptom from a product was, accurately, "not working".
+
+  `AgentTurnFailure.Describe` classifies the exception and the runner reports the result: a rejected
+  key and an unreachable endpoint each name the AI-settings screen, a spent quota and an outage each
+  say to wait rather than reconfigure, and an unknown model names the model. This narrows the opaque
+  case rather than replacing it — anything unattributed, **including a 4xx that is more likely the
+  platform's own request being wrong, keeps the original message**. Classification reads the status
+  from `ClientResultException`, `RequestFailedException` or `HttpRequestException` anywhere in the
+  inner-exception chain, and treats a non-positive status as "no response happened" so a refused
+  connection is read from the transport error the ClientModel pipeline wraps rather than from the
+  wrapper.
+
+  The provider's own message is **never** relayed: it quotes request payloads, organisation
+  identifiers and endpoint URLs. The classification is one of a fixed set of platform-authored
+  strings, and the exception continues to the log and nowhere else.
+
+  Also fixed alongside it: a provider read that timed out arrived as an `OperationCanceledException`
+  and was rethrown as though the caller had aborted, tearing the stream down with no event at all.
+  Only cancellation of the turn's own token counts as a caller abort now; anything else is reported
+  as a provider timeout.
+
 - **Dev-auth now resolves the caller on hub paths, so chat over SignalR is no longer always
   `system_admin`.** A browser's WebSocket handshake cannot set request headers, so SignalR can only
   carry the dev identity in the query string. `DevAuthenticationHandler` read `Request.Headers` only,
