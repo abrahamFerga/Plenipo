@@ -667,6 +667,79 @@ export interface UsageReport {
 }
 
 /**
+ * One agent turn, from GET /api/admin/runs. Written however the turn ended, so a run whose
+ * `outcome` is not "Completed" is the normal way a failure surfaces — there may be no tokens at all.
+ */
+export interface AgentRun {
+  id: string;
+  occurredAt: string;
+  userDisplay?: string;
+  moduleId: string;
+  conversationId?: string;
+  agentName?: string;
+  workflowName?: string;
+  parentRunId?: string;
+  provider?: string;
+  model?: string;
+  /** Hash of the exact instruction assembly the turn ran under; resolves via the instruction snapshot. */
+  instructionsHash?: string;
+  /** Serialized AgentRunOutcome: "Completed", "Error", "BlockedBySecurity", "BudgetExceeded", … */
+  outcome: string;
+  /** Internal classification (exception type or short code) — not the sanitized text the user saw. */
+  errorKind?: string;
+  errorMessage?: string;
+  firstTokenMs?: number;
+  totalMs: number;
+  toolCallCount: number;
+  approvalCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cost?: number;
+  currency?: string;
+  traceId?: string;
+}
+
+/** Health of the filtered run window. */
+export interface AgentRunSummary {
+  total: number;
+  errors: number;
+  /** Fraction in [0,1], not a percentage. */
+  errorRate: number;
+  p50Ms: number;
+  p95Ms: number;
+  totalTokens: number;
+  cost: number;
+}
+
+/** The run explorer's payload: summary over the whole window, plus a page of runs. */
+export interface AgentRunList {
+  summary: AgentRunSummary;
+  runs: AgentRun[];
+  /** Filter options present in the window, so the UI never offers a value with no rows. */
+  modules: string[];
+  models: string[];
+  outcomes: string[];
+}
+
+/** One turn reconstructed, from GET /api/admin/runs/{id}. */
+export interface AgentRunDetail {
+  run: AgentRun;
+  toolCalls: ToolCall[];
+  /** For a workflow parent: the step runs carrying it as their parent. */
+  steps: AgentRun[];
+}
+
+export interface AgentRunFilters {
+  days?: number;
+  module?: string;
+  model?: string;
+  outcome?: string;
+  conversationId?: string;
+  take?: number;
+}
+
+/**
  * Thrown by {@link apiGet} / {@link apiSend} on a non-2xx response. Carries the HTTP `status` (so callers
  * can branch on it — a permission message on 403, a not-found state on 404 — without parsing `message`) and
  * the raw response `body`; the server's problem-details `detail`/`title` is also folded into `message`.
@@ -1146,6 +1219,16 @@ export const api = {
     }) => apiSend("/api/admin/agent-profiles", "PUT", profile),
     deleteAgentProfile: (id: string) => apiSend(`/api/admin/agent-profiles/${id}`, "DELETE"),
     usage: (days = 30) => apiGet<UsageReport>(`/api/admin/usage?days=${days}`),
+    runs: (filters: AgentRunFilters = {}) => {
+      const query = new URLSearchParams();
+      for (const [key, value] of Object.entries(filters)) {
+        if (value !== undefined && value !== "") {
+          query.set(key, String(value));
+        }
+      }
+      return apiGet<AgentRunList>(`/api/admin/runs?${query.toString()}`);
+    },
+    run: (id: string) => apiGet<AgentRunDetail>(`/api/admin/runs/${id}`),
     ops: () => apiGet<OpsSnapshot>("/api/admin/ops"),
     notificationSettings: () => apiGet<NotificationSettings>("/api/admin/notification-settings"),
     setNotificationSettings: (settings: {

@@ -116,6 +116,11 @@ export type {
   UsageReport,
   UsageByModule,
   UsageByDay,
+  AgentRun,
+  AgentRunSummary,
+  AgentRunList,
+  AgentRunDetail,
+  AgentRunFilters,
 } from "./lib/api";
 export type { AgentStreamEvent } from "./lib/signalr";
 export type { AguiEvent } from "./lib/agui";

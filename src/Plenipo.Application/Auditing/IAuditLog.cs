@@ -15,4 +15,10 @@ public interface IAuditLog
     public Task RecordEntityChangesAsync(IReadOnlyCollection<EntityChangeAuditEntry> entries, CancellationToken cancellationToken = default);
 
     public Task RecordTokenUsageAsync(TokenUsageRecord record, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Records one completed-or-failed agent turn. Called from the runner's <c>finally</c>, so
+    /// implementations must tolerate being invoked while the turn's own token is already cancelled.
+    /// </summary>
+    public Task RecordAgentRunAsync(AgentRunRecord record, CancellationToken cancellationToken = default);
 }

@@ -162,6 +162,7 @@ public sealed class ToolApprovalTests
         public Task RecordAuthEventAsync(AuthAuditEntry entry, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task RecordEntityChangesAsync(IReadOnlyCollection<EntityChangeAuditEntry> entries, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task RecordTokenUsageAsync(TokenUsageRecord record, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task RecordAgentRunAsync(AgentRunRecord record, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class FakeCurrentUser : ICurrentUser
