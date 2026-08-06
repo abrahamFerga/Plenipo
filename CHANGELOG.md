@@ -166,6 +166,25 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
 
 ### Fixed
 
+- **Dev-auth now resolves the caller on hub paths, so chat over SignalR is no longer always
+  `system_admin`.** A browser's WebSocket handshake cannot set request headers, so SignalR can only
+  carry the dev identity in the query string. `DevAuthenticationHandler` read `Request.Headers` only,
+  and every `/hubs` turn in Development therefore fell through to its defaults — subject `dev-user`,
+  tenant `dev`, roles `system_admin` ⇒ `["*"]`. The pre-model-call tool filter offered tools RBAC
+  should have removed and approvals parked in a tenant nobody addressed, which meant RBAC-shaped
+  behaviour "verified" over the hub proved nothing about RBAC.
+
+  The handler now reads `X-Dev-*` from the query string for **hub paths only** — the same restriction,
+  for the same reason, that `AuthSetup` already puts on the JwtBearer `access_token` parameter: a query
+  string reaches browser history and proxy logs, and the REST surface can carry headers perfectly well,
+  so it keeps ignoring identity in the URL. A header still wins where both are present, and the
+  absent-vs-present-but-empty `X-Dev-Roles` asymmetry is preserved.
+
+  Development-only: the handler is registered only when no real authority is configured. The shipped
+  `@plenipo/ui` still sends no identity in the hub URL and is unchanged — its dev identity is a
+  constant equal to these same defaults, so emitting it would be a no-op. This is what lets a product's
+  dev identity switcher or e2e harness drive a real identity over the hub.
+
 - **A request whose tenant does not resolve now says so.** `GET /api/platform/me` reports
   `tenantResolved: false` with a `tenantProblem` naming the cause, the resulting 403 carries the same
   explanation in its body, and the SignalR hub raises it as a `HubException`. Previously `/me` returned a
