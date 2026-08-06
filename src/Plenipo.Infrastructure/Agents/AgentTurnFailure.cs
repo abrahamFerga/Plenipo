@@ -32,8 +32,11 @@ public static class AgentTurnFailure
     internal const string QuotaExhausted =
         "The AI provider is rate-limiting this tenant, or its quota is exhausted. Try again shortly, or check the plan with the provider.";
 
-    internal const string ModelUnknown =
-        "The AI provider does not recognise the configured model. An administrator can change it under AI settings.";
+    // A 404 says "not here", not "no such model": a wrong base URL or Azure deployment path produces
+    // one just as a retired model name does, and the two are indistinguishable from the response. Both
+    // are fixed on the same screen, so the message names both rather than asserting the narrower one.
+    internal const string ModelOrEndpointUnknown =
+        "The AI provider does not recognise the configured model or endpoint. An administrator can check both under AI settings.";
 
     internal const string ProviderFailing =
         "The AI provider is currently failing. This is not a configuration problem — try again shortly.";
@@ -49,13 +52,6 @@ public static class AgentTurnFailure
     {
         ArgumentNullException.ThrowIfNull(exception);
 
-        // A timeout arrives as a cancellation the caller did not ask for; the runner only routes one
-        // here once it has established its own token is not the source.
-        if (exception is TimeoutException or OperationCanceledException)
-        {
-            return TimedOut;
-        }
-
         for (Exception? current = exception; current is not null; current = current.InnerException)
         {
             if (StatusOf(current) is { } status)
@@ -70,6 +66,12 @@ public static class AgentTurnFailure
                 return Unreachable;
             }
 
+            // A read that ran out of time: HttpClient reports its own timeout as a cancellation
+            // carrying a TimeoutException, and requiring that TimeoutException is what separates a
+            // timeout from a cancellation nobody attributed. The catch this serves spans the whole
+            // run — middleware, module tools, connector fetches — so a bare cancellation is NOT
+            // evidence the provider was slow, and reporting it as one would repeat the very
+            // misattribution this class exists to remove, one level in. It stays Generic.
             if (current is TimeoutException)
             {
                 return TimedOut;
@@ -100,7 +102,7 @@ public static class AgentTurnFailure
     {
         (int)HttpStatusCode.Unauthorized or (int)HttpStatusCode.Forbidden => KeyRejected,
         (int)HttpStatusCode.TooManyRequests => QuotaExhausted,
-        (int)HttpStatusCode.NotFound => ModelUnknown,
+        (int)HttpStatusCode.NotFound => ModelOrEndpointUnknown,
         // 402 is how several providers report an exhausted prepaid balance.
         (int)HttpStatusCode.PaymentRequired => QuotaExhausted,
         >= 500 => ProviderFailing,

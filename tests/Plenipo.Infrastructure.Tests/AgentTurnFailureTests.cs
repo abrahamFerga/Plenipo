@@ -34,9 +34,15 @@ public sealed class AgentTurnFailureTests
     }
 
     [Fact]
-    public void A_model_the_connection_does_not_carry_names_the_model_as_the_fix()
+    public void A_404_names_both_the_model_and_the_endpoint_because_either_produces_one()
     {
-        Assert.Equal(AgentTurnFailure.ModelUnknown, AgentTurnFailure.Describe(ClientFailure(HttpStatusCode.NotFound)));
+        // A retired model name and a wrong base URL are indistinguishable from a 404, so the message
+        // does not assert which one it was — it names both, and both are fixed on the same screen.
+        var message = AgentTurnFailure.Describe(ClientFailure(HttpStatusCode.NotFound));
+
+        Assert.Equal(AgentTurnFailure.ModelOrEndpointUnknown, message);
+        Assert.Contains("model", message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("endpoint", message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
@@ -93,8 +99,35 @@ public sealed class AgentTurnFailureTests
     public void A_provider_read_that_times_out_says_so()
     {
         Assert.Equal(AgentTurnFailure.TimedOut, AgentTurnFailure.Describe(new TimeoutException()));
-        // The runner only routes a cancellation here once it knows its own token was not the source.
-        Assert.Equal(AgentTurnFailure.TimedOut, AgentTurnFailure.Describe(new TaskCanceledException()));
+
+        // The shape HttpClient actually produces when its own Timeout elapses: a cancellation carrying
+        // a TimeoutException. That inner exception is the evidence; the cancellation alone is not.
+        var httpClientTimeout = new TaskCanceledException(
+            "The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.",
+            new TimeoutException("A task was canceled."));
+
+        Assert.Equal(AgentTurnFailure.TimedOut, AgentTurnFailure.Describe(httpClientTimeout));
+    }
+
+    [Fact]
+    public void A_cancellation_carrying_no_timeout_is_not_blamed_on_the_provider()
+    {
+        // The catch this serves spans the whole run — middleware, module tools, connector fetches — so a
+        // bare cancellation is not evidence the AI provider was slow. Saying it was would repeat the
+        // misattribution this class exists to remove, one level in, and send the administrator to the
+        // wrong screen. Unattributed stays unattributed.
+        Assert.Equal(AgentTurnFailure.Generic, AgentTurnFailure.Describe(new OperationCanceledException()));
+        Assert.Equal(AgentTurnFailure.Generic, AgentTurnFailure.Describe(new TaskCanceledException()));
+    }
+
+    [Fact]
+    public void A_cancellation_wrapping_a_real_provider_status_still_reports_that_status()
+    {
+        // Removing the cancellation short-circuit also fixed a case it was hiding: a provider failure
+        // that surfaces underneath a cancellation used to report as a timeout, losing the 401.
+        var wrapped = new TaskCanceledException("cancelled", ClientFailure(HttpStatusCode.Unauthorized));
+
+        Assert.Equal(AgentTurnFailure.KeyRejected, AgentTurnFailure.Describe(wrapped));
     }
 
     [Fact]
