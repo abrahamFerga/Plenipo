@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Plenipo.AspNetCore.Auth;
+using Plenipo.AspNetCore.Auth.Local;
 using Plenipo.AspNetCore.Channels;
 using Plenipo.AspNetCore.Commerce;
 using Plenipo.AspNetCore.Endpoints;
@@ -168,6 +169,18 @@ public static class PlenipoHostSetup
         // Serve the product's domain UI (@plenipo/ui, built with the product's branding) at / when its
         // assets are present under wwwroot/app — the no-registry distribution path. No-op otherwise.
         app.UsePlenipoDomainUi();
+
+        // The embedded issuer's PROTOCOL surface (/connect, /auth) exists only when the host IS the
+        // issuer (ADR 0003) — elsewhere those routes are simply absent. The credential-management API
+        // maps unconditionally and answers an explanatory 409 outside Local mode instead (the
+        // RequiresDatabaseAuthorizationFilter precedent): a 404 would read as "wrong URL", and the
+        // admin console deserves the real answer.
+        if (app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Auth.AuthOptions>>().Value.IsLocalMode)
+        {
+            app.MapPlenipoLocalAuth();
+        }
+
+        app.MapPlenipoLocalAccountEndpoints();
 
         app.MapDefaultEndpoints();
         app.MapPlatformEndpoints();

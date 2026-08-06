@@ -53,6 +53,14 @@ public static class DatabaseInitializer
             await SeedDevTenantAsync(platform, services, cancellationToken);
         }
 
+        // Local auth mode (ADR 0003): load-or-generate the issuer's keys and upsert the built-in
+        // client BEFORE anything serves traffic — and before bootstrap, which creates the first
+        // admin's credential.
+        if (services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Auth.AuthOptions>>().Value.IsLocalMode)
+        {
+            await Auth.Local.LocalAuthInitializer.InitializeAsync(services, cancellationToken);
+        }
+
         // Outside Development nothing above creates a tenant, and permissions are only resolved after a
         // tenant resolves — so an empty deployment has nobody who could create one. The Bootstrap section
         // breaks that deadlock once, from configuration, and is inert as soon as an operator exists.

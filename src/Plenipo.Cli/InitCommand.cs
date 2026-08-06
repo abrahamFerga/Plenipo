@@ -56,6 +56,10 @@ public sealed class InitCommand : Command<InitCommand.Settings>
         [Description("Local | AzureBlob")]
         public string? FilesProvider { get; init; }
 
+        [CommandOption("--auth-mode <MODE>")]
+        [Description("Local (built-in sign-in — no external IdP, for on-prem/mini-PC installs) | Oidc (external authority).")]
+        public string? AuthMode { get; init; }
+
         [CommandOption("--auth-authority <URL>")]
         [Description("OIDC authority (Entra External ID / B2C). Empty keeps dev auth in Development.")]
         public string? AuthAuthority { get; init; }
@@ -137,6 +141,7 @@ public sealed class InitCommand : Command<InitCommand.Settings>
         DocumentsEnabled = s.Documents,
         WhatsAppEnabled = s.WhatsApp,
         FilesProvider = s.FilesProvider,
+        AuthMode = s.AuthMode,
         AuthAuthority = s.AuthAuthority,
         AuthAudience = s.AuthAudience,
         PermissionSource = s.PermissionSource,
@@ -193,8 +198,31 @@ public sealed class InitCommand : Command<InitCommand.Settings>
                 .Title("[bold]5/8[/] File storage")
                 .AddChoices("Local", "AzureBlob", "(keep current)"));
 
+        string? authMode = s.AuthMode;
         string? authority = s.AuthAuthority, audience = s.AuthAudience, permissionSource = s.PermissionSource;
-        if (AnsiConsole.Confirm("[bold]6/8[/] Configure an external identity provider (Entra External ID / B2C)?", defaultValue: false))
+        string? bootstrapSlug = s.BootstrapTenantSlug, bootstrapEmail = s.BootstrapAdminEmail;
+        const string BuiltIn = "Built-in sign-in (no external IdP — login page and users live here)";
+        const string External = "External identity provider (Entra External ID / Keycloak / any OIDC)";
+        var authChoice = authMode is not null
+            ? (string.Equals(authMode, "Local", StringComparison.OrdinalIgnoreCase) ? BuiltIn : External)
+            : AnsiConsole.Prompt(
+                new SelectionPrompt<string>()
+                    .Title("[bold]6/8[/] Sign-in — on-prem and mini-PC installs usually want Built-in")
+                    .AddChoices(BuiltIn, External, "(keep current)"));
+        if (authChoice == BuiltIn)
+        {
+            authMode = "Local";
+            // The first admin: without a Bootstrap section a fresh non-Development database has
+            // NOBODY who can sign in. The temporary password is never written here — the host
+            // generates one and prints it once at first startup (ADR 0003).
+            if (bootstrapSlug is null && bootstrapEmail is null
+                && AnsiConsole.Confirm("   Create the first tenant + admin at first run (recommended)?", defaultValue: true))
+            {
+                bootstrapSlug = AnsiConsole.Ask("   Tenant slug:", "main");
+                bootstrapEmail = AnsiConsole.Ask<string>("   First admin's email:");
+            }
+        }
+        else if (authChoice == External)
         {
             authority ??= AnsiConsole.Ask<string>("   OIDC authority URL:");
             audience ??= AnsiConsole.Ask<string>("   Audience (API client id):");
@@ -231,9 +259,12 @@ public sealed class InitCommand : Command<InitCommand.Settings>
             DocumentsEnabled = documents,
             WhatsAppEnabled = whatsapp,
             FilesProvider = filesProvider is "(keep current)" ? null : filesProvider,
+            AuthMode = authMode,
             AuthAuthority = authority,
             AuthAudience = audience,
             PermissionSource = permissionSource,
+            BootstrapTenantSlug = bootstrapSlug,
+            BootstrapAdminEmail = bootstrapEmail,
             SkillsEnabled = skills,
             SkillsPath = skillsPath,
             SecretsProvider = secretsProvider is "(keep current)" ? null : secretsProvider,
@@ -262,6 +293,18 @@ public sealed class InitCommand : Command<InitCommand.Settings>
             {
                 AnsiConsole.WriteLine("  " + step);
             }
+        }
+
+        if (plan.AuthMode == "Local")
+        {
+            AnsiConsole.MarkupLine(
+                """
+
+                [bold]Built-in sign-in:[/] at first startup the host prints the first admin's TEMPORARY
+                password to its log, once ("LOCAL SIGN-IN READY"). Sign in with it and change it.
+                To choose the initial password instead, set [bold]Bootstrap:AdminInitialPassword[/] via
+                user-secrets or an environment variable — never in this file.
+                """);
         }
 
         AnsiConsole.MarkupLine(

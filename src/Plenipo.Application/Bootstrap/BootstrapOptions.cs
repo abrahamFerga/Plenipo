@@ -40,6 +40,14 @@ public sealed class BootstrapOptions
     public string? AdminDisplayName { get; set; }
 
     /// <summary>
+    /// Local auth mode only (<c>Auth:Mode=Local</c>, ADR 0003): the first admin's initial password.
+    /// Optional — when absent the platform generates a temporary one and prints it ONCE to the
+    /// startup log. Either way the first sign-in forces a change, so the value in configuration (or
+    /// in the log) stops working the moment it has done its one job. Ignored outside Local mode.
+    /// </summary>
+    public string? AdminInitialPassword { get; set; }
+
+    /// <summary>
     /// Roles for the first admin, as configured. Empty means "unspecified" — see
     /// <see cref="EffectiveAdminRoles"/> for the default that then applies.
     ///
@@ -76,7 +84,12 @@ public sealed class BootstrapOptions
     /// The effective role baseline (built-ins merged with host <c>ProductRole</c>s) — used to reject an
     /// unknown role name and to detect operator-reserved grants.
     /// </param>
-    public void ThrowIfInvalid(IReadOnlyDictionary<string, string[]> declaredRoles)
+    /// <param name="platformIssuesSubjects">
+    /// True under <c>Auth:Mode=Local</c> (ADR 0003), where the platform mints the admin's subject
+    /// itself and binds roles to it directly — no unverified email matching is involved, so the
+    /// "operator roles need an explicit subject" guard does not apply.
+    /// </param>
+    public void ThrowIfInvalid(IReadOnlyDictionary<string, string[]> declaredRoles, bool platformIssuesSubjects = false)
     {
         ArgumentNullException.ThrowIfNull(declaredRoles);
 
@@ -129,11 +142,22 @@ public sealed class BootstrapOptions
         // An email-keyed bootstrap binds roles through a standing invite, which RequestEnricher matches
         // against the token's email claim — and email is not a verified identifier. Fine for tenant-grade
         // roles; not fine for handing out cross-tenant control to whoever presents the address first.
-        if (string.IsNullOrWhiteSpace(AdminSubject) && EffectiveAdminRoles.Any(r => GrantsOperatorPermission(r, declaredRoles)))
+        // Not applicable when the platform issues subjects itself (Local mode): there the roles bind to a
+        // platform-minted subject whose only credential is the one bootstrap creates.
+        if (!platformIssuesSubjects
+            && string.IsNullOrWhiteSpace(AdminSubject)
+            && EffectiveAdminRoles.Any(r => GrantsOperatorPermission(r, declaredRoles)))
         {
             throw new InvalidOperationException(
                 "Bootstrap:AdminSubject is required when Bootstrap:AdminRoles grants operator-reserved permissions; " +
                 "an email-keyed invite is matched against an unverified claim. Set the IdP subject (`sub`) of the first operator.");
+        }
+
+        // Too short to be a real choice; catch it before it becomes the deployment's operator password.
+        if (AdminInitialPassword is { Length: > 0 and < 12 })
+        {
+            throw new InvalidOperationException(
+                "Bootstrap:AdminInitialPassword must be at least 12 characters (or omitted, to have one generated).");
         }
     }
 

@@ -14,6 +14,12 @@
       "port": 4321
     },
     {
+      "name": "plenipo-ui",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "frontend/plenipo-ui", "dev"],
+      "port": 5173
+    },
+    {
       "name": "plenipo-admin-ui",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--dir", "frontend/admin-ui", "dev"],
