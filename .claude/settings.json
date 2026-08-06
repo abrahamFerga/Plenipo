@@ -14,7 +14,7 @@
     "define@plenipo-agents": true,
     "shape@plenipo-agents": true,
     "deliver@plenipo-agents": true,
-    "steward@plenipo-agents": false
+    "steward@plenipo-agents": true
   },
 
   "permissions": {
