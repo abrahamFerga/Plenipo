@@ -784,3 +784,51 @@ describe("GenericTab (singleton form)", () => {
     expect(screen.queryByRole("combobox")).toBeNull();
   });
 });
+
+// Conformance test adopted from platform-request #112 (from abrahamFerga/networthy#152).
+// The wrapper used to be `overflow-hidden`, which clips BOTH axes: a table wider than its wrapper
+// lost every column past the right edge with no scrollbar and no page-level scroll to fall back on.
+// jsdom computes no layout, so reachability itself is proven in a real browser; what is guarded here
+// is the class contract that produces it — scrollable across, still clipped down.
+describe("GenericTab (wide tables stay reachable — plenipo#112)", () => {
+  /** The wrapper is the element that scrolls: the table's own parent. */
+  const wrapperOf = (table: Element) => table.parentElement!;
+
+  function expectScrollsAcrossButClipsDown(wrapper: HTMLElement) {
+    // 1. Scrollable across, so columns past the right edge stay reachable.
+    expect(wrapper.classList.contains("overflow-x-auto")).toBe(true);
+    // 3. Still clipped down, so the rounded corners keep cropping the table's own edges.
+    expect(wrapper.classList.contains("overflow-y-hidden")).toBe(true);
+    // The both-axes clip is what made the columns unreachable — it must not come back.
+    expect(wrapper.classList.contains("overflow-hidden")).toBe(false);
+    // The border-radius that overflow-y-hidden exists to preserve is still on the same element.
+    expect(wrapper.classList.contains("rounded-lg")).toBe(true);
+  }
+
+  it("the main table's wrapper scrolls across and still clips down", async () => {
+    renderTab(foodsTab, [{ name: "Oats", kcalPer100g: 389 }]);
+
+    const table = await screen.findByRole("table");
+    expectScrollsAcrossButClipsDown(wrapperOf(table));
+  });
+
+  it("a row-detail sub-table's wrapper does too — the second wrapper is not forgotten", async () => {
+    await renderDetail({
+      title: "april.pdf",
+      sections: [
+        {
+          heading: "Extracted lines",
+          columns: [
+            { field: "description", header: "Description" },
+            { field: "amount", header: "Amount" },
+          ],
+          rows: [{ description: "Coffee", amount: "4.50" }],
+        },
+      ],
+    });
+
+    // The detail document renders its own table inside a section, distinct from the main tab table.
+    const detailTable = (await screen.findByText("Extracted lines")).closest("section")!.querySelector("table")!;
+    expectScrollsAcrossButClipsDown(wrapperOf(detailTable));
+  });
+});
