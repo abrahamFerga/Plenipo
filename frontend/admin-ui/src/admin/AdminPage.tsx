@@ -11,6 +11,7 @@ import { AiSettingsAdmin } from "./AiSettingsAdmin";
 import { AgentProfilesAdmin } from "./AgentProfilesAdmin";
 import { KnowledgeAdmin } from "./KnowledgeAdmin";
 import { UsageDashboard } from "./UsageDashboard";
+import { RunsExplorer } from "./RunsExplorer";
 import { AuditLog } from "./AuditLog";
 import { OpsView } from "./OpsView";
 
@@ -25,6 +26,7 @@ const SECTIONS = [
   { to: "/agents", label: "Agent Profiles", end: false },
   { to: "/knowledge", label: "Knowledge", end: false },
   { to: "/usage", label: "Token Usage", end: false },
+  { to: "/runs", label: "Agent Runs", end: false },
   { to: "/audit", label: "Audit Log", end: false },
   { to: "/ops", label: "Operations", end: false },
 ];
@@ -98,6 +100,7 @@ export function AdminPage() {
             <Route path="ai" element={<AiSettingsAdmin />} />
             <Route path="agents" element={<AgentProfilesAdmin />} />
             <Route path="usage" element={<UsageDashboard />} />
+            <Route path="runs" element={<RunsExplorer />} />
             <Route path="audit" element={<AuditLog />} />
             <Route path="ops" element={<OpsView />} />
             <Route path="ext/:moduleId/:tabId" element={<ExtensionPage />} />

@@ -93,6 +93,31 @@ public sealed class AuditOutboxSerializerTests
     }
 
     [Fact]
+    public void AgentRun_RoundTrips_PreservingTheOutcomeEnum()
+    {
+        var record = new AgentRunRecord
+        {
+            TenantId = Guid.NewGuid(),
+            ModuleId = "finance",
+            Outcome = AgentRunOutcome.BudgetExceeded,
+            ErrorKind = "ConversationBudget",
+            ErrorMessage = "Conversation consumed 1,200 of 1,000 tokens.",
+            Provider = "Mock",
+            Model = "mock",
+            TotalMs = 12,
+        };
+
+        var message = AuditOutboxSerializer.ForAgentRun(record);
+        Assert.Equal(AuditRecordKind.AgentRun, message.Kind);
+
+        var back = JsonSerializer.Deserialize<AgentRunRecord>(message.PayloadJson)!;
+        Assert.Equal(record.Id, back.Id);
+        Assert.Equal(AgentRunOutcome.BudgetExceeded, back.Outcome);
+        Assert.Equal("ConversationBudget", back.ErrorKind);
+        Assert.Equal(12, back.TotalMs);
+    }
+
+    [Fact]
     public void Apply_UnknownKind_Throws()
     {
         var message = new AuditOutboxMessage { Kind = "Nonsense", PayloadJson = "{}" };
