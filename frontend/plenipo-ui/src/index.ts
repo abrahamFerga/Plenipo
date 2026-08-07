@@ -121,6 +121,8 @@ export type {
   AgentRunList,
   AgentRunDetail,
   AgentRunFilters,
+  // Consumed by the admin console's local-users panel, which imports it from this package.
+  LocalUserAdmin,
 } from "./lib/api";
 export type { AgentStreamEvent } from "./lib/signalr";
 export type { AguiEvent } from "./lib/agui";
