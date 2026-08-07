@@ -138,10 +138,18 @@ public sealed class ToolInvocationMiddleware(
 
             return inspection.Modified ? inspection.Text : result;
         }
-        catch (OperationCanceledException ex)
+        catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
         {
-            // A cancellation is the caller's, not the tool's. It has to reach the runner as itself, or
-            // a user closing the tab becomes a reported provider error. The audit entry is unchanged.
+            // The CALLER's cancellation, and only that. It has to reach the runner as itself, or a user
+            // closing the tab becomes a reported provider error. The audit entry is unchanged.
+            //
+            // The predicate is load-bearing: HttpClient reports its OWN Timeout elapsing as a
+            // TaskCanceledException carrying a TimeoutException, so a slow connector raises an
+            // OperationCanceledException while this token is UNCANCELLED. Caught bare, it would leave
+            // here unmarked and the classifier would descend to the inner TimeoutException and report
+            // "the AI provider did not respond in time" — a healthy provider blamed for a slow tool,
+            // which is exactly the misattribution the marker below exists to prevent. Such a
+            // cancellation is the tool's failure and falls through to be marked like any other.
             success = false;
             failure = ex.Message;
             throw;

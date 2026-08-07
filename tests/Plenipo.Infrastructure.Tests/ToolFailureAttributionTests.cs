@@ -31,6 +31,14 @@ public sealed class ToolFailureAttributionTests
         Assert.Equal(AgentTurnFailure.Generic, AgentTurnFailure.Describe(fromTool));
     }
 
+    /// <summary>
+    /// The classifier half of the tool-timeout case. That the middleware actually PRODUCES this shape —
+    /// rather than rethrowing a tool's own HttpClient timeout bare, which would strand it here as an
+    /// unmarked <see cref="TaskCanceledException"/> and have it read as a provider timeout — is pinned
+    /// separately by <c>ToolApprovalTests.A_tools_own_timeout_is_marked_rather_than_read_as_the_providers</c>,
+    /// which drives the middleware. Neither test is sufficient alone: this one would stay green against a
+    /// middleware that never marks this path.
+    /// </summary>
     [Fact]
     public void A_tool_that_times_out_does_not_become_a_provider_timeout()
     {
@@ -38,6 +46,10 @@ public sealed class ToolFailureAttributionTests
             "fetch_statements", new TaskCanceledException("slow", new TimeoutException()));
 
         Assert.Equal(AgentTurnFailure.Generic, AgentTurnFailure.Describe(toolTimeout));
+
+        // The same exception unmarked is what the bug looked like: a healthy provider blamed for a slow tool.
+        Assert.Equal(AgentTurnFailure.TimedOut,
+            AgentTurnFailure.Describe(new TaskCanceledException("slow", new TimeoutException())));
     }
 
     [Fact]

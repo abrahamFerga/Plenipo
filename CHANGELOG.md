@@ -223,8 +223,12 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   reported as *"the AI provider rejected the configured API key"*, sending an administrator to a screen
   where nothing is wrong. `ToolInvocationMiddleware` now rethrows a tool failure wrapped in
   `ToolInvocationFailedException`, and the classifier reads that marker as "not the provider's" and
-  keeps the generic message. Cancellation is deliberately left unwrapped, so a caller abort is still a
-  caller abort.
+  keeps the generic message. The middleware applies the same caller-abort rule the runner does: only a
+  cancellation of the turn's own token is left unwrapped, so a user closing the tab is still a caller
+  abort. A tool's *own* timeout — `HttpClient` reporting its elapsed `Timeout` as a
+  `TaskCanceledException` carrying a `TimeoutException`, raised while the turn's token is uncancelled —
+  is the tool's failure, gets the marker, and stays generic. Caught bare it would have been read as a
+  provider timeout, blaming a healthy provider for a slow connector.
 
 - **Dev-auth now resolves the caller on hub paths, so chat over SignalR is no longer always
   `system_admin`.** A browser's WebSocket handshake cannot set request headers, so SignalR can only

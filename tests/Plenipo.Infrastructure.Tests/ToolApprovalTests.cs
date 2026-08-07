@@ -131,6 +131,36 @@ public sealed class ToolApprovalTests
                 abort.Token));
     }
 
+    /// <summary>
+    /// The other half of the cancellation split, and the one that is easy to get wrong: a tool whose own
+    /// HttpClient times out raises a <see cref="TaskCanceledException"/> carrying a
+    /// <see cref="TimeoutException"/> while the turn's token is still UNCANCELLED. Caught bare alongside
+    /// a caller abort, it would leave the middleware unmarked, and
+    /// <see cref="AgentTurnFailure.Describe"/> would descend to the inner <see cref="TimeoutException"/>
+    /// and blame a perfectly healthy AI provider for a slow connector. This drives the middleware rather
+    /// than hand-building the wrapper, so it fails if the marker stops being applied on this path.
+    /// </summary>
+    [Fact]
+    public async Task A_tools_own_timeout_is_marked_rather_than_read_as_the_providers()
+    {
+        var middleware = BuildMiddleware();
+        var context = new FunctionInvocationContext
+        {
+            Function = AIFunctionFactory.Create(() => "unused", name: "fetch_statements"),
+        };
+        using var uncancelled = new CancellationTokenSource();
+
+        var thrown = await Assert.ThrowsAsync<ToolInvocationFailedException>(async () =>
+            await middleware.InvokeAsync(
+                agent: null!,
+                context,
+                (_, _) => throw new TaskCanceledException("slow", new TimeoutException()),
+                uncancelled.Token));
+
+        Assert.Equal("fetch_statements", thrown.ToolName);
+        Assert.Equal(AgentTurnFailure.Generic, AgentTurnFailure.Describe(thrown));
+    }
+
     private static ToolInvocationMiddleware BuildMiddleware() =>
         new(new NoopAuditLog(),
             new FakeCurrentUser(),
