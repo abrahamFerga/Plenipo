@@ -140,7 +140,10 @@ export type { OidcOptions, OidcAuthAdapter } from "./lib/oidc";
 export { initPlenipoWebAuth } from "./lib/initWebAuth";
 export type { InitWebAuthOptions, WebAuthState } from "./lib/initWebAuth";
 export { configureClient, clientConfig, devAuthHeaders, fetchAuthConfig } from "./lib/api";
-export type { AuthConfig } from "./lib/api";
+// LocalUserAdmin is the row type of api.admin.localUsers(), which Auth:Mode=Local's admin panel
+// renders — the package re-exports named symbols rather than star-exporting, so a type reachable
+// through the API surface is not reachable through the package until it is named here.
+export type { AuthConfig, LocalUserAdmin } from "./lib/api";
 
 // API / lib utilities
 export { apiGet, apiSend, apiPost, api, ApiError, uploadFile } from "./lib/api";
