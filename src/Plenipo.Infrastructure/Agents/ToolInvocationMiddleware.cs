@@ -138,11 +138,21 @@ public sealed class ToolInvocationMiddleware(
 
             return inspection.Modified ? inspection.Text : result;
         }
+        catch (OperationCanceledException ex)
+        {
+            // A cancellation is the caller's, not the tool's. It has to reach the runner as itself, or
+            // a user closing the tab becomes a reported provider error. The audit entry is unchanged.
+            success = false;
+            failure = ex.Message;
+            throw;
+        }
         catch (Exception ex)
         {
             success = false;
             failure = ex.Message;
-            throw;
+            // The audit above keeps the real exception; the rethrow carries a marker so the runner's
+            // classifier cannot read this tool's (or its connector's) HTTP status as the AI provider's.
+            throw new ToolInvocationFailedException(name, ex);
         }
         finally
         {

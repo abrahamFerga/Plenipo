@@ -47,38 +47,76 @@ public static class AgentTurnFailure
     internal const string TimedOut =
         "The AI provider did not respond in time. Try again shortly.";
 
+    /// <summary>How far down an exception chain to look before giving up; guards a cyclic chain.</summary>
+    private const int MaxDepth = 16;
+
     /// <summary>Maps <paramref name="exception"/> to user-facing text; never includes provider detail.</summary>
     public static string Describe(Exception exception)
     {
         ArgumentNullException.ThrowIfNull(exception);
 
-        for (Exception? current = exception; current is not null; current = current.InnerException)
+        return Classify(exception, depth: 0) ?? Generic;
+    }
+
+    /// <summary>
+    /// The message <paramref name="exception"/> warrants, or null when it carries no evidence and the
+    /// search should continue into its inner causes.
+    /// </summary>
+    private static string? Classify(Exception exception, int depth)
+    {
+        if (depth > MaxDepth)
         {
-            if (StatusOf(current) is { } status)
-            {
-                return FromStatus(status);
-            }
-
-            // No status: the request never got far enough to receive one (DNS, TLS, refused
-            // connection, or the outbound-URL policy rejecting the endpoint).
-            if (current is HttpRequestException)
-            {
-                return Unreachable;
-            }
-
-            // A read that ran out of time: HttpClient reports its own timeout as a cancellation
-            // carrying a TimeoutException, and requiring that TimeoutException is what separates a
-            // timeout from a cancellation nobody attributed. The catch this serves spans the whole
-            // run — middleware, module tools, connector fetches — so a bare cancellation is NOT
-            // evidence the provider was slow, and reporting it as one would repeat the very
-            // misattribution this class exists to remove, one level in. It stays Generic.
-            if (current is TimeoutException)
-            {
-                return TimedOut;
-            }
+            return null;
         }
 
-        return Generic;
+        // A tool — or a connector it called — is not the AI provider, and its HTTP status says nothing
+        // about one. A connector 401 read as a provider 401 would name the wrong screen with the same
+        // confidence as a correct answer, which is worse than the generic string this class replaced.
+        // Everything below this marker belongs to the tool, so the search stops rather than descending.
+        if (exception is ToolInvocationFailedException)
+        {
+            return Generic;
+        }
+
+        if (StatusOf(exception) is { } status)
+        {
+            return FromStatus(status);
+        }
+
+        // No status: the request never got far enough to receive one (DNS, TLS, refused
+        // connection, or the outbound-URL policy rejecting the endpoint).
+        if (exception is HttpRequestException)
+        {
+            return Unreachable;
+        }
+
+        // A read that ran out of time: HttpClient reports its own timeout as a cancellation
+        // carrying a TimeoutException, and requiring that TimeoutException is what separates a
+        // timeout from a cancellation nobody attributed. The catch this serves spans the whole
+        // run — middleware, module tools, connector fetches — so a bare cancellation is NOT
+        // evidence the provider was slow, and reporting it as one would repeat the very
+        // misattribution this class exists to remove, one level in. It stays Generic.
+        if (exception is TimeoutException)
+        {
+            return TimedOut;
+        }
+
+        // Retries exhausted, or a parallel read, arrive as an AggregateException whose cause may sit in
+        // any branch — following InnerException alone reads only the first and loses the rest.
+        if (exception is AggregateException aggregate)
+        {
+            foreach (var inner in aggregate.Flatten().InnerExceptions)
+            {
+                if (Classify(inner, depth + 1) is { } fromBranch)
+                {
+                    return fromBranch;
+                }
+            }
+
+            return null;
+        }
+
+        return exception.InnerException is { } single ? Classify(single, depth + 1) : null;
     }
 
     /// <summary>
