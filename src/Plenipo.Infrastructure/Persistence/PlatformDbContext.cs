@@ -47,6 +47,8 @@ public sealed class PlatformDbContext(
     public DbSet<BillingEvent> BillingEvents => Set<BillingEvent>();
     public DbSet<TenantEntitlement> TenantEntitlements => Set<TenantEntitlement>();
     public DbSet<ChannelCursor> ChannelCursors => Set<ChannelCursor>();
+    public DbSet<LocalCredential> LocalCredentials => Set<LocalCredential>();
+    public DbSet<LocalAuthKey> LocalAuthKeys => Set<LocalAuthKey>();
 
     private static readonly MethodInfo ApplyTenantFilterMethod = typeof(PlatformDbContext)
         .GetMethod(nameof(ApplyTenantFilter), BindingFlags.NonPublic | BindingFlags.Instance)!;
@@ -55,6 +57,13 @@ public sealed class PlatformDbContext(
     {
         modelBuilder.HasDefaultSchema(Schema);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(PlatformDbContext).Assembly);
+
+        // The embedded issuer's protocol stores (Auth:Mode=Local, ADR 0003). Always part of the model —
+        // never conditional on the mode — so migrations don't fork by deployment shape; outside Local
+        // mode the tables simply stay empty. None of these entities is ITenantOwned (tokens bind to a
+        // subject, and the issuer is deployment-level), so the tenant-filter loop below skips them, and
+        // their string keys leave the Guid v7 key fix-up alone.
+        modelBuilder.UseOpenIddict();
 
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {

@@ -3,6 +3,7 @@ using Plenipo.Application.Authorization;
 using Plenipo.Application.Bootstrap;
 using Plenipo.Application.Commerce;
 using Plenipo.Core.Platform;
+using Plenipo.Infrastructure.LocalAuth;
 using Plenipo.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -21,6 +22,8 @@ public sealed class PlatformBootstrapper(
     ITenantProvisioningService provisioning,
     IOptions<BootstrapOptions> options,
     IOptions<AuthorizationSourceOptions> authorizationSource,
+    IOptions<AuthModeOptions> authMode,
+    LocalCredentialService credentials,
     IEnumerable<ProductRole> productRoles,
     IAuditLog auditLog,
     ILogger<PlatformBootstrapper> logger) : IPlatformBootstrapper
@@ -43,9 +46,18 @@ public sealed class PlatformBootstrapper(
 
         var slug = settings.TenantSlug!.Trim().ToLowerInvariant();
         var email = settings.AdminEmail!.Trim();
-        var hasSubject = !string.IsNullOrWhiteSpace(settings.AdminSubject);
         var adminRoles = settings.EffectiveAdminRoles;
         var roleList = string.Join(", ", adminRoles);
+        var isLocal = authMode.Value.IsLocal;
+
+        // In Local mode this deployment IS the identity provider, so a missing AdminSubject is the
+        // normal case, not a gap: the platform mints one (ADR 0003). A minted subject binds the roles
+        // directly to the user row instead of through an email-matched invite — there is no unverified
+        // claim in the loop, because the only credential that will ever present this subject is the
+        // one created right below.
+        var subject = !string.IsNullOrWhiteSpace(settings.AdminSubject)
+            ? settings.AdminSubject.Trim()
+            : isLocal ? $"local|{Guid.CreateVersion7():N}" : null;
 
         // In Token mode the IdP is the single authority for roles, so DB assignments are never consulted
         // (PermissionResolver skips them entirely). Create the tenant anyway — that half is still needed —
@@ -67,9 +79,9 @@ public sealed class PlatformBootstrapper(
                 Name: string.IsNullOrWhiteSpace(settings.TenantName) ? slug : settings.TenantName.Trim(),
                 Slug: slug,
                 AdminEmail: email,
-                AdminSubject: settings.AdminSubject?.Trim(),
+                AdminSubject: subject,
                 AdminDisplayName: settings.AdminDisplayName?.Trim(),
-                AdminRoles: hasSubject ? adminRoles : []),
+                AdminRoles: subject is not null ? adminRoles : []),
             cancellationToken);
 
         if (result.Error == ProvisionError.SlugTaken)
@@ -89,7 +101,7 @@ public sealed class PlatformBootstrapper(
             return new BootstrapResult(BootstrapOutcome.Failed, Slug: slug, Detail: result.ErrorDetail);
         }
 
-        if (!hasSubject)
+        if (subject is null)
         {
             db.UserInvites.Add(new UserInvite
             {
@@ -100,16 +112,40 @@ public sealed class PlatformBootstrapper(
             await db.SaveChangesAsync(cancellationToken);
         }
 
+        // Local mode: the first admin needs a way IN — create their credential now. A configured
+        // Bootstrap:AdminInitialPassword is used as-is; otherwise a temporary one is generated and
+        // printed ONCE below. Either way the first sign-in forces a change.
+        string? generatedPassword = null;
+        if (isLocal && result.AdminUserId is { } adminUserId)
+        {
+            var admin = await db.Users.IgnoreQueryFilters().FirstAsync(u => u.Id == adminUserId, cancellationToken);
+            var configuredPassword = string.IsNullOrWhiteSpace(settings.AdminInitialPassword)
+                ? null
+                : settings.AdminInitialPassword;
+            var (_, initialPassword, credentialError) = await credentials.CreateAsync(
+                admin, configuredPassword, ipAddress: null, cancellationToken);
+            if (credentialError is not null)
+            {
+                logger.LogError(
+                    "Bootstrap created tenant {Slug} but could not create the admin's local credential: {Error}",
+                    slug, credentialError);
+            }
+            else if (configuredPassword is null)
+            {
+                generatedPassword = initialPassword;
+            }
+        }
+
         await auditLog.RecordAuthEventAsync(new AuthAuditEntry
         {
             TenantId = result.TenantId,
             UserId = result.AdminUserId,
-            Subject = Truncate(settings.AdminSubject ?? email, 200),
+            Subject = Truncate(subject ?? email, 200),
             UserDisplay = settings.AdminDisplayName,
             EventType = AuthAuditEventType.PlatformBootstrapped,
             Detail = Truncate(
                 $"created first tenant '{slug}' with admin {email} holding {roleList}" +
-                (hasSubject ? "" : " (via a standing invite, bound at first sign-in)"),
+                (subject is not null ? "" : " (via a standing invite, bound at first sign-in)"),
                 1000),
         }, cancellationToken);
 
@@ -119,6 +155,17 @@ public sealed class PlatformBootstrapper(
                 "Bootstrapped tenant {Slug} with first admin {Email} holding {Roles}. " +
                 "Remove the Bootstrap section from configuration now that the deployment has an operator.",
                 slug, email, roleList);
+        }
+
+        if (generatedPassword is not null)
+        {
+            // The Jenkins/Grafana first-run pattern: whoever reads the deployment's log already
+            // controls the deployment. The value stops working after its one job — first sign-in
+            // forces a change — and this is the only place it ever appears.
+            logger.LogWarning(
+                "LOCAL SIGN-IN READY — {Email} can sign in with the temporary password {Password} " +
+                "(shown only this once; a change is forced at first sign-in).",
+                email, generatedPassword);
         }
 
         return new BootstrapResult(BootstrapOutcome.Created, result.TenantId, slug);

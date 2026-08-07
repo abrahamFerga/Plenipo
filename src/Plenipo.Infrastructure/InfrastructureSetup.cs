@@ -251,12 +251,33 @@ public static class InfrastructureSetup
         // entirely to the external IdP. Fail fast on a typo rather than silently defaulting.
         services.Configure<AuthorizationSourceOptions>(
             builder.Configuration.GetSection(AuthorizationSourceOptions.SectionName));
-        (builder.Configuration.GetSection(AuthorizationSourceOptions.SectionName).Get<AuthorizationSourceOptions>()
-            ?? new AuthorizationSourceOptions()).ThrowIfInvalid();
+        var authorizationSource = builder.Configuration.GetSection(AuthorizationSourceOptions.SectionName)
+            .Get<AuthorizationSourceOptions>() ?? new AuthorizationSourceOptions();
+        authorizationSource.ThrowIfInvalid();
+
+        // Auth:Mode — unset (auto), Oidc, or Local, the embedded issuer (ADR 0003). Bound at the
+        // application layer so infrastructure services (bootstrap, credentials) branch on it without
+        // reaching up into the host. Validated here for the same reason PermissionSource is.
+        services.Configure<AuthModeOptions>(builder.Configuration.GetSection(AuthModeOptions.SectionName));
+        var authMode = builder.Configuration.GetSection(AuthModeOptions.SectionName).Get<AuthModeOptions>()
+            ?? new AuthModeOptions();
+        authMode.ThrowIfInvalid(authorizationSource);
 
         services.AddScoped<IPermissionResolver, PermissionResolver>();
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
+
+        // Local auth building blocks are registered unconditionally — the bootstrapper injects them,
+        // and outside Local mode they are inert (no row is ever written, no key is ever generated).
+        // The OpenIddict protocol stores exist only in Local mode: they are what the embedded
+        // authorization server persists codes/refresh tokens through.
+        services.AddScoped<LocalAuth.LocalCredentialService>();
+        services.AddSingleton<LocalAuth.ILocalAuthKeyRing, LocalAuth.LocalAuthKeyRing>();
+        if (authMode.IsLocal)
+        {
+            services.AddOpenIddict().AddCore(options =>
+                options.UseEntityFrameworkCore().UseDbContext<PlatformDbContext>());
+        }
     }
 
     private static void AddAuditing(IServiceCollection services)
@@ -303,10 +324,15 @@ public static class InfrastructureSetup
             builder.Configuration.GetSection(Plenipo.Application.Bootstrap.BootstrapOptions.SectionName));
         var bootstrapOptions = new Plenipo.Application.Bootstrap.BootstrapOptions();
         builder.Configuration.GetSection(Plenipo.Application.Bootstrap.BootstrapOptions.SectionName).Bind(bootstrapOptions);
-        bootstrapOptions.ThrowIfInvalid(Plenipo.Application.Authorization.RoleBaseline.Merge(
-            services.Where(d => d.ServiceType == typeof(Plenipo.Application.Authorization.ProductRole))
-                .Select(d => d.ImplementationInstance)
-                .OfType<Plenipo.Application.Authorization.ProductRole>()));
+        bootstrapOptions.ThrowIfInvalid(
+            Plenipo.Application.Authorization.RoleBaseline.Merge(
+                services.Where(d => d.ServiceType == typeof(Plenipo.Application.Authorization.ProductRole))
+                    .Select(d => d.ImplementationInstance)
+                    .OfType<Plenipo.Application.Authorization.ProductRole>()),
+            // Local mode mints the admin's subject itself (ADR 0003), so the explicit-subject guard
+            // for operator roles does not apply there.
+            platformIssuesSubjects: (builder.Configuration.GetSection(AuthModeOptions.SectionName)
+                .Get<AuthModeOptions>() ?? new AuthModeOptions()).IsLocal);
         services.AddScoped<Plenipo.Application.Bootstrap.IPlatformBootstrapper, Bootstrap.PlatformBootstrapper>();
         services.AddSingleton<Plenipo.Application.Commerce.IProductOfferingCatalog, Plenipo.Application.Commerce.ProductOfferingCatalog>();
         services.AddHttpClient(nameof(Commerce.GitHubDedicatedEnvironmentProvisioner));

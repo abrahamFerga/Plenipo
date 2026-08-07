@@ -45,6 +45,30 @@ public enum AuthAuditEventType
     /// so it must never be renamed.
     /// </summary>
     PlatformBootstrapped = 16,
+
+    // Local auth mode (Auth:Mode=Local, ADR 0003) — the embedded issuer's credential lifecycle.
+    // Successful local sign-ins record the existing SignIn event; these cover everything around it.
+
+    /// <summary>A local sign-in attempt failed (wrong password or TOTP code).</summary>
+    LocalSignInFailed = 17,
+
+    /// <summary>Repeated failures locked a local credential until its lockout horizon.</summary>
+    LocalLockedOut = 18,
+
+    /// <summary>A user changed their own local password (rotates the security stamp).</summary>
+    LocalPasswordChanged = 19,
+
+    /// <summary>An admin (or bootstrap) created a local credential with a temporary password.</summary>
+    LocalCredentialCreated = 20,
+
+    /// <summary>An admin reset a local credential to a new temporary password (rotates the stamp).</summary>
+    LocalCredentialReset = 21,
+
+    /// <summary>The user confirmed a TOTP enrollment with a valid code.</summary>
+    LocalMfaEnrolled = 22,
+
+    /// <summary>TOTP was removed from a local credential (by the user or an admin reset).</summary>
+    LocalMfaDisabled = 23,
 }
 
 /// <summary>Append-only record of an identity / authorization event.</summary>

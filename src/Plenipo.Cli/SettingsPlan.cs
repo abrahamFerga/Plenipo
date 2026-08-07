@@ -24,6 +24,9 @@ public sealed record SettingsPlan
 
     public string? FilesProvider { get; init; }
 
+    /// <summary>"Local" (built-in sign-in, ADR 0003), "Oidc", or null to leave the mode untouched.</summary>
+    public string? AuthMode { get; init; }
+
     public string? AuthAuthority { get; init; }
     public string? AuthAudience { get; init; }
     public string? PermissionSource { get; init; }
@@ -72,6 +75,7 @@ public static class PlenipoSettingsFile
 
         Set(root, plan.FilesProvider, "Files", "Provider");
 
+        Set(root, plan.AuthMode, "Auth", "Mode");
         Set(root, plan.AuthAuthority, "Auth", "Authority");
         Set(root, plan.AuthAudience, "Auth", "Audience");
         Set(root, plan.PermissionSource, "Auth", "PermissionSource");

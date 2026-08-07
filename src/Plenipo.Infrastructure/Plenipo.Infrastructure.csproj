@@ -34,6 +34,10 @@
          Azure.Storage.Blobs (MIT) backs the production file store. -->
     <PackageReference Include="PdfPig" />
     <PackageReference Include="Azure.Storage.Blobs" />
+
+    <!-- Local auth mode (ADR 0003): OpenIddict EF stores. (PasswordHasher comes from the
+         Microsoft.AspNetCore.App framework reference above — no Identity package needed.) -->
+    <PackageReference Include="OpenIddict.EntityFrameworkCore" />
   </ItemGroup>
 
   <ItemGroup>

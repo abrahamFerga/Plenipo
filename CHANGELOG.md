@@ -130,6 +130,28 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
 
 ### Added
 
+- **Built-in sign-in: `Auth:Mode=Local` makes the host its own OpenID Connect issuer (ADR 0003).**
+  On-prem and mini-PC deployments were left choosing between standing up Entra External ID — the
+  single biggest install-time cliff — or bundling a Keycloak-class sidecar that duplicates the
+  users, invites, roles and seat limits the platform database already owns. Now the host itself can
+  issue the tokens: embedded OpenIddict (authorization code + PKCE + rotating refresh tokens),
+  a server-rendered branded login page with forced-password-change and TOTP steps, credentials on
+  the existing platform `User` (PBKDF2, per-credential lockout, a security stamp that ends every
+  outstanding session on any reset), per-deployment signing keys stored Data-Protection-protected,
+  and a daily prune of expired protocol state.
+
+  What deliberately does not fork: the API surface stays bearer-JWT through the identical JwtBearer →
+  `RequestEnricher` → RBAC path; the SPA runs its unchanged PKCE flow (`/api/platform/auth-config`
+  answers `oidc` with the host's own origin as authority); `Auth:RequireMfa` composes (the issuer
+  emits `amr: ["otp"]`); and unset `Auth:Mode` behaves exactly as before — Local is explicit opt-in,
+  never a weakened default. User management completes in Admin → Users ("Local sign-in accounts"):
+  create-with-temporary-password (the no-SMTP path), reset, unlock, remove MFA — behind the existing
+  `platform.users.manage` / `platform.roles.manage` permissions, answering 409 on external-IdP
+  deployments. `Bootstrap` gains `AdminInitialPassword` (absent → a temporary one is printed once at
+  first startup); `plenipo init` offers the choice as step 6; the Compose profile carries `AUTH_MODE`.
+  Redirect URIs validate same-host-by-path, because a mini PC is legitimately reached by hostname,
+  mDNS name, and LAN IP at once — foreign hosts stay refused.
+
 - **The web shell can obtain a real bearer token.** Server-side auth was complete, but the shipped web
   client had no way to get a token — no sign-in route, no authority redirect, no callback handler, no
   token store, no refresh, no 401 recovery. `PlenipoClientConfig.authHeaders` was the right seam, but
@@ -165,6 +187,25 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   after the first start.
 
 ### Fixed
+
+- **Dev-auth now resolves the caller on hub paths, so chat over SignalR is no longer always
+  `system_admin`.** A browser's WebSocket handshake cannot set request headers, so SignalR can only
+  carry the dev identity in the query string. `DevAuthenticationHandler` read `Request.Headers` only,
+  and every `/hubs` turn in Development therefore fell through to its defaults — subject `dev-user`,
+  tenant `dev`, roles `system_admin` ⇒ `["*"]`. The pre-model-call tool filter offered tools RBAC
+  should have removed and approvals parked in a tenant nobody addressed, which meant RBAC-shaped
+  behaviour "verified" over the hub proved nothing about RBAC.
+
+  The handler now reads `X-Dev-*` from the query string for **hub paths only** — the same restriction,
+  for the same reason, that `AuthSetup` already puts on the JwtBearer `access_token` parameter: a query
+  string reaches browser history and proxy logs, and the REST surface can carry headers perfectly well,
+  so it keeps ignoring identity in the URL. A header still wins where both are present, and the
+  absent-vs-present-but-empty `X-Dev-Roles` asymmetry is preserved.
+
+  Development-only: the handler is registered only when no real authority is configured. The shipped
+  `@plenipo/ui` still sends no identity in the hub URL and is unchanged — its dev identity is a
+  constant equal to these same defaults, so emitting it would be a no-op. This is what lets a product's
+  dev identity switcher or e2e harness drive a real identity over the hub.
 
 - **A request whose tenant does not resolve now says so.** `GET /api/platform/me` reports
   `tenantResolved: false` with a `tenantProblem` naming the cause, the resulting 403 carries the same

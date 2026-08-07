@@ -105,9 +105,13 @@ infra/                               # Terraform (azurerm): Container Apps, Post
    `platform.users.manage`). Wildcards (`tools.finance.*`) and the `*` global grant are honoured.
 3. **Per-resource ACLs** — owner/editor/viewer (the seam exists; module-specific).
 
-**Bring your own IdP (Entra External ID / B2C).** Authentication is OIDC: set the `Auth` section
-(`Authority` + `Audience`) and Plenipo validates that IdP's JWTs — the `X-Dev-*` dev scheme isn't
-even registered once a real authority is configured (and is Development-only regardless). For
+**Bring your own IdP — or none at all.** Authentication is OIDC either way. Set the `Auth` section
+(`Authority` + `Audience`) and Plenipo validates that IdP's JWTs (Entra External ID, Keycloak,
+Authentik — anything compliant). Or set **`Auth:Mode=Local`** and the host is its own OIDC issuer:
+a built-in login page, users and passwords managed in the admin console, optional TOTP — zero
+external identity setup, which is what an on-prem or mini-PC install wants
+(docs/CONFIGURATION.md → "Built-in sign-in", ADR 0003). The `X-Dev-*` dev scheme isn't even
+registered once either is configured (and is Development-only regardless). For
 deployments that want the IdP to own authorization too, set `"Auth": { "PermissionSource": "Token" }`:
 roles then come **exclusively** from the token (Entra app roles / B2C claims), internal role
 assignments and per-user grants are ignored, JIT provisioning never invents a default role, and the

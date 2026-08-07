@@ -53,9 +53,13 @@ before deploying.
   verifiable against the trail.
 - **Multi-tenant isolation.** Row-level isolation via EF Core global query filters on `TenantId` — a query
   cannot cross a tenant boundary by omission.
-- **Authentication.** Entra External ID (OIDC / JWT) in production; a dev-only header fallback that is
-  registered **only** in the Development environment. JWT authority and audience are both mandatory,
-  and tokens are always audience-validated.
+- **Authentication.** Two production shapes, both OIDC bearer-JWT on the API surface: an external
+  IdP (Entra External ID, Keycloak, …) via `Auth:Authority`/`Auth:Audience`, or **built-in sign-in**
+  (`Auth:Mode=Local`, ADR 0003) where the host is its own OpenID Connect issuer — embedded OpenIddict,
+  PBKDF2-hashed credentials in the platform database, per-credential lockout, optional TOTP, a
+  security stamp that ends outstanding sessions on any password reset, and every sign-in event in the
+  append-only audit trail. The dev-only header fallback is registered **only** in the Development
+  environment. Tokens are always audience-validated.
 - **Controlled outbound traffic.** Tenant-configured HTTP endpoints are restricted to HTTPS and public
   network destinations by default; redirects are disabled on sensitive clients. Operators can explicitly
   permit HTTP/private destinations only for an isolated self-hosted deployment.
@@ -68,13 +72,22 @@ before deploying.
 
 ## Hardening notes for deployment
 
-- Configure Entra External ID. The dev-auth fallback is inert outside Development, so you **must** set
-  both `Auth:Authority` and `Auth:Audience` in production. A partial configuration fails startup.
+- Configure authentication explicitly. The dev-auth fallback is inert outside Development, so you
+  **must** either set both `Auth:Authority` and `Auth:Audience` (external IdP) or set
+  `Auth:Mode=Local` (built-in sign-in — the on-prem/mini-PC path with no external dependency).
+  A partial or contradictory configuration fails startup; built-in sign-in is never a silent default.
+- **Built-in sign-in specifics** (`Auth:Mode=Local`): the first admin comes from the `Bootstrap`
+  section — with no `Bootstrap:AdminInitialPassword` a temporary password is printed ONCE to the
+  startup log and must be changed at first sign-in. Login and token endpoints are IP-rate-limited and
+  credentials lock after repeated failures. Signing keys are generated per deployment and stored
+  Data-Protection-protected in the platform database. On plain-HTTP LAN deployments set
+  `Auth:RequireHttpsMetadata=false` deliberately; anywhere TLS exists, leave it on.
 - **Multi-factor authentication** is enrolled and enforced at your IdP (Entra External ID user
-  flows, Keycloak/Authentik for self-hosters) — Plenipo deliberately holds no credential store.
-  Set `Auth:RequireMfa` to make the platform additionally **reject any token that was not issued
-  after MFA** (judged by the `amr` claim; accepted markers configurable via `Auth:MfaAmrValues`),
-  so an IdP misconfiguration can't silently admit single-factor sessions.
+  flows, Keycloak/Authentik for self-hosters) — or, under built-in sign-in, as TOTP enrolled from
+  `/api/auth/totp/*` and verified on the login page. Set `Auth:RequireMfa` to make the platform
+  additionally **reject any token that was not issued after MFA** (judged by the `amr` claim;
+  accepted markers configurable via `Auth:MfaAmrValues`) — the local issuer emits `amr: ["otp"]`
+  after a verified TOTP code, so the same backstop covers both shapes.
 - **Browser sign-in.** Set `Auth:ClientId` to the PUBLIC client id of your SPA registration, and register
   `https://<your-host>/signin-callback` and `https://<your-host>/admin/signin-callback` as its redirect
   URIs. The shipped shell then runs Authorization Code + PKCE with no client secret — a browser cannot
@@ -86,7 +99,10 @@ before deploying.
 - **Anonymous endpoints** are exactly: `/alive` and `/health` (liveness/readiness),
   `/api/platform/branding` (the product name, which must render before any sign-in),
   `/api/platform/auth-config` (public OIDC client metadata — a client cannot present a token before it
-  knows where to get one), and the signature-verified Stripe and WhatsApp webhooks. Nothing else.
+  knows where to get one), the signature-verified Stripe and WhatsApp webhooks, and — **only under
+  `Auth:Mode=Local`** — the issuer surface itself: `/.well-known/*` (discovery + JWKS),
+  `/connect/authorize|token|logout`, and the `/auth/login*` pages (anonymous by definition: they are
+  what creates sessions; rate-limited and lockout-protected). Nothing else.
   If you add health checks that surface sensitive dependency detail, restrict `/health` (auth, or an
   internal-only port).
 - Run behind HTTPS; terminate TLS at the ingress (the Container App / reverse proxy).

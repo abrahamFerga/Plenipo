@@ -119,7 +119,55 @@ if (!FIXTURE || RUNS_FIXTURE) {
 function evaluate(pr) {
   const fail = [];
   const labels = (pr.labels ?? []).map((l) => (typeof l === 'string' ? l : l.name).toLowerCase());
-  const checks = pr.statusCheckRollup ?? [];
+  // GitHub's rollup keeps EVERY check run for the head commit, including superseded ones — a check
+  // that failed and was then re-run green appears TWICE. Filtering the raw list makes a stale
+  // FAILURE permanent: a pull request that ever went red could never merge again however green it
+  // became, and the queue stops with a reason that reads like a real failure.
+  //
+  // Observed, not theorised: after a PR body edit re-triggered `Agent gates`, the rollup held
+  //   PR gates | FAILURE | 01:29:48
+  //   PR gates | SUCCESS | 01:31:56
+  // and `gh pr checks` reported pass while this gate reported "PR gates not passing".
+  //
+  // EVERY rule below biases toward blocking, because the two failure directions are not
+  // symmetrical: refusing a mergeable PR wastes a tick, while merging on a superseded green is
+  // unrecoverable. An earlier version of this collapsed to "latest by startedAt", which merged a PR
+  // whose re-run was still QUEUED — the queued entry has no timestamp, lost the comparison, and was
+  // dropped. That sequence is routine here by design: `agent-gates.yml` re-triggers on `labeled`,
+  // ship adds `agent:approved`, and the merge cron fires minutes later.
+  //
+  // NOTE: this is deliberately NOT the same rule as `brokenWorkflows` below, despite operating on
+  // the same idea. That one keys on the WORKFLOW name, takes the first entry trusting `gh run list`
+  // to be newest-first, and excludes `cancelled`. This keys on workflow+job (two workflows may both
+  // define `build`), cannot trust rollup ordering (observed: the earliest-started entry appearing
+  // last), and treats `cancelled` as broken.
+  const groups = new Map();
+  for (const c of pr.statusCheckRollup ?? []) {
+    // Job name alone collides across workflows; qualify it.
+    const key = `${c.workflowName ?? ''}/${c.name || c.context || ''}`;
+    (groups.get(key) ?? groups.set(key, []).get(key)).push(c);
+  }
+
+  const terminal = (c) => (c.conclusion || c.state || c.status || '').toUpperCase();
+  const isPending = (c) => ['PENDING', 'IN_PROGRESS', 'QUEUED', 'WAITING', ''].includes(terminal(c));
+  // StatusContext entries carry no startedAt at all; legacy commit statuses only have createdAt.
+  const when = (c) => c.completedAt ?? c.startedAt ?? c.createdAt ?? '';
+
+  const checks = [...groups.values()].map((runs) => {
+    // A re-run in flight means the verdict is not settled, whatever an older run concluded. Report
+    // the pending one so `checks_green` says "still running" rather than merging on stale green.
+    const inFlight = runs.find(isPending);
+    if (inFlight) return inFlight;
+
+    // Latest terminal run wins; on a tie — same-second timestamps are common, one event triggering
+    // several runs — prefer the non-SUCCESS, so an ambiguous pair never resolves to "mergeable".
+    return runs.reduce((best, c) => {
+      if (when(c) > when(best)) return c;
+      if (when(c) < when(best)) return best;
+      return terminal(best) === 'SUCCESS' ? c : best;
+    });
+  });
+
   const files = (pr.files ?? []).map((f) => f.path ?? f.filename ?? '');
 
   const state = (c) => (c.conclusion || c.state || c.status || '').toUpperCase();

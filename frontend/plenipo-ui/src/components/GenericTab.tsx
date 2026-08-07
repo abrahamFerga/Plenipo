@@ -293,7 +293,7 @@ function DetailView({ endpoint, onBack }: { endpoint: string; onBack: () => void
             ((section.rows.length ?? 0) === 0 ? (
               <p className="text-sm text-slate-400">None.</p>
             ) : (
-              <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
+              <div className="overflow-x-auto overflow-y-hidden rounded-lg border border-slate-200 dark:border-slate-700">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                     <tr>
@@ -664,7 +664,7 @@ function DataTable({
           })}
         </ul>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
+        <div className="overflow-x-auto overflow-y-hidden rounded-lg border border-slate-200 dark:border-slate-700">
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
               <tr>
