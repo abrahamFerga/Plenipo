@@ -1359,7 +1359,148 @@ public static class AdminEndpoints
         })
         .RequireAuthorization(PermissionRequirement.PolicyName(Permissions.ViewAuditLog))
         .WithName("Admin_Usage");
+
+        MapAgentRuns(group);
     }
+
+    // ── Agent runs: one row per turn, however it ended ────────────────────────
+
+    private static void MapAgentRuns(RouteGroupBuilder group)
+    {
+        // The run explorer's list: a health summary over the whole filtered window, plus the most
+        // recent page of runs. The summary is computed from two narrow columns rather than the full
+        // rows, so widening the window costs a projection, not a table load.
+        group.MapGet("/runs", async (
+            AuditDbContext audit, ICurrentUser current,
+            int? days, string? module, string? model, string? outcome, Guid? conversationId, int? take,
+            CancellationToken ct) =>
+        {
+            var tenantId = current.TenantId ?? Guid.Empty;
+            var since = DateTimeOffset.UtcNow.AddDays(-Math.Clamp(days ?? 7, 1, 365));
+
+            var query = audit.AgentRuns.Where(r => r.TenantId == tenantId && r.OccurredAt >= since);
+
+            if (!string.IsNullOrWhiteSpace(module))
+            {
+                query = query.Where(r => r.ModuleId == module);
+            }
+
+            if (!string.IsNullOrWhiteSpace(model))
+            {
+                query = query.Where(r => r.Model == model);
+            }
+
+            if (Enum.TryParse<AgentRunOutcome>(outcome, ignoreCase: true, out var parsedOutcome))
+            {
+                query = query.Where(r => r.Outcome == parsedOutcome);
+            }
+
+            if (conversationId is { } cid)
+            {
+                query = query.Where(r => r.ConversationId == cid);
+            }
+
+            var stats = await query
+                .Select(r => new { r.Outcome, r.TotalMs, r.TotalTokens, r.Cost })
+                .ToListAsync(ct);
+
+            var durations = stats.Select(s => s.TotalMs).OrderBy(ms => ms).ToArray();
+            var errors = stats.Count(s => s.Outcome != AgentRunOutcome.Completed);
+            var summary = new AgentRunSummaryDto(
+                stats.Count,
+                errors,
+                stats.Count == 0 ? 0 : Math.Round((double)errors / stats.Count, 4),
+                Percentile(durations, 0.50),
+                Percentile(durations, 0.95),
+                stats.Sum(s => s.TotalTokens),
+                stats.Sum(s => s.Cost ?? 0m));
+
+            var runs = await query
+                .OrderByDescending(r => r.OccurredAt)
+                .Take(Math.Clamp(take ?? 100, 1, 500))
+                .ToListAsync(ct);
+
+            // Filter options come from the window itself, so the UI only ever offers values that exist.
+            var modules = await query.Select(r => r.ModuleId).Distinct().OrderBy(m => m).ToListAsync(ct);
+            var models = await query
+                .Where(r => r.Model != null)
+                .Select(r => r.Model!)
+                .Distinct()
+                .OrderBy(m => m)
+                .ToListAsync(ct);
+
+            return Results.Ok(new AgentRunListDto(
+                summary,
+                runs.Select(ToRunDto).ToArray(),
+                modules.ToArray(),
+                models.ToArray(),
+                Enum.GetNames<AgentRunOutcome>()));
+        })
+        .RequireAuthorization(PermissionRequirement.PolicyName(Permissions.ViewAuditLog))
+        .WithName("Admin_AgentRuns");
+
+        // One turn, reconstructed: the run itself, the tool calls it made, and — for a workflow —
+        // the step runs that carry it as their parent.
+        group.MapGet("/runs/{id:guid}", async (
+            Guid id, AuditDbContext audit, ICurrentUser current, CancellationToken ct) =>
+        {
+            var tenantId = current.TenantId ?? Guid.Empty;
+            var run = await audit.AgentRuns.FirstOrDefaultAsync(r => r.Id == id && r.TenantId == tenantId, ct);
+            if (run is null)
+            {
+                return Results.NotFound();
+            }
+
+            // tool_calls predate agent_runs and carry no run id, so they are matched on the
+            // conversation within this turn's own wall-clock window. The second of slack absorbs
+            // the gap between a tool completing and its audit row being stamped.
+            var toolCalls = Array.Empty<ToolCallDto>();
+            if (run.ConversationId is { } conversationId)
+            {
+                var until = run.OccurredAt.AddMilliseconds(run.TotalMs).AddSeconds(1);
+                toolCalls = await audit.ToolCalls
+                    .Where(t => t.TenantId == tenantId
+                        && t.ConversationId == conversationId
+                        && t.OccurredAt >= run.OccurredAt
+                        && t.OccurredAt <= until)
+                    .OrderBy(t => t.OccurredAt)
+                    .Select(t => new ToolCallDto(
+                        t.Id, t.OccurredAt, t.UserDisplay, t.ModuleId, t.ToolName, t.Permission, t.Success, t.Error, t.DurationMs))
+                    .ToArrayAsync(ct);
+            }
+
+            var steps = await audit.AgentRuns
+                .Where(r => r.TenantId == tenantId && r.ParentRunId == id)
+                .OrderBy(r => r.OccurredAt)
+                .ToListAsync(ct);
+
+            return Results.Ok(new AgentRunDetailDto(
+                ToRunDto(run),
+                toolCalls,
+                steps.Select(ToRunDto).ToArray()));
+        })
+        .RequireAuthorization(PermissionRequirement.PolicyName(Permissions.ViewAuditLog))
+        .WithName("Admin_AgentRunDetail");
+    }
+
+    /// <summary>Nearest-rank percentile over a pre-sorted array; 0 for an empty window.</summary>
+    private static long Percentile(long[] sorted, double fraction)
+    {
+        if (sorted.Length == 0)
+        {
+            return 0;
+        }
+
+        var rank = (int)Math.Ceiling(fraction * sorted.Length) - 1;
+        return sorted[Math.Clamp(rank, 0, sorted.Length - 1)];
+    }
+
+    private static AgentRunDto ToRunDto(AgentRunRecord r) => new(
+        r.Id, r.OccurredAt, r.UserDisplay, r.ModuleId, r.ConversationId,
+        r.AgentName, r.WorkflowName, r.ParentRunId, r.Provider, r.Model,
+        r.InstructionsHash, r.Outcome.ToString(), r.ErrorKind, r.ErrorMessage,
+        r.FirstTokenMs, r.TotalMs, r.ToolCallCount, r.ApprovalCount,
+        r.InputTokens, r.OutputTokens, r.TotalTokens, r.Cost, r.Currency, r.TraceId);
 
     /// <summary>Records an auth-audit event for a security change one user made to another (attributed to the
     /// actor, with the target and the exact change in <c>Detail</c>). Used by the role/permission endpoints.</summary>
@@ -1517,4 +1658,19 @@ public static class AdminEndpoints
         long InputTokens, long OutputTokens, long TotalTokens, int Turns, UsageByModuleDto[] ByModule, UsageByDayDto[] ByDay);
     private sealed record UsageByModuleDto(string ModuleId, long InputTokens, long OutputTokens, long TotalTokens, int Turns);
     private sealed record UsageByDayDto(DateOnly Day, long TotalTokens);
+
+    private sealed record AgentRunDto(
+        Guid Id, DateTimeOffset OccurredAt, string? UserDisplay, string ModuleId, Guid? ConversationId,
+        string? AgentName, string? WorkflowName, Guid? ParentRunId, string? Provider, string? Model,
+        string? InstructionsHash, string Outcome, string? ErrorKind, string? ErrorMessage,
+        long? FirstTokenMs, long TotalMs, int ToolCallCount, int ApprovalCount,
+        long InputTokens, long OutputTokens, long TotalTokens, decimal? Cost, string? Currency, string? TraceId);
+
+    private sealed record AgentRunSummaryDto(
+        int Total, int Errors, double ErrorRate, long P50Ms, long P95Ms, long TotalTokens, decimal Cost);
+
+    private sealed record AgentRunListDto(
+        AgentRunSummaryDto Summary, AgentRunDto[] Runs, string[] Modules, string[] Models, string[] Outcomes);
+
+    private sealed record AgentRunDetailDto(AgentRunDto Run, ToolCallDto[] ToolCalls, AgentRunDto[] Steps);
 }

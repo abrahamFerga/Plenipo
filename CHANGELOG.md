@@ -193,8 +193,9 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   `"The assistant could not complete the request."` — the same sentence for a rejected API key, an
   exhausted quota, a model the connection does not carry, and a provider outage. Three of those the
   tenant's own administrator resolves in a minute, and the real reason went only to
-  `logger.LogError`, which on a hosted deployment is the operator's log and not theirs. The reported
-  symptom from a product was, accurately, "not working".
+  `logger.LogError` — and now also to the agent-run audit record — both of which are the operator's
+  on a hosted deployment, not theirs. The reported symptom from a product was, accurately, "not
+  working".
 
   `AgentTurnFailure.Describe` classifies the exception and the runner reports the result: a rejected
   key and an unreachable endpoint each name the AI-settings screen, a spent quota and an outage each

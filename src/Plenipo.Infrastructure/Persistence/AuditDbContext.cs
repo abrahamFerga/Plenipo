@@ -19,6 +19,7 @@ public sealed class AuditDbContext(DbContextOptions<AuditDbContext> options) : D
     public DbSet<AuthAuditEntry> AuthEvents => Set<AuthAuditEntry>();
     public DbSet<EntityChangeAuditEntry> EntityChanges => Set<EntityChangeAuditEntry>();
     public DbSet<TokenUsageRecord> TokenUsage => Set<TokenUsageRecord>();
+    public DbSet<AgentRunRecord> AgentRuns => Set<AgentRunRecord>();
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
@@ -42,6 +43,7 @@ public sealed class AuditDbContext(DbContextOptions<AuditDbContext> options) : D
         modelBuilder.Entity<AuthAuditEntry>(ConfigureAuthEvent);
         modelBuilder.Entity<EntityChangeAuditEntry>(ConfigureEntityChange);
         modelBuilder.Entity<TokenUsageRecord>(ConfigureTokenUsage);
+        modelBuilder.Entity<AgentRunRecord>(ConfigureAgentRun);
 
         base.OnModelCreating(modelBuilder);
     }
@@ -98,6 +100,32 @@ public sealed class AuditDbContext(DbContextOptions<AuditDbContext> options) : D
         b.HasIndex(x => new { x.TenantId, x.OccurredAt });
         b.HasIndex(x => new { x.TenantId, x.ModuleId });
         b.HasIndex(x => x.ConversationId);
+    }
+
+    private static void ConfigureAgentRun(EntityTypeBuilder<AgentRunRecord> b)
+    {
+        b.ToTable("agent_runs");
+        b.HasKey(x => x.Id);
+        b.Property(x => x.ModuleId).HasMaxLength(64).IsRequired();
+        b.Property(x => x.UserDisplay).HasMaxLength(200);
+        b.Property(x => x.AgentName).HasMaxLength(128);
+        b.Property(x => x.WorkflowName).HasMaxLength(128);
+        b.Property(x => x.Provider).HasMaxLength(32);
+        b.Property(x => x.Model).HasMaxLength(128);
+        b.Property(x => x.InstructionsHash).HasMaxLength(64);
+        // Stored as the enum NAME so a reordered enum can never silently re-label historical rows.
+        b.Property(x => x.Outcome).HasConversion<string>().HasMaxLength(24).IsRequired();
+        b.Property(x => x.ErrorKind).HasMaxLength(128);
+        b.Property(x => x.ErrorMessage).HasMaxLength(2000);
+        b.Property(x => x.Cost).HasPrecision(18, 6);
+        b.Property(x => x.Currency).HasMaxLength(3);
+        b.Property(x => x.TraceId).HasMaxLength(32);
+        b.Property(x => x.SpanId).HasMaxLength(16);
+        b.HasIndex(x => new { x.TenantId, x.OccurredAt });
+        // The failure-hunting index: "what went wrong for this tenant recently".
+        b.HasIndex(x => new { x.TenantId, x.Outcome, x.OccurredAt });
+        b.HasIndex(x => x.ConversationId);
+        b.HasIndex(x => x.ParentRunId);
     }
 
     private void EnsureAppendOnly()

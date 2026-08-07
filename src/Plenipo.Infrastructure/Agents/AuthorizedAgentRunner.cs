@@ -17,6 +17,7 @@ using Plenipo.Application.Skills;
 using Plenipo.Application.Usage;
 using Plenipo.Core.Identity;
 using Plenipo.Core.Platform;
+using Plenipo.Infrastructure.Auditing;
 using Plenipo.Modules.Sdk;
 
 namespace Plenipo.Infrastructure.Agents;
@@ -71,8 +72,46 @@ public sealed class AuthorizedAgentRunner(
         AgentRunRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        await foreach (var evt in RunInternalAsync(request, parentRunId: null, cancellationToken))
+        {
+            yield return evt;
+        }
+    }
+
+    /// <summary>
+    /// Wraps every turn — including each step of a workflow — so that exactly one
+    /// <see cref="AgentRunRecord"/> is written however the turn ends. <see cref="RunCoreAsync"/> keeps
+    /// its early <c>yield break</c>s; this <c>finally</c> is what makes them auditable. Because an async
+    /// iterator runs its <c>finally</c> on disposal, a client that hangs up mid-stream is recorded too,
+    /// rather than leaving no trace at all.
+    /// </summary>
+    private async IAsyncEnumerable<AgentStreamEvent> RunInternalAsync(
+        AgentRunRequest request,
+        Guid? parentRunId,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var run = new AgentRunRecorder(currentUser, request, parentRunId);
+        try
+        {
+            await foreach (var evt in RunCoreAsync(request, run, cancellationToken))
+            {
+                yield return evt;
+            }
+        }
+        finally
+        {
+            await run.FlushAsync(auditLog, logger);
+        }
+    }
+
+    private async IAsyncEnumerable<AgentStreamEvent> RunCoreAsync(
+        AgentRunRequest request,
+        AgentRunRecorder run,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
         if (!moduleCatalog.TryGetManifest(request.ModuleId, out var manifest) || manifest is null)
         {
+            run.Fail(AgentRunOutcome.ModuleUnavailable, "UnknownModule", $"Unknown module '{request.ModuleId}'.");
             yield return AgentStreamEvent.Failed($"Unknown module '{request.ModuleId}'.");
             yield break;
         }
@@ -81,6 +120,8 @@ public sealed class AuthorizedAgentRunner(
         // the turn before resolving any tools, so a disabled module's tools never reach the model.
         if (!await tenantModuleStore.IsEnabledAsync(request.ModuleId, cancellationToken))
         {
+            run.Fail(AgentRunOutcome.ModuleUnavailable, "ModuleDisabled",
+                $"Module '{request.ModuleId}' is not enabled for this tenant.");
             yield return AgentStreamEvent.Failed($"The '{manifest.DisplayName}' module is not enabled for this tenant.");
             yield break;
         }
@@ -100,6 +141,10 @@ public sealed class AuthorizedAgentRunner(
         await RecordSecurityAsync(request.ModuleId, AgentSecurityStage.UserInput, inputInspection, cancellationToken);
         if (inputInspection.Blocked)
         {
+            run.Fail(
+                AgentRunOutcome.BlockedBySecurity,
+                inputInspection.Unavailable ? "SecurityUnavailable" : "InputBlocked",
+                SecurityFindingSummary(inputInspection));
             yield return AgentStreamEvent.Failed(SecurityFailureMessage(inputInspection));
             yield break;
         }
@@ -119,15 +164,21 @@ public sealed class AuthorizedAgentRunner(
                 w => string.Equals(w.Name, request.Agent, StringComparison.Ordinal));
             if (workflow is not null)
             {
+                // This run becomes the PARENT of the chain: each step below opens its own run
+                // carrying this id, so the explorer can nest a workflow under the turn that began it.
+                run.Workflow(workflow.Name);
+
                 if (workflow.AgentNames.Count == 0 ||
                     workflow.AgentNames.Any(n => manifest.Workflows.Any(w => string.Equals(w.Name, n, StringComparison.Ordinal))))
                 {
+                    run.Fail(AgentRunOutcome.Rejected, "MisdeclaredWorkflow",
+                        $"Workflow '{workflow.Name}' needs at least one step, and steps must be agents, not workflows.");
                     yield return AgentStreamEvent.Failed(
                         $"Workflow '{workflow.Name}' is misdeclared: it needs at least one step, and steps must be agents, not workflows.");
                     yield break;
                 }
 
-                await foreach (var evt in RunWorkflowAsync(workflow, request, cancellationToken))
+                await foreach (var evt in RunWorkflowAsync(workflow, request, run, cancellationToken))
                 {
                     yield return evt;
                 }
@@ -146,6 +197,8 @@ public sealed class AuthorizedAgentRunner(
             profile = await agentProfiles.ResolveNamedAsync(request.ModuleId, request.Agent, cancellationToken);
             if (profile is null)
             {
+                run.Fail(AgentRunOutcome.Rejected, "UnknownAgent",
+                    $"Unknown agent '{request.Agent}' for module '{request.ModuleId}'.");
                 yield return AgentStreamEvent.Failed(
                     $"Unknown agent '{request.Agent}' for the '{manifest.DisplayName}' module.");
                 yield break;
@@ -168,6 +221,8 @@ public sealed class AuthorizedAgentRunner(
         {
             if (!aiSettings.AllowsModel(request.Model))
             {
+                run.Fail(AgentRunOutcome.Rejected, "ModelNotAvailable",
+                    $"Model '{request.Model}' is not on the advertised list for this tenant.");
                 yield return AgentStreamEvent.Failed(
                     $"Model '{request.Model}' is not available. An administrator configures the selectable models (Ai:AvailableModels).");
                 yield break;
@@ -175,6 +230,12 @@ public sealed class AuthorizedAgentRunner(
 
             modelOverride = request.Model;
         }
+
+        // The model that will actually serve the turn: the per-turn pick, else the agent's pin, else
+        // the tenant default. Stamped before the client is built so a turn that dies resolving the
+        // provider still records WHAT it was trying to run.
+        var effectiveModel = modelOverride is { Length: > 0 } ? modelOverride : aiSettings.Model;
+        run.Provider(aiSettings.Provider, effectiveModel);
 
         // The turn's chat client: the tenant's connection with the model override. A misconfigured
         // connection (e.g. a key that no longer reveals) fails the turn readably.
@@ -187,6 +248,8 @@ public sealed class AuthorizedAgentRunner(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Could not build the chat client for provider {Provider}.", aiSettings.Provider);
+            // The audit keeps the real exception; the user gets the sanitized sentence below.
+            run.Fail(AgentRunOutcome.ProviderUnavailable, ex.GetType().Name, ex.Message);
             clientError = "The AI provider connection is misconfigured for this tenant. An administrator can fix it under AI settings.";
         }
 
@@ -198,6 +261,8 @@ public sealed class AuthorizedAgentRunner(
 
         if (chatClient is null)
         {
+            run.Fail(AgentRunOutcome.ProviderUnavailable, "ProviderNotConfigured",
+                $"No chat client for provider '{aiSettings.Provider}'.");
             yield return AgentStreamEvent.Failed("The AI provider is not configured for this deployment.");
             yield break;
         }
@@ -229,9 +294,13 @@ public sealed class AuthorizedAgentRunner(
 
         if (conversation is null)
         {
+            run.Fail(AgentRunOutcome.Rejected, "ConversationNotFound",
+                $"Conversation '{request.ConversationId}' could not be resolved.");
             yield return AgentStreamEvent.Failed("Conversation not found.");
             yield break;
         }
+
+        run.Conversation(conversation.Id);
 
         // Per-conversation token budget (per-tenant override applied): refuse the turn once prior usage has reached the cap.
         if (aiSettings.MaxConversationTokens > 0)
@@ -239,6 +308,8 @@ public sealed class AuthorizedAgentRunner(
             var consumed = await usageReader.GetConversationTotalAsync(conversation.Id, cancellationToken);
             if (TokenBudget.IsExceeded(consumed, aiSettings.MaxConversationTokens))
             {
+                run.Fail(AgentRunOutcome.BudgetExceeded, "ConversationBudget",
+                    $"Conversation consumed {consumed:N0} of {aiSettings.MaxConversationTokens:N0} tokens.");
                 yield return AgentStreamEvent.Failed(
                     $"This conversation has reached its token budget ({aiSettings.MaxConversationTokens:N0} tokens). Start a new conversation to continue.");
                 yield break;
@@ -253,6 +324,8 @@ public sealed class AuthorizedAgentRunner(
             monthConsumed = await usageReader.GetTenantMonthTotalAsync(DateTimeOffset.UtcNow, cancellationToken);
             if (TokenBudget.IsExceeded(monthConsumed, aiSettings.MaxMonthlyTokens))
             {
+                run.Fail(AgentRunOutcome.BudgetExceeded, "MonthlyBudget",
+                    $"Tenant consumed {monthConsumed:N0} of {aiSettings.MaxMonthlyTokens:N0} tokens this month.");
                 yield return AgentStreamEvent.Failed(
                     $"This organization has reached its monthly token budget ({aiSettings.MaxMonthlyTokens:N0} tokens). An administrator can raise it under AI settings.");
                 yield break;
@@ -310,6 +383,7 @@ public sealed class AuthorizedAgentRunner(
         // is best-effort and never fails the turn; the hash lands on the assistant message below.
         var instructionsHash = InstructionHash.Compute(instructions);
         await instructionSnapshots.EnsureAsync(instructionsHash, instructions, cancellationToken);
+        run.Instructions(instructionsHash);
         var middleware = new ToolInvocationMiddleware(
             auditLog,
             currentUser,
@@ -362,12 +436,17 @@ public sealed class AuthorizedAgentRunner(
             assistant,
             announcedTools,
             usage,
+            run,
             emitTokens: !bufferOutput,
             cancellationToken))
         {
             yield return evt;
             if (evt.Type == AgentStreamEventType.Error)
             {
+                // StreamTurnAsync already stamped the real exception on the run; the flush in
+                // RunInternalAsync writes it even though the turn ends here.
+                run.Tools(announcedTools.Count, 0);
+                run.Usage(usage.InputTokens, usage.OutputTokens, usage.Effective);
                 yield break;
             }
         }
@@ -386,6 +465,12 @@ public sealed class AuthorizedAgentRunner(
 
             if (outputInspection.Blocked)
             {
+                // The turn goes on to persist a refusal and report Completed to the client, but the
+                // audit verdict is the block — first outcome wins, so this is what the run records.
+                run.Fail(
+                    AgentRunOutcome.BlockedBySecurity,
+                    outputInspection.Unavailable ? "SecurityUnavailable" : "OutputBlocked",
+                    SecurityFindingSummary(outputInspection));
                 assistant.Clear();
                 assistant.Append(SecurityFailureMessage(outputInspection));
                 outputRewritten = true;
@@ -415,8 +500,11 @@ public sealed class AuthorizedAgentRunner(
             // conversation the model resumes, so never repeat them.
             await approvalStore.MarkSurfacedAsync(resolvedApprovals.Select(a => a.Id).ToList(), cancellationToken);
         }
+        // effectiveModel (not the profile pin) is what actually served the turn, so a per-turn model
+        // pick is attributed to the model that ran — and agrees with the agent-run record.
         await RecordUsageAsync(request.ModuleId, conversation.Id, usage,
-            aiSettings.Provider, profile?.Model is { Length: > 0 } m ? m : aiSettings.Model, cancellationToken);
+            aiSettings.Provider, effectiveModel, cancellationToken);
+        run.Usage(usage.InputTokens, usage.OutputTokens, usage.Effective);
 
         if (aiSettings.MaxMonthlyTokens > 0 && usage.HasAny)
         {
@@ -451,6 +539,8 @@ public sealed class AuthorizedAgentRunner(
             yield return AgentStreamEvent.UsageReport(usage.InputTokens, usage.OutputTokens, usage.Effective);
         }
 
+        run.Tools(announcedTools.Count, middleware.BlockedForApproval.Count);
+        run.Complete();
         yield return AgentStreamEvent.Completed(conversation.Id);
     }
 
@@ -531,6 +621,7 @@ public sealed class AuthorizedAgentRunner(
         StringBuilder assistant,
         HashSet<string> announcedTools,
         UsageAccumulator usage,
+        AgentRunRecorder run,
         bool emitTokens,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
@@ -559,8 +650,11 @@ public sealed class AuthorizedAgentRunner(
                 }
                 catch (Exception ex)
                 {
-                    // The exception stays here; the caller gets a classification, never provider text.
+                    // The exception itself never leaves the server: the log and the audit keep its type
+                    // and message for the operator, and the caller gets a CLASSIFICATION of it rather
+                    // than the provider's own words, which quote payloads, org ids and endpoint URLs.
                     logger.LogError(ex, "Agent turn failed");
+                    run.Fail(AgentRunOutcome.Error, ex.GetType().Name, ex.Message);
                     error = AgentTurnFailure.Describe(ex);
                 }
 
@@ -586,6 +680,9 @@ public sealed class AuthorizedAgentRunner(
 
                 if (!string.IsNullOrEmpty(update.Text))
                 {
+                    // Time-to-first-token measures the model, so it is stamped when text is produced
+                    // — not when it is emitted, which output buffering would otherwise delay.
+                    run.FirstToken();
                     assistant.Append(update.Text);
                     if (emitTokens)
                     {
@@ -637,6 +734,13 @@ public sealed class AuthorizedAgentRunner(
         ? "Required AI security screening is temporarily unavailable. Please try again later."
         : "This content was blocked by your organization's AI security policy.";
 
+    /// <summary>
+    /// Detector metadata for the run record — which detector fired and in what category, never the
+    /// inspected text or the matched values, exactly as <see cref="RecordSecurityAsync"/> treats them.
+    /// </summary>
+    private static string SecurityFindingSummary(AgentSecurityInspection inspection) =>
+        string.Join(",", inspection.Findings.Select(f => $"{f.Detector}:{f.Category}").Distinct(StringComparer.Ordinal));
+
 
     /// <summary>
     /// Sequential workflow execution by composition: each step is a normal <see cref="RunAsync"/>
@@ -647,6 +751,7 @@ public sealed class AuthorizedAgentRunner(
     private async IAsyncEnumerable<AgentStreamEvent> RunWorkflowAsync(
         WorkflowDescriptor workflow,
         AgentRunRequest request,
+        AgentRunRecorder run,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         Guid? conversationId = request.ConversationId;
@@ -669,7 +774,9 @@ public sealed class AuthorizedAgentRunner(
             }
 
             var failed = false;
-            await foreach (var evt in RunAsync(step, cancellationToken))
+            // Each step opens its own run carrying this workflow run as its parent, so the chain is
+            // reconstructable: one parent row plus one row per step, all sharing the conversation.
+            await foreach (var evt in RunInternalAsync(step, run.Id, cancellationToken))
             {
                 if (evt.Type == AgentStreamEventType.Token && evt.Text is not null)
                 {
@@ -680,6 +787,11 @@ public sealed class AuthorizedAgentRunner(
                 {
                     // Chain all steps into ONE conversation; only the last step completes the run.
                     conversationId = evt.ConversationId ?? conversationId;
+                    if (conversationId is { } chained)
+                    {
+                        run.Conversation(chained);
+                    }
+
                     if (i == workflow.AgentNames.Count - 1)
                     {
                         yield return evt;
@@ -693,9 +805,13 @@ public sealed class AuthorizedAgentRunner(
 
             if (failed)
             {
+                run.Fail(AgentRunOutcome.Error, "WorkflowStepFailed",
+                    $"Step {i + 1} ('{stepName}') of workflow '{workflow.Name}' failed; the step's own run holds the cause.");
                 yield break;
             }
         }
+
+        run.Complete();
     }
 
     private static List<ChatMessage> BuildHistory(Conversation conversation, string newMessage)

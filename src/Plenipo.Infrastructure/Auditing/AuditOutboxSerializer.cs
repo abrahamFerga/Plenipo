@@ -17,6 +17,7 @@ public static class AuditOutboxSerializer
     public static AuditOutboxMessage ForToolCall(ToolCallAuditEntry entry) => Create(AuditRecordKind.ToolCall, entry);
     public static AuditOutboxMessage ForAuthEvent(AuthAuditEntry entry) => Create(AuditRecordKind.AuthEvent, entry);
     public static AuditOutboxMessage ForTokenUsage(TokenUsageRecord record) => Create(AuditRecordKind.TokenUsage, record);
+    public static AuditOutboxMessage ForAgentRun(AgentRunRecord record) => Create(AuditRecordKind.AgentRun, record);
 
     public static AuditOutboxMessage ForEntityChanges(IReadOnlyCollection<EntityChangeAuditEntry> entries) =>
         Create(AuditRecordKind.EntityChange, entries);
@@ -42,6 +43,9 @@ public static class AuditOutboxSerializer
                 break;
             case AuditRecordKind.TokenUsage:
                 audit.TokenUsage.Add(Deserialize<TokenUsageRecord>(message.PayloadJson));
+                break;
+            case AuditRecordKind.AgentRun:
+                audit.AgentRuns.Add(Deserialize<AgentRunRecord>(message.PayloadJson));
                 break;
             default:
                 throw new InvalidOperationException($"Unknown audit outbox kind '{message.Kind}'.");
