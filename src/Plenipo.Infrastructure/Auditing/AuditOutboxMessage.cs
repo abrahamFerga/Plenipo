@@ -7,6 +7,7 @@ public static class AuditRecordKind
     public const string AuthEvent = "AuthEvent";
     public const string EntityChange = "EntityChange";
     public const string TokenUsage = "TokenUsage";
+    public const string AgentRun = "AgentRun";
 }
 
 /// <summary>

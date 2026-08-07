@@ -208,5 +208,8 @@ public sealed class LocalCredentialServiceTests : IDisposable
 
         public Task RecordTokenUsageAsync(TokenUsageRecord record, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
+
+        public Task RecordAgentRunAsync(AgentRunRecord record, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 }

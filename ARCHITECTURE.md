@@ -119,7 +119,7 @@ flowchart LR
     fs["finance schema<br/>transactions, budgets, rules<br/>(a module owns this)"]
   end
   subgraph auditdb["Audit database (append-only)"]
-    aud["audit schema<br/>tool_calls, auth_events,<br/>entity_changes, token_usage"]
+    aud["audit schema<br/>agent_runs, tool_calls, auth_events,<br/>entity_changes, token_usage"]
   end
 ```
 
@@ -134,6 +134,16 @@ queryable), but if that write fails — a transient audit-DB outage — the reco
 `audit_outbox` table in the platform DB and a background `AuditOutboxProcessor` flushes it once the audit
 store recovers. So a momentary outage defers audit records instead of dropping them, and the "audit
 everything" guarantee survives an audit-DB blip without ever failing the user-facing operation.
+
+**Every agent turn is on the record.** `agent_runs` holds exactly one row per turn — completed, refused,
+blocked, over budget, thrown, or abandoned mid-stream — written from a `finally` in `AuthorizedAgentRunner`
+so no early exit can skip it. This is deliberately separate from `token_usage`, which a provider only
+reports for a turn it actually billed: a turn refused before the model is reached costs nothing and would
+otherwise leave no trace at all, and those are exactly the turns an operator is looking for. Each row
+carries its outcome, the internal error kind and message (not the sanitized text the user saw), latency
+including time-to-first-token, the effective provider and model, the instructions hash, and the trace id
+that joins back to the OpenTelemetry span while that trace is still retained. Admin → Agent Runs is the
+read surface, gated on `platform.audit.view`.
 
 ## Security model
 

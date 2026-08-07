@@ -33,6 +33,9 @@ public sealed class AuditLog(AuditDbContext db, OutboxDbContext outbox, ILogger<
     public Task RecordTokenUsageAsync(TokenUsageRecord record, CancellationToken cancellationToken = default) =>
         WriteAsync(() => db.TokenUsage.Add(record), () => AuditOutboxSerializer.ForTokenUsage(record), cancellationToken);
 
+    public Task RecordAgentRunAsync(AgentRunRecord record, CancellationToken cancellationToken = default) =>
+        WriteAsync(() => db.AgentRuns.Add(record), () => AuditOutboxSerializer.ForAgentRun(record), cancellationToken);
+
     private async Task WriteAsync(Action stage, Func<AuditOutboxMessage> toOutbox, CancellationToken cancellationToken)
     {
         try
