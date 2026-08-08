@@ -333,5 +333,139 @@
    }
   ],
   "closingIssuesReferences": []
+ },
+ {
+  "number": 911,
+  "title": "an UNKNOWN merge state must block — only BEHIND is repairable",
+  "headRefName": "fix/911-unknown",
+  "labels": [
+   {
+    "name": "agent:approved"
+   }
+  ],
+  "mergeStateStatus": "UNKNOWN",
+  "body": "plenipo-agent envelope",
+  "isDraft": false,
+  "baseRefName": "main",
+  "mergeable": "MERGEABLE",
+  "reviewDecision": "",
+  "statusCheckRollup": [
+   {
+    "name": "PR gates",
+    "workflowName": "Agent gates",
+    "conclusion": "SUCCESS",
+    "startedAt": "2026-08-06T01:31:56Z",
+    "completedAt": "2026-08-06T01:32:05Z"
+   }
+  ],
+  "files": [
+   {
+    "path": "tests/X.cs"
+   }
+  ],
+  "closingIssuesReferences": []
+ },
+ {
+  "number": 912,
+  "title": "an UNSTABLE merge state must block — wait for a settled state",
+  "headRefName": "fix/912-unstable",
+  "labels": [
+   {
+    "name": "agent:approved"
+   }
+  ],
+  "mergeStateStatus": "UNSTABLE",
+  "body": "plenipo-agent envelope",
+  "isDraft": false,
+  "baseRefName": "main",
+  "mergeable": "MERGEABLE",
+  "reviewDecision": "",
+  "statusCheckRollup": [
+   {
+    "name": "PR gates",
+    "workflowName": "Agent gates",
+    "conclusion": "SUCCESS",
+    "startedAt": "2026-08-06T01:31:56Z",
+    "completedAt": "2026-08-06T01:32:05Z"
+   }
+  ],
+  "files": [
+   {
+    "path": "tests/X.cs"
+   }
+  ],
+  "closingIssuesReferences": []
+ },
+ {
+  "number": 913,
+  "title": "a cross-repository closing issue retains its repository identity",
+  "headRefName": "fix/913-cross-repo-issue",
+  "labels": [
+   {
+    "name": "agent:approved"
+   }
+  ],
+  "mergeStateStatus": "CLEAN",
+  "body": "plenipo-agent envelope",
+  "isDraft": false,
+  "baseRefName": "main",
+  "mergeable": "MERGEABLE",
+  "reviewDecision": "",
+  "statusCheckRollup": [
+   {
+    "name": "PR gates",
+    "workflowName": "Agent gates",
+    "conclusion": "SUCCESS",
+    "startedAt": "2026-08-06T01:31:56Z",
+    "completedAt": "2026-08-06T01:32:05Z"
+   }
+  ],
+  "files": [
+   {
+    "path": "tests/X.cs"
+   }
+  ],
+  "closingIssuesReferences": [
+   {
+    "number": 151,
+    "repository": {
+     "name": "Other",
+     "owner": {
+      "login": "other-org"
+     }
+    }
+   }
+  ]
+ },
+ {
+  "number": 914,
+  "title": "a HAS_HOOKS merge state must block — merge requirements are not clean",
+  "headRefName": "fix/914-has-hooks",
+  "labels": [
+   {
+    "name": "agent:approved"
+   }
+  ],
+  "mergeStateStatus": "HAS_HOOKS",
+  "body": "plenipo-agent envelope",
+  "isDraft": false,
+  "baseRefName": "main",
+  "mergeable": "MERGEABLE",
+  "reviewDecision": "",
+  "statusCheckRollup": [
+   {
+    "name": "PR gates",
+    "workflowName": "Agent gates",
+    "conclusion": "SUCCESS",
+    "startedAt": "2026-08-06T01:31:56Z",
+    "completedAt": "2026-08-06T01:32:05Z"
+   }
+  ],
+  "files": [
+   {
+    "path": "tests/X.cs"
+   }
+  ],
+  "closingIssuesReferences": []
  }
 ]

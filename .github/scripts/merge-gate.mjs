@@ -225,8 +225,14 @@ function evaluate(pr) {
   // queue could absorb exactly one merge and then stopped forever. Fourteen of twenty-five open
   // pull requests were sitting on this single reason, three of them already carrying
   // `agent:approved` — the system had decided they should merge and then could not.
-  const stale = pr.mergeStateStatus === 'BEHIND';
-  if (['DIRTY', 'BLOCKED'].includes(pr.mergeStateStatus)) fail.push(`mergeable: mergeStateStatus=${pr.mergeStateStatus}`);
+  const mergeState = String(pr.mergeStateStatus ?? '').toUpperCase();
+  const stale = mergeState === 'BEHIND';
+  // BEHIND is the only non-CLEAN state this gate can repair. UNKNOWN, UNSTABLE and HAS_HOOKS
+  // are not benign aliases for clean: they mean GitHub has not produced a settled merge verdict,
+  // so accepting any of them would merge on less evidence than a blocked PR.
+  if (mergeState && !['CLEAN', 'BEHIND'].includes(mergeState)) {
+    fail.push(`mergeable: mergeStateStatus=${mergeState}`);
+  }
   if (pr.reviewDecision === 'CHANGES_REQUESTED') fail.push('no_blocking_review: a review requested changes');
   if (!labels.includes('agent:approved')) fail.push('agent_approved: no `agent:approved` label — nothing has reviewed this');
   if (labels.includes('agent:changes-requested')) fail.push('agent_approved: `agent:changes-requested` is still set');

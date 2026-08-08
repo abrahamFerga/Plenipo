@@ -108,6 +108,9 @@ for (const [number, mustMatch, why] of closeCases) {
 const mergeableCases = [
   [908, false, 'BEHIND must not block — it is staleness, and this script can repair it in one call'],
   [909, true, 'DIRTY must still block — a real conflict needs the author, not a branch update'],
+  [911, true, 'UNKNOWN must block — only a known-clean state or repairable staleness is safe'],
+  [912, true, 'UNSTABLE must block — a transient merge state is not permission to merge'],
+  [914, true, 'HAS_HOOKS must block — GitHub has an unsatisfied merge requirement'],
 ];
 
 for (const [number, mustFail, why] of mergeableCases) {
