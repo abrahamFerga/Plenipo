@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Plenipo.Application.Ai;
@@ -76,6 +77,97 @@ public sealed class ToolApprovalTests
 
         Assert.Equal("[REDACTED:EMAIL]", received);
     }
+
+    /// <summary>
+    /// The middleware is the only place that knows a failure came out of a tool rather than out of the
+    /// AI provider, and <see cref="AgentTurnFailure"/> depends on it saying so: a connector's 401,
+    /// unmarked, is indistinguishable from the provider's and would be reported as a rejected AI key.
+    /// </summary>
+    [Fact]
+    public async Task A_tool_that_throws_is_rethrown_marked_as_the_tools_failure()
+    {
+        var connectorFailure = new HttpRequestException(
+            "upstream said no", inner: null, HttpStatusCode.Unauthorized);
+        var middleware = BuildMiddleware();
+        var context = new FunctionInvocationContext
+        {
+            Function = AIFunctionFactory.Create(() => "unused", name: "sync_ledger"),
+        };
+
+        var thrown = await Assert.ThrowsAsync<ToolInvocationFailedException>(async () =>
+            await middleware.InvokeAsync(
+                agent: null!,
+                context,
+                (_, _) => throw connectorFailure,
+                CancellationToken.None));
+
+        Assert.Equal("sync_ledger", thrown.ToolName);
+        Assert.Same(connectorFailure, thrown.InnerException);
+        // The end the marker exists for: the runner's classifier must not name the AI settings screen.
+        Assert.Equal(AgentTurnFailure.Generic, AgentTurnFailure.Describe(thrown));
+    }
+
+    /// <summary>
+    /// Cancellation is the one failure the marker must NOT capture: the runner tells a caller abort from
+    /// a provider failure by catching <see cref="OperationCanceledException"/>, so wrapping one would
+    /// turn a user closing the tab into a reported error.
+    /// </summary>
+    [Fact]
+    public async Task A_cancelled_tool_call_is_rethrown_unwrapped()
+    {
+        var middleware = BuildMiddleware();
+        var context = new FunctionInvocationContext
+        {
+            Function = AIFunctionFactory.Create(() => "unused", name: "sync_ledger"),
+        };
+        using var abort = new CancellationTokenSource();
+        await abort.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+            await middleware.InvokeAsync(
+                agent: null!,
+                context,
+                (_, token) => throw new OperationCanceledException(token),
+                abort.Token));
+    }
+
+    /// <summary>
+    /// The other half of the cancellation split, and the one that is easy to get wrong: a tool whose own
+    /// HttpClient times out raises a <see cref="TaskCanceledException"/> carrying a
+    /// <see cref="TimeoutException"/> while the turn's token is still UNCANCELLED. Caught bare alongside
+    /// a caller abort, it would leave the middleware unmarked, and
+    /// <see cref="AgentTurnFailure.Describe"/> would descend to the inner <see cref="TimeoutException"/>
+    /// and blame a perfectly healthy AI provider for a slow connector. This drives the middleware rather
+    /// than hand-building the wrapper, so it fails if the marker stops being applied on this path.
+    /// </summary>
+    [Fact]
+    public async Task A_tools_own_timeout_is_marked_rather_than_read_as_the_providers()
+    {
+        var middleware = BuildMiddleware();
+        var context = new FunctionInvocationContext
+        {
+            Function = AIFunctionFactory.Create(() => "unused", name: "fetch_statements"),
+        };
+        using var uncancelled = new CancellationTokenSource();
+
+        var thrown = await Assert.ThrowsAsync<ToolInvocationFailedException>(async () =>
+            await middleware.InvokeAsync(
+                agent: null!,
+                context,
+                (_, _) => throw new TaskCanceledException("slow", new TimeoutException()),
+                uncancelled.Token));
+
+        Assert.Equal("fetch_statements", thrown.ToolName);
+        Assert.Equal(AgentTurnFailure.Generic, AgentTurnFailure.Describe(thrown));
+    }
+
+    private static ToolInvocationMiddleware BuildMiddleware() =>
+        new(new NoopAuditLog(),
+            new FakeCurrentUser(),
+            new HashSet<string>(StringComparer.Ordinal),
+            new Dictionary<string, ModuleTool>(),
+            moduleId: "demo",
+            conversationId: Guid.NewGuid());
 
     private static (AIAgent Agent, ToolInvocationMiddleware Middleware, Func<bool> WasExecuted) BuildAgent(
         string callTool, string toolName, bool requiresApproval)

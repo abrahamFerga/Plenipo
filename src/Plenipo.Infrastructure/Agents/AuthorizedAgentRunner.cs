@@ -641,17 +641,21 @@ public sealed class AuthorizedAgentRunner(
 
                     update = enumerator.Current;
                 }
-                catch (OperationCanceledException)
+                // Only OUR token cancelling is a caller abort. A provider read timing out also arrives
+                // as a cancellation, and propagating that tore the stream down with no event at all —
+                // it is a provider failure and reports as one.
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
                     throw;
                 }
                 catch (Exception ex)
                 {
+                    // The exception itself never leaves the server: the log and the audit keep its type
+                    // and message for the operator, and the caller gets a CLASSIFICATION of it rather
+                    // than the provider's own words, which quote payloads, org ids and endpoint URLs.
                     logger.LogError(ex, "Agent turn failed");
-                    // The audit keeps the exception type and message — the sanitized sentence the
-                    // user sees below is deliberately useless for diagnosing anything.
                     run.Fail(AgentRunOutcome.Error, ex.GetType().Name, ex.Message);
-                    error = "The assistant could not complete the request.";
+                    error = AgentTurnFailure.Describe(ex);
                 }
 
                 if (error is not null)
