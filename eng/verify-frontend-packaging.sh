@@ -118,6 +118,7 @@ import {
   type AuthAdapter,
   type SecureStorageAdapter,
   type AuthConfig,
+  type LocalUserAdmin,
   type PlenipoModuleUi,
   type ModuleTabProps,
   type PlenipoBranding,
@@ -151,6 +152,18 @@ const store: SecureStorageAdapter = {
 };
 const shellProps: AppShellProps = { branding };
 
+// Auth:Mode=Local ships an admin surface, so its row type has to be reachable from the TARBALL too.
+// Named here because nothing else in this consumer would notice it going missing: #135 was caught
+// only because the in-repo admin-ui happens to import it, which is a monorepo coincidence rather
+// than a guard on the published package.
+const localUser: LocalUserAdmin = {
+  userId: "u-1",
+  email: "someone@example.com",
+  isActive: true,
+  mustChangePassword: false,
+  totpEnabled: false,
+};
+
 export async function signInFlow() {
   const config: AuthConfig = { mode: "oidc", authority: "https://idp.example.com", clientId: "spa" };
   const oidc = createOidcAuth({ authority: config.authority!, clientId: config.clientId! });
@@ -162,7 +175,7 @@ export async function signInFlow() {
 }
 
 export function App() {
-  void [AppShell, ChatPanel, api, createAgentConnection, ApiError, useActiveModule, sampleModule, currentUser];
+  void [AppShell, ChatPanel, api, createAgentConnection, ApiError, useActiveModule, sampleModule, currentUser, localUser];
   // The one-liner a product writes to let someone log in.
   return <PlenipoApp moduleUi={[finance]} branding={branding} config={{ auth: byoAuth }} />;
 }
