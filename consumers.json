@@ -25,6 +25,15 @@
       "note": "Real Plenipo.* consumer (alpha.28), blocked on two prerequisites, both fixed in auditworthy#27: it repeated the platform version per csproj (the swap needs a central PlenipoVersion property), and it pinned Microsoft.Extensions.AI 10.7.0 while platform main requires >= 10.8.1, which is 12 NU1605 downgrade errors. Flip conformance on once auditworthy#27 merges."
     },
     {
+      "repo": "abrahamFerga/hireworthy",
+      "solution": "Hireworthy.slnx",
+      "ref": "main",
+      "module": "hiring",
+      "required": false,
+      "conformance": false,
+      "note": "Real Plenipo.* consumer (alpha.28) on main — src/Hireworthy.{AppHost,Host,Hiring} verified via the GitHub tree — and it filed #145 with an L3 reproduction, so it was consuming the platform while unregistered and therefore unprotected. Registered with conformance OFF deliberately, not as a judgement on the repo: #144 documents that one red consumer deadlocks every platform PR, so adding an unproven consumer to the blocking matrix while that is live would widen a known deadlock. Flip conformance on once #144 is fixed AND a manual build of Hireworthy.slnx against platform main is green."
+    },
+    {
       "repo": "abrahamFerga/casewell",
       "solution": "Casewell.slnx",
       "ref": "main",
