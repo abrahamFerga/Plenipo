@@ -145,7 +145,9 @@ export type { OidcOptions, OidcAuthAdapter } from "./lib/oidc";
 export { initPlenipoWebAuth } from "./lib/initWebAuth";
 export type { InitWebAuthOptions, WebAuthState } from "./lib/initWebAuth";
 export { configureClient, clientConfig, devAuthHeaders, fetchAuthConfig } from "./lib/api";
-export type { AuthConfig } from "./lib/api";
+// The local-auth admin panel consumes this row type through the published UI package. Keep the
+// named re-export beside AuthConfig: this entry point intentionally does not star-export lib/api.
+export type { AuthConfig, LocalUserAdmin } from "./lib/api";
 
 // API / lib utilities
 export { apiGet, apiSend, apiPost, api, ApiError, uploadFile } from "./lib/api";

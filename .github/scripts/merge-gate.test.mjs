@@ -140,6 +140,188 @@ for (const [number, mustFail, why] of mergeableCases) {
 const scratch = mkdtempSync(join(tmpdir(), 'merge-gate-'));
 writeFileSync(join(scratch, 'workflow.json'), JSON.stringify({ autonomy: { level: 3, maxMergesPerTick: 20 } }));
 
+// ── Platform policy — an agent verdict can approve a declared break, and conformance follows its
+// workflow's path surface ───────────────────────────────────────────────────────────────────────
+// Consumer conformance only runs for `src/**` and the root Directory props files. Requiring that
+// check for a workflow-only change turns a skipped workflow into a permanent deadlock; skipping it
+// for a source change lets a package break through. These three cases prove the two policies stay
+// aligned, and that a platform break uses the same agent verdict as every other unattended merge.
+const policyScratch = mkdtempSync(join(tmpdir(), 'merge-gate-platform-policy-'));
+writeFileSync(
+  join(policyScratch, 'workflow.json'),
+  JSON.stringify({ stage: 'platform', autonomy: { level: 3, maxMergesPerTick: 20 } })
+);
+const policyFixture = join(policyScratch, 'policy-fixture.json');
+writeFileSync(
+  policyFixture,
+  JSON.stringify([
+    {
+      number: 915,
+      title: 'agent-approved workflow-only breaking policy change',
+      body: 'plenipo-agent envelope\nSurface: breaking',
+      isDraft: false,
+      headRefName: 'fix/915-policy',
+      baseRefName: 'main',
+      labels: [{ name: 'agent:approved' }],
+      mergeable: 'MERGEABLE',
+      mergeStateStatus: 'CLEAN',
+      reviewDecision: '',
+      statusCheckRollup: [{ name: 'PR gates', workflowName: 'Agent gates', conclusion: 'SUCCESS' }],
+      files: [{ path: '.github/workflows/agent-merge.yml' }],
+    },
+    {
+      number: 916,
+      title: 'breaking platform change without an agent verdict',
+      body: 'plenipo-agent envelope\nSurface: breaking',
+      isDraft: false,
+      headRefName: 'fix/916-policy',
+      baseRefName: 'main',
+      labels: [],
+      mergeable: 'MERGEABLE',
+      mergeStateStatus: 'CLEAN',
+      reviewDecision: '',
+      statusCheckRollup: [{ name: 'PR gates', workflowName: 'Agent gates', conclusion: 'SUCCESS' }],
+      files: [{ path: '.github/workflows/agent-merge.yml' }],
+    },
+    {
+      number: 917,
+      title: 'source change without a conformance result',
+      body: 'plenipo-agent envelope\nSurface: additive',
+      isDraft: false,
+      headRefName: 'fix/917-policy',
+      baseRefName: 'main',
+      labels: [{ name: 'agent:approved' }],
+      mergeable: 'MERGEABLE',
+      mergeStateStatus: 'CLEAN',
+      reviewDecision: '',
+      statusCheckRollup: [{ name: 'PR gates', workflowName: 'Agent gates', conclusion: 'SUCCESS' }],
+      files: [{ path: 'src/Plenipo.Core/Contract.cs' }],
+    },
+  ])
+);
+
+const policyRun = spawnSync(process.execPath, [gate, '--fixture', policyFixture], {
+  encoding: 'utf8',
+  cwd: policyScratch,
+});
+
+if (policyRun.status !== 0) {
+  console.log(`  FAIL — platform policy fixture exited ${policyRun.status}\n${policyRun.stderr || policyRun.stdout}`);
+  failed++;
+} else {
+  const policyReasons = (number) => {
+    const lines = policyRun.stdout.split('\n');
+    const start = lines.findIndex((line) => line.includes(`#${number} `));
+    if (start === -1) return null;
+    const rest = lines.slice(start + 1);
+    const end = rest.findIndex((line) => /^\s{2}(READY|BLOCK|HELD|MERGED)/.test(line));
+    return (end === -1 ? rest : rest.slice(0, end)).join('\n');
+  };
+
+  const ready915 = policyRun.stdout.split('\n').find((line) => line.includes('#915 '));
+  const reasons915 = policyReasons(915);
+  if (ready915 && /^\s{2}READY\b/.test(ready915) && !/surface_declared|consumers_green/.test(reasons915 ?? '')) {
+    console.log('  ok   #915 — an agent-approved workflow-only platform policy change needs no human label or skipped conformance');
+  } else {
+    console.log(`  FAIL #915 — expected READY without surface/conformance failures; got:\n       ${ready915 ?? '(missing)'}\n${reasons915 ?? ''}`);
+    failed++;
+  }
+
+  const reasons916 = policyReasons(916) ?? '';
+  if (/surface_declared: .*agent:approved/i.test(reasons916)) {
+    console.log('  ok   #916 — a breaking platform surface without the agent verdict remains blocked');
+  } else {
+    console.log(`  FAIL #916 — the breaking-surface rule did not name the required agent verdict:\n${reasons916}`);
+    failed++;
+  }
+
+  const reasons917 = policyReasons(917) ?? '';
+  if (/consumers_green/.test(reasons917)) {
+    console.log('  ok   #917 — a platform source change still requires consumer conformance');
+  } else {
+    console.log(`  FAIL #917 — a platform source change lost its conformance requirement:\n${reasons917}`);
+    failed++;
+  }
+}
+
+// ── Required checks, not every informational workflow ──────────────────────
+// A Copilot outage in the comment-only intent reviewer is not failed product CI. The approval
+// label is the verdict gate; branch protection names the CI checks that must actually be green.
+// This fixture models one required check plus an advisory `agent` job that failed externally.
+const advisoryScratch = mkdtempSync(join(tmpdir(), 'merge-gate-advisory-check-'));
+writeFileSync(
+  join(advisoryScratch, 'workflow.json'),
+  JSON.stringify({ autonomy: { level: 3, maxMergesPerTick: 20 } })
+);
+const advisoryFixture = join(advisoryScratch, 'required-checks-fixture.json');
+writeFileSync(
+  advisoryFixture,
+  JSON.stringify({
+    requiredCheckContexts: ['PR gates'],
+    pullRequests: [
+      {
+        number: 918,
+        title: 'a failed advisory agent job must not block required CI',
+        body: 'plenipo-agent envelope',
+        isDraft: false,
+        headRefName: 'fix/918-advisory',
+        baseRefName: 'main',
+        labels: [{ name: 'agent:approved' }],
+        mergeable: 'MERGEABLE',
+        mergeStateStatus: 'CLEAN',
+        reviewDecision: '',
+        statusCheckRollup: [
+          { name: 'PR gates', workflowName: 'Agent gates', conclusion: 'SUCCESS' },
+          { name: 'agent', workflowName: 'Review platform pull request intent', conclusion: 'FAILURE' },
+        ],
+        files: [{ path: 'tests/X.cs' }],
+      },
+      {
+        number: 919,
+        title: 'a missing required check still blocks despite an advisory success',
+        body: 'plenipo-agent envelope',
+        isDraft: false,
+        headRefName: 'fix/919-required',
+        baseRefName: 'main',
+        labels: [{ name: 'agent:approved' }],
+        mergeable: 'MERGEABLE',
+        mergeStateStatus: 'CLEAN',
+        reviewDecision: '',
+        statusCheckRollup: [{ name: 'agent', workflowName: 'Review platform pull request intent', conclusion: 'SUCCESS' }],
+        files: [{ path: 'tests/X.cs' }],
+      },
+    ],
+  })
+);
+
+const advisoryRun = spawnSync(process.execPath, [gate, '--fixture', advisoryFixture], {
+  encoding: 'utf8',
+  cwd: advisoryScratch,
+});
+if (advisoryRun.status !== 0) {
+  console.log(`  FAIL — required-check fixture exited ${advisoryRun.status}\n${advisoryRun.stderr || advisoryRun.stdout}`);
+  failed++;
+} else {
+  const line918 = advisoryRun.stdout.split('\n').find((line) => line.includes('#918 '));
+  if (line918 && /^\s{2}READY\b/.test(line918)) {
+    console.log('  ok   #918 — an advisory model outage does not turn green required CI red');
+  } else {
+    console.log(`  FAIL #918 — expected READY with only required CI considered; got:\n       ${line918 ?? '(missing)'}`);
+    failed++;
+  }
+
+  const reasons919 = advisoryRun.stdout
+    .split('\n')
+    .slice(advisoryRun.stdout.split('\n').findIndex((line) => line.includes('#919 ')) + 1)
+    .join('\n');
+  if (/checks_green: required check.*PR gates/i.test(reasons919)) {
+    console.log('  ok   #919 — a missing required context remains a hard block');
+  } else {
+    console.log(`  FAIL #919 — missing required CI was not reported:\n${reasons919}`);
+    failed++;
+  }
+}
+
 const levelled = spawnSync(process.execPath, [gate, '--fixture', fixture], {
   encoding: 'utf8',
   cwd: scratch,
@@ -200,4 +382,4 @@ if (failed) {
   console.log(`\n${failed} rollup case(s) wrong. merge-gate is the last automated thing before main — do not merge this.\n`);
   process.exit(1);
 }
-console.log(`\nOK — ${cases.length} rollup, ${closeCases.length} linked-issue, ${mergeableCases.length} mergeable, 3 stale-routing and 1 simulation case(s) behave correctly.\n`);
+console.log(`\nOK — ${cases.length} rollup, ${closeCases.length} linked-issue, ${mergeableCases.length} mergeable, 3 platform-policy, 2 required-context, 3 stale-routing and 1 simulation case(s) behave correctly.\n`);

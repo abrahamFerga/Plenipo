@@ -73,11 +73,14 @@ const LOW_RISK = [/\.md$/i, /^tests\//, /\.http$/i, /^\.http$/i];
 // platform as a release candidate and rebuilds every registered consumer against it.
 const IS_PLATFORM = String(cfg.stage ?? cfg.kind ?? 'product').toLowerCase() === 'platform';
 const CONFORMANCE_CHECK = /consumer.?conformance|conformance verdict/i;
+// Keep this exact path list aligned with consumer-conformance.yml. Requiring a check whose workflow
+// was skipped is a deadlock; accepting a source change without that check is a consumer break.
+const CONFORMANCE_PATHS = [/^src\//, /^Directory\.(?:Packages|Build)\.props$/];
 const SURFACE_RE = /^\s*(?:public[- ])?surface:\s*(additive|breaking|none)\b/im;
 
 const PR_FIELDS = [
   'number', 'title', 'body', 'isDraft', 'headRefName', 'baseRefName', 'labels',
-  'mergeable', 'mergeStateStatus', 'reviewDecision', 'statusCheckRollup', 'files', 'author',
+  'mergeable', 'mergeStateStatus', 'reviewDecision', 'statusCheckRollup', 'files', 'changedFiles', 'author',
   // Only ever reported, never gated on. A queue that stops moving looks identical to a healthy one
   // in a run log that prints no ages — which is how this went unnoticed for weeks.
   'createdAt',
@@ -88,12 +91,50 @@ const PR_FIELDS = [
 
 // ── Load the pull requests ───────────────────────────────────────────────────
 let prs;
+let fixtureRequiredCheckContexts = null;
 if (FIXTURE) {
-  prs = JSON.parse(readFileSync(FIXTURE, 'utf8'));
+  const fixture = JSON.parse(readFileSync(FIXTURE, 'utf8'));
+  if (Array.isArray(fixture)) {
+    prs = fixture;
+  } else {
+    prs = fixture.pullRequests ?? [];
+    fixtureRequiredCheckContexts = fixture.requiredCheckContexts ?? null;
+  }
 } else if (ONE_PR) {
   prs = [JSON.parse(gh(['pr', 'view', ONE_PR, '--json', PR_FIELDS]))];
 } else {
   prs = JSON.parse(gh(['pr', 'list', '--state', 'open', '--limit', '50', '--json', PR_FIELDS]));
+}
+
+// Branch protection, not every check that happens to appear in a rollup, defines the CI contract.
+// Agentic intent review is deliberately advisory: a 429 there means no extra comment, not a failed
+// build. The approval verdict is enforced separately by its label. Read the required contexts from
+// the protected base so a PR cannot nominate its own optional check set. GitHub itself still checks
+// the required App identity at merge time; this list only decides which rollup entries are CI gates.
+const requiredContextsCache = new Map();
+let repoSlug;
+function requiredContextsFor(base) {
+  if (FIXTURE) return { contexts: fixtureRequiredCheckContexts };
+  if (requiredContextsCache.has(base)) return requiredContextsCache.get(base);
+
+  let result;
+  try {
+    repoSlug ??= JSON.parse(gh(['repo', 'view', '--json', 'nameWithOwner'])).nameWithOwner;
+    const protection = JSON.parse(
+      gh(['api', `repos/${repoSlug}/branches/${encodeURIComponent(base)}/protection/required_status_checks`])
+    );
+    const contexts = [
+      ...(protection.checks ?? []).map((check) => check.context),
+      ...(protection.contexts ?? []),
+    ].filter(Boolean);
+    result = contexts.length
+      ? { contexts: [...new Set(contexts)] }
+      : { error: `base branch ${base} has no required status-check contexts` };
+  } catch (error) {
+    result = { error: `could not read required status checks for ${base}: ${error.message.split('\n')[0]}` };
+  }
+  requiredContextsCache.set(base, result);
+  return result;
 }
 
 // ── The default branch must be green before anything lands on it ─────────────
@@ -149,6 +190,9 @@ refreshMainGreen();
 function evaluate(pr) {
   const fail = [];
   const labels = (pr.labels ?? []).map((l) => (typeof l === 'string' ? l : l.name).toLowerCase());
+  const agentApproved =
+    labels.includes('agent:approved') &&
+    !['agent:changes-requested', ...HOLD_LABELS].some((label) => labels.includes(label));
   // GitHub's rollup keeps EVERY check run for the head commit, including superseded ones — a check
   // that failed and was then re-run green appears TWICE. Filtering the raw list makes a stale
   // FAILURE permanent: a pull request that ever went red could never merge again however green it
@@ -199,10 +243,16 @@ function evaluate(pr) {
   });
 
   const files = (pr.files ?? []).map((f) => f.path ?? f.filename ?? '');
+  const filesAreComplete = !Number.isInteger(pr.changedFiles) || files.length >= pr.changedFiles;
+  const conformanceRequired = !filesAreComplete || files.some((file) => CONFORMANCE_PATHS.some((re) => re.test(file)));
 
   const state = (c) => (c.conclusion || c.state || c.status || '').toUpperCase();
-  const pending = checks.filter((c) => ['PENDING', 'IN_PROGRESS', 'QUEUED', 'WAITING', ''].includes(state(c)));
-  const broken = checks.filter((c) => ['FAILURE', 'ERROR', 'CANCELLED', 'TIMED_OUT', 'ACTION_REQUIRED'].includes(state(c)));
+  const context = (c) => c.name || c.context || '';
+  const required = requiredContextsFor(pr.baseRefName);
+  const requiredChecks = required.contexts ? checks.filter((c) => required.contexts.includes(context(c))) : checks;
+  const missingRequired = required.contexts?.filter((name) => !checks.some((c) => context(c) === name)) ?? [];
+  const pending = requiredChecks.filter((c) => ['PENDING', 'IN_PROGRESS', 'QUEUED', 'WAITING', ''].includes(state(c)));
+  const broken = requiredChecks.filter((c) => ['FAILURE', 'ERROR', 'CANCELLED', 'TIMED_OUT', 'ACTION_REQUIRED'].includes(state(c)));
 
   const isLowRisk = files.length > 0 && files.every((f) => LOW_RISK.some((re) => re.test(f)));
   const changeClass = isLowRisk ? 'low-risk' : 'feature';
@@ -210,9 +260,14 @@ function evaluate(pr) {
   if (!LOOP_BRANCH.test(pr.headRefName)) fail.push(`is_loop_pr: "${pr.headRefName}" is not a loop branch — not ours to merge`);
   if (!/plenipo-agent/.test(pr.body ?? '')) fail.push('is_loop_pr: the body carries no plenipo-agent envelope');
   if (pr.isDraft) fail.push('not_draft: the PR is a draft');
-  if (checks.length === 0) fail.push('checks_exist: no status checks ran — green would mean nothing');
+  if (required.error) fail.push(`checks_configured: ${required.error}`);
+  else if (missingRequired.length) {
+    fail.push(`checks_green: required check(s) missing from the rollup: ${missingRequired.join(', ')}`);
+  } else if (requiredChecks.length === 0) {
+    fail.push('checks_exist: no required status checks ran — green would mean nothing');
+  }
   if (pending.length) fail.push(`checks_green: ${pending.length} check(s) still running`);
-  if (broken.length) fail.push(`checks_green: ${broken.map((c) => c.name || c.context).join(', ')} not passing`);
+  if (broken.length) fail.push(`checks_green: ${broken.map(context).join(', ')} not passing`);
   if (pr.mergeable && pr.mergeable !== 'MERGEABLE') fail.push(`mergeable: mergeable=${pr.mergeable}`);
   // `BEHIND` is staleness, not a defect, and it is the ONE mergeStateStatus this script can repair
   // by itself — which is why it is no longer lumped in with DIRTY and BLOCKED. Those need someone
@@ -251,19 +306,21 @@ function evaluate(pr) {
   // "it did not run". That is the `checks_exist` failure mode one level up — a check nobody ran
   // reads exactly like a check that passed.
   if (IS_PLATFORM) {
-    const conformance = checks.filter((c) => CONFORMANCE_CHECK.test(c.name || c.context || ''));
-    const notGreen = conformance.filter((c) => state(c) !== 'SUCCESS');
+    if (conformanceRequired) {
+      const conformance = checks.filter((c) => CONFORMANCE_CHECK.test(c.name || c.context || ''));
+      const notGreen = conformance.filter((c) => state(c) !== 'SUCCESS');
 
-    if (conformance.length === 0) {
-      fail.push(
-        'consumers_green: no consumer-conformance check ran on this PR — a skipped conformance ' +
-          'run is a red gate, not a missing one'
-      );
-    } else if (notGreen.length) {
-      fail.push(
-        `consumers_green: ${notGreen.map((c) => `${c.name || c.context} (${state(c) || 'no conclusion'})`).join(', ')} ` +
-          '— a registered consumer does not build or does not pass against this change'
-      );
+      if (conformance.length === 0) {
+        fail.push(
+          'consumers_green: no consumer-conformance check ran on this platform-surface PR — a skipped ' +
+            'conformance run is a red gate, not a missing one'
+        );
+      } else if (notGreen.length) {
+        fail.push(
+          `consumers_green: ${notGreen.map((c) => `${c.name || c.context} (${state(c) || 'no conclusion'})`).join(', ')} ` +
+            '— a registered consumer does not build or does not pass against this change'
+        );
+      }
     }
 
     const surface = SURFACE_RE.exec(pr.body ?? '');
@@ -273,10 +330,10 @@ function evaluate(pr) {
           'unclassified break gets announced without migration steps, which starts N agents down ' +
           'an unverified path'
       );
-    } else if (surface[1].toLowerCase() === 'breaking' && !labels.includes('human-approved')) {
+    } else if (surface[1].toLowerCase() === 'breaking' && !agentApproved) {
       fail.push(
-        'surface_declared: "Surface: breaking" needs the `human-approved` label — a human writes ' +
-          'the migration before every consumer is told to follow it'
+        'surface_declared: "Surface: breaking" needs a live `agent:approved` verdict — the agent ' +
+          'must verify the migration evidence before every consumer is told to follow it'
       );
     }
   }

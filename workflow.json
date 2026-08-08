@@ -9,6 +9,7 @@
     "level": 3,
     "maxOpenPRs": 3,
     "maxMergesPerTick": 2,
+    "maxVerdictRequestsPerTick": 2,
     "readyFloor": 3,
     "maxIssuesPerSweep": 8,
     "maxNewCapabilities": 5

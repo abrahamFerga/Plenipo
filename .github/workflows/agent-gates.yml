@@ -4,8 +4,8 @@
 # opinion, and a required status check cannot. Make it a REQUIRED check on the default branch or it
 # gates nothing.
 #
-# `edited` and `labeled` are in the trigger list on purpose: the PR body is one of the gates, and
-# `human-approved` is the documented override, so both must re-run the check.
+# `edited` and `labeled` are in the trigger list on purpose: the PR body is one of the gates, and a
+# fresh `agent:approved` verdict is the normal autonomous override for a protected diff.
 name: Agent gates
 
 on:
