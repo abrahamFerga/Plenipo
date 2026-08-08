@@ -210,7 +210,13 @@
   ],
   "closingIssuesReferences": [
    {
-    "number": 150
+    "number": 150,
+    "repository": {
+     "name": "Plenipo",
+     "owner": {
+      "login": "abrahamFerga"
+     }
+    }
    }
   ]
  },

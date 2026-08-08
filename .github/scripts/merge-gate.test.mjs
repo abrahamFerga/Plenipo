@@ -77,8 +77,9 @@ for (const [number, mustFail, why] of cases) {
 // Asserts on the NOTE rather than on a close actually happening: closing needs `gh` and a live
 // repo, which this file deliberately does not have.
 const closeCases = [
-  [906, /closes #150\b/, 'a linked issue must be named in the run log, or a silent no-close is invisible'],
+  [906, /closes abrahamFerga\/Plenipo#150\b/, 'a linked issue must be named in the run log, or a silent no-close is invisible'],
   [907, /closes nothing/, 'a pull request that will close nothing must say so before it merges'],
+  [913, /closes other-org\/Other#151\b/, 'a cross-repository linked issue must retain its owner in the run log'],
 ];
 
 for (const [number, mustMatch, why] of closeCases) {
@@ -137,7 +138,7 @@ for (const [number, mustFail, why] of mergeableCases) {
 // STALE-versus-BLOCK split deterministically. The gate reads policy from `workflow.json` in the
 // working directory and the fixture path is absolute, so cwd is the whole control surface.
 const scratch = mkdtempSync(join(tmpdir(), 'merge-gate-'));
-writeFileSync(join(scratch, 'workflow.json'), JSON.stringify({ autonomy: { level: 3 } }));
+writeFileSync(join(scratch, 'workflow.json'), JSON.stringify({ autonomy: { level: 3, maxMergesPerTick: 20 } }));
 
 const levelled = spawnSync(process.execPath, [gate, '--fixture', fixture], {
   encoding: 'utf8',
@@ -188,8 +189,11 @@ if (simulated.status !== 0) {
 } else if (/^\s{2}(MERGED|UPDATE) /m.test(simulated.stdout)) {
   console.log(`  FAIL — \`--fixture --merge\` reported a REAL merge or branch update on fixture data`);
   failed++;
+} else if (!/WOULD CLOSE other-org\/Other#151 with --repo other-org\/Other/.test(simulated.stdout)) {
+  console.log('  FAIL — `--fixture --merge` did not preserve the linked issue repository in its simulated close command');
+  failed++;
 } else {
-  console.log('  ok   simulate — `--fixture --merge` simulates and never reaches the network');
+  console.log('  ok   simulate — `--fixture --merge` simulates, never reaches the network, and preserves issue ownership');
 }
 
 if (failed) {

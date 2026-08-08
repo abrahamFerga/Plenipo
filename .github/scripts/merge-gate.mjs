@@ -299,15 +299,46 @@ const results = prs.map(evaluate).sort((a, b) => a.pr.number - b.pr.number);
 // The permission is granted now, but relying on the implicit behaviour is exactly what failed
 // quietly for a week — so close them here, where the run log says whether it happened.
 const linkedIssues = (pr) =>
-  (pr.closingIssuesReferences ?? []).map((i) => i?.number).filter((n) => Number.isInteger(n));
+  (pr.closingIssuesReferences ?? [])
+    .map((i) => {
+      const number = i?.number;
+      const owner = i?.repository?.owner?.login;
+      const name = i?.repository?.name;
+      return Number.isInteger(number)
+        ? { number, repository: owner && name ? `${owner}/${name}` : null }
+        : null;
+    })
+    .filter(Boolean);
+
+const issueReference = (issue) =>
+  issue.repository ? `${issue.repository}#${issue.number}` : `#${issue.number} (repository unknown)`;
 
 function closeLinkedIssues(pr) {
-  for (const n of linkedIssues(pr)) {
-    const { ok, out } = ghSoft(['issue', 'close', String(n), '--reason', 'completed',
-      '--comment', `Closed by #${pr.number}.`]);
+  for (const issue of linkedIssues(pr)) {
+    // Closing by bare number uses the platform repo inferred from cwd. A linked issue may belong
+    // to another repository, where the same number names unrelated work, so refuse incomplete
+    // metadata and always tell `gh` exactly which repository owns the issue.
+    if (!issue.repository) {
+      console.log(`         WARN could not close ${issueReference(issue)}: no repository was returned by GitHub`);
+      continue;
+    }
+    const { ok, out } = ghSoft(['issue', 'close', String(issue.number), '--repo', issue.repository,
+      '--reason', 'completed', '--comment', `Closed by #${pr.number}.`]);
     // An issue already closed — by the implicit behaviour, or by a human ahead of the tick — is
     // the goal state, not a failure. Report either way; never let bookkeeping stop the loop.
-    console.log(ok ? `         closed #${n}` : `         WARN could not close #${n}: ${out}`);
+    console.log(ok
+      ? `         closed ${issueReference(issue)}`
+      : `         WARN could not close ${issueReference(issue)}: ${out}`);
+  }
+}
+
+function simulateClosingLinkedIssues(pr) {
+  for (const issue of linkedIssues(pr)) {
+    if (!issue.repository) {
+      console.log(`         WOULD NOT CLOSE ${issueReference(issue)}: no repository was returned by GitHub`);
+      continue;
+    }
+    console.log(`         WOULD CLOSE ${issueReference(issue)} with --repo ${issue.repository}`);
   }
 }
 
@@ -332,7 +363,7 @@ for (const { pr, fail, changeClass, stale } of results) {
   // absence of a link would stall the queue on exactly the PRs nobody filed an issue for.
   const closes = linkedIssues(pr);
   const closesNote = closes.length
-    ? `closes ${closes.map((n) => `#${n}`).join(', ')}`
+    ? `closes ${closes.map(issueReference).join(', ')}`
     : 'closes nothing — no issue is linked to this pull request';
 
   // ── Stale but otherwise clean: repair it, do not merge it ──────────────────
@@ -410,6 +441,7 @@ for (const { pr, fail, changeClass, stale } of results) {
         merged++;
         console.log(`  WOULD MERGE #${pr.number} ${pr.title} [${changeClass}]`);
         console.log(`         ${closesNote}`);
+        simulateClosingLinkedIssues(pr);
         continue;
       }
 
