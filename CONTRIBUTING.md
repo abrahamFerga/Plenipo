@@ -95,10 +95,11 @@ The dashboard tabs, RBAC, audit, token tracking, HITL approval, and chat all app
 - Ensure builds, tests, and the frontend lint + tests all pass.
 
 `main` is protected: the three CI contexts (`.NET build, test & image scan`, `Package consumption
-smoke`, `Frontend lint, test, build & E2E`) must be green, and **platform changes always merge by a
-human** — no autonomy level applies here. See [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md) for the
-repository configuration itself, and for how to set up a new **product** repo on this base (branch
-protection, merge gates, labels, the project board, secrets, and which skill runs each step).
+smoke`, `Frontend lint, test, build & E2E`) and `PR gates` must be green. An agent-approved PR merges
+only after the deterministic merger re-checks the live branch state; platform source/package changes
+also require consumer conformance. See [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md) for the
+repository configuration itself (branch protection, merge gates, labels, the project board, secrets,
+and which skill runs each step).
 
 ## License
 

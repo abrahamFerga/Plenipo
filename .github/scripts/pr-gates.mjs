@@ -19,8 +19,9 @@
 //   The spine guard runs on EVERY pull request, including a human's. It fires when a diff REMOVES
 //   or MODIFIES a line touching tenant isolation, the approval gate, permission grants, role
 //   baselines, CI itself, or the package feed. Adding such a line is ordinary feature work;
-//   editing or deleting one is a change to the thing the platform exists to guarantee. Override
-//   deliberately with the `human-approved` label — which is a human act, recorded on the PR.
+//   editing or deleting one is a change to the thing the platform exists to guarantee. Override it
+//   only with a live, uncontradicted `agent:approved` verdict (or the legacy human override). The
+//   merger independently re-checks every required CI result, mergeability, holds and autonomy.
 
 import { readFileSync, existsSync } from 'node:fs';
 
@@ -34,6 +35,10 @@ const labels = (process.env.PR_LABELS ?? '')
 
 const isLoopPr = /^(feat|fix|chore)\//.test(headRef);
 const humanApproved = labels.includes('human-approved');
+const agentApproved =
+  labels.includes('agent:approved') &&
+  !['agent:changes-requested', 'needs-human', 'agent:blocked', 'human-hold'].some((label) => labels.includes(label));
+const spineOverride = agentApproved || humanApproved;
 
 const failures = [];
 const passes = [];
@@ -116,14 +121,15 @@ for (const line of readFileSync(diffPath, 'utf8').split('\n')) {
 }
 
 const unique = [...new Set(hits)];
-if (unique.length && !humanApproved) {
+if (unique.length && !spineOverride) {
   failures.push(
-    'spine_untouched: this diff changes something the platform exists to guarantee.\n' +
+    'spine_untouched: a protected diff needs an approved agent verdict (`agent:approved` without a ' +
+      'contradictory hold), or a deliberate `human-approved` override.\n' +
       unique.map((h) => `      - ${h}`).join('\n') +
-      '\n      A human must review it. Add the `human-approved` label to override, deliberately.'
+      '\n      The scheduled merger still requires green CI, a settled merge state, and the same live agent verdict.'
   );
 } else if (unique.length) {
-  passes.push('spine_untouched (overridden by human-approved)');
+  passes.push(`spine_untouched (overridden by ${agentApproved ? 'agent:approved' : 'human-approved'})`);
 }
 
 // ── Report ───────────────────────────────────────────────────────────────────

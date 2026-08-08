@@ -14,6 +14,8 @@
 // the level — turning a real check into noise someone silences.
 
 import { spawnSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -66,8 +68,318 @@ for (const [number, mustFail, why] of cases) {
   }
 }
 
+// ── The linked issue must be named before the merge, not discovered after it ──
+// A `GITHUB_TOKEN` merge without `issues: write` closes the pull request and silently leaves the
+// issue open, so an unattended board keeps advertising merged work. That failure was invisible
+// because nothing in the run log ever mentioned the issue. These assert on the dry run — the step
+// `agent-merge.yml` always executes — so the intent is on record even when the merge is skipped.
+//
+// Asserts on the NOTE rather than on a close actually happening: closing needs `gh` and a live
+// repo, which this file deliberately does not have.
+const closeCases = [
+  [906, /closes abrahamFerga\/Plenipo#150\b/, 'a linked issue must be named in the run log, or a silent no-close is invisible'],
+  [907, /closes nothing/, 'a pull request that will close nothing must say so before it merges'],
+  [913, /closes other-org\/Other#151\b/, 'a cross-repository linked issue must retain its owner in the run log'],
+];
+
+for (const [number, mustMatch, why] of closeCases) {
+  const reasons = reasonsFor(number);
+  if (reasons === null) {
+    console.log(`  FAIL #${number} — not present in the gate's output at all`);
+    failed++;
+    continue;
+  }
+
+  if (mustMatch.test(reasons)) {
+    console.log(`  ok   #${number} — ${why}`);
+  } else {
+    console.log(`  FAIL #${number} — expected ${mustMatch} in the report.\n       ${why}\n       reported:\n${reasons}`);
+    failed++;
+  }
+}
+
+// ── A stale branch is repairable, a conflicted one is not ────────────────────
+// `BEHIND` used to sit in the same list as `DIRTY` and `BLOCKED`, and that one line froze the whole
+// fleet: the first merge onto main made every other open pull request BEHIND, nothing ever ran
+// `gh pr update-branch`, and so the queue absorbed exactly one merge and then stopped. Fourteen of
+// twenty-five open PRs across six repos were stuck on this single reason.
+//
+// These assert on the presence of a `mergeable:` reason rather than on READY/STALE/BLOCK, for the
+// same reason as everything above: a verdict depends on `autonomy.level`, a gate reason does not.
+const mergeableCases = [
+  [908, false, 'BEHIND must not block — it is staleness, and this script can repair it in one call'],
+  [909, true, 'DIRTY must still block — a real conflict needs the author, not a branch update'],
+  [911, true, 'UNKNOWN must block — only a known-clean state or repairable staleness is safe'],
+  [912, true, 'UNSTABLE must block — a transient merge state is not permission to merge'],
+  [914, true, 'HAS_HOOKS must block — GitHub has an unsatisfied merge requirement'],
+];
+
+for (const [number, mustFail, why] of mergeableCases) {
+  const reasons = reasonsFor(number);
+  if (reasons === null) {
+    console.log(`  FAIL #${number} — not present in the gate's output at all`);
+    failed++;
+    continue;
+  }
+
+  const fired = /mergeable:/.test(reasons);
+  if (fired === mustFail) {
+    console.log(`  ok   #${number} — ${why}`);
+  } else {
+    console.log(`  FAIL #${number} — the mergeable gate ${fired ? 'fired' : 'did NOT fire'}, expected the opposite.\n       ${why}\n       reasons:\n${reasons}`);
+    failed++;
+  }
+}
+
+// ── Which stale branches actually get updated ────────────────────────────────
+// The routing above is level-dependent by construction — a branch is only worth updating when
+// freshness is the LAST thing wrong with it, and at level 0 nothing is. So this runs the gate in a
+// scratch directory holding a level-3 `workflow.json`, which is the only way to assert the
+// STALE-versus-BLOCK split deterministically. The gate reads policy from `workflow.json` in the
+// working directory and the fixture path is absolute, so cwd is the whole control surface.
+const scratch = mkdtempSync(join(tmpdir(), 'merge-gate-'));
+writeFileSync(join(scratch, 'workflow.json'), JSON.stringify({ autonomy: { level: 3, maxMergesPerTick: 20 } }));
+
+// ── Platform policy — an agent verdict can approve a declared break, and conformance follows its
+// workflow's path surface ───────────────────────────────────────────────────────────────────────
+// Consumer conformance only runs for `src/**` and the root Directory props files. Requiring that
+// check for a workflow-only change turns a skipped workflow into a permanent deadlock; skipping it
+// for a source change lets a package break through. These three cases prove the two policies stay
+// aligned, and that a platform break uses the same agent verdict as every other unattended merge.
+const policyScratch = mkdtempSync(join(tmpdir(), 'merge-gate-platform-policy-'));
+writeFileSync(
+  join(policyScratch, 'workflow.json'),
+  JSON.stringify({ stage: 'platform', autonomy: { level: 3, maxMergesPerTick: 20 } })
+);
+const policyFixture = join(policyScratch, 'policy-fixture.json');
+writeFileSync(
+  policyFixture,
+  JSON.stringify([
+    {
+      number: 915,
+      title: 'agent-approved workflow-only breaking policy change',
+      body: 'plenipo-agent envelope\nSurface: breaking',
+      isDraft: false,
+      headRefName: 'fix/915-policy',
+      baseRefName: 'main',
+      labels: [{ name: 'agent:approved' }],
+      mergeable: 'MERGEABLE',
+      mergeStateStatus: 'CLEAN',
+      reviewDecision: '',
+      statusCheckRollup: [{ name: 'PR gates', workflowName: 'Agent gates', conclusion: 'SUCCESS' }],
+      files: [{ path: '.github/workflows/agent-merge.yml' }],
+    },
+    {
+      number: 916,
+      title: 'breaking platform change without an agent verdict',
+      body: 'plenipo-agent envelope\nSurface: breaking',
+      isDraft: false,
+      headRefName: 'fix/916-policy',
+      baseRefName: 'main',
+      labels: [],
+      mergeable: 'MERGEABLE',
+      mergeStateStatus: 'CLEAN',
+      reviewDecision: '',
+      statusCheckRollup: [{ name: 'PR gates', workflowName: 'Agent gates', conclusion: 'SUCCESS' }],
+      files: [{ path: '.github/workflows/agent-merge.yml' }],
+    },
+    {
+      number: 917,
+      title: 'source change without a conformance result',
+      body: 'plenipo-agent envelope\nSurface: additive',
+      isDraft: false,
+      headRefName: 'fix/917-policy',
+      baseRefName: 'main',
+      labels: [{ name: 'agent:approved' }],
+      mergeable: 'MERGEABLE',
+      mergeStateStatus: 'CLEAN',
+      reviewDecision: '',
+      statusCheckRollup: [{ name: 'PR gates', workflowName: 'Agent gates', conclusion: 'SUCCESS' }],
+      files: [{ path: 'src/Plenipo.Core/Contract.cs' }],
+    },
+  ])
+);
+
+const policyRun = spawnSync(process.execPath, [gate, '--fixture', policyFixture], {
+  encoding: 'utf8',
+  cwd: policyScratch,
+});
+
+if (policyRun.status !== 0) {
+  console.log(`  FAIL — platform policy fixture exited ${policyRun.status}\n${policyRun.stderr || policyRun.stdout}`);
+  failed++;
+} else {
+  const policyReasons = (number) => {
+    const lines = policyRun.stdout.split('\n');
+    const start = lines.findIndex((line) => line.includes(`#${number} `));
+    if (start === -1) return null;
+    const rest = lines.slice(start + 1);
+    const end = rest.findIndex((line) => /^\s{2}(READY|BLOCK|HELD|MERGED)/.test(line));
+    return (end === -1 ? rest : rest.slice(0, end)).join('\n');
+  };
+
+  const ready915 = policyRun.stdout.split('\n').find((line) => line.includes('#915 '));
+  const reasons915 = policyReasons(915);
+  if (ready915 && /^\s{2}READY\b/.test(ready915) && !/surface_declared|consumers_green/.test(reasons915 ?? '')) {
+    console.log('  ok   #915 — an agent-approved workflow-only platform policy change needs no human label or skipped conformance');
+  } else {
+    console.log(`  FAIL #915 — expected READY without surface/conformance failures; got:\n       ${ready915 ?? '(missing)'}\n${reasons915 ?? ''}`);
+    failed++;
+  }
+
+  const reasons916 = policyReasons(916) ?? '';
+  if (/surface_declared: .*agent:approved/i.test(reasons916)) {
+    console.log('  ok   #916 — a breaking platform surface without the agent verdict remains blocked');
+  } else {
+    console.log(`  FAIL #916 — the breaking-surface rule did not name the required agent verdict:\n${reasons916}`);
+    failed++;
+  }
+
+  const reasons917 = policyReasons(917) ?? '';
+  if (/consumers_green/.test(reasons917)) {
+    console.log('  ok   #917 — a platform source change still requires consumer conformance');
+  } else {
+    console.log(`  FAIL #917 — a platform source change lost its conformance requirement:\n${reasons917}`);
+    failed++;
+  }
+}
+
+// ── Required checks, not every informational workflow ──────────────────────
+// A Copilot outage in the comment-only intent reviewer is not failed product CI. The approval
+// label is the verdict gate; branch protection names the CI checks that must actually be green.
+// This fixture models one required check plus an advisory `agent` job that failed externally.
+const advisoryScratch = mkdtempSync(join(tmpdir(), 'merge-gate-advisory-check-'));
+writeFileSync(
+  join(advisoryScratch, 'workflow.json'),
+  JSON.stringify({ autonomy: { level: 3, maxMergesPerTick: 20 } })
+);
+const advisoryFixture = join(advisoryScratch, 'required-checks-fixture.json');
+writeFileSync(
+  advisoryFixture,
+  JSON.stringify({
+    requiredCheckContexts: ['PR gates'],
+    pullRequests: [
+      {
+        number: 918,
+        title: 'a failed advisory agent job must not block required CI',
+        body: 'plenipo-agent envelope',
+        isDraft: false,
+        headRefName: 'fix/918-advisory',
+        baseRefName: 'main',
+        labels: [{ name: 'agent:approved' }],
+        mergeable: 'MERGEABLE',
+        mergeStateStatus: 'CLEAN',
+        reviewDecision: '',
+        statusCheckRollup: [
+          { name: 'PR gates', workflowName: 'Agent gates', conclusion: 'SUCCESS' },
+          { name: 'agent', workflowName: 'Review platform pull request intent', conclusion: 'FAILURE' },
+        ],
+        files: [{ path: 'tests/X.cs' }],
+      },
+      {
+        number: 919,
+        title: 'a missing required check still blocks despite an advisory success',
+        body: 'plenipo-agent envelope',
+        isDraft: false,
+        headRefName: 'fix/919-required',
+        baseRefName: 'main',
+        labels: [{ name: 'agent:approved' }],
+        mergeable: 'MERGEABLE',
+        mergeStateStatus: 'CLEAN',
+        reviewDecision: '',
+        statusCheckRollup: [{ name: 'agent', workflowName: 'Review platform pull request intent', conclusion: 'SUCCESS' }],
+        files: [{ path: 'tests/X.cs' }],
+      },
+    ],
+  })
+);
+
+const advisoryRun = spawnSync(process.execPath, [gate, '--fixture', advisoryFixture], {
+  encoding: 'utf8',
+  cwd: advisoryScratch,
+});
+if (advisoryRun.status !== 0) {
+  console.log(`  FAIL — required-check fixture exited ${advisoryRun.status}\n${advisoryRun.stderr || advisoryRun.stdout}`);
+  failed++;
+} else {
+  const line918 = advisoryRun.stdout.split('\n').find((line) => line.includes('#918 '));
+  if (line918 && /^\s{2}READY\b/.test(line918)) {
+    console.log('  ok   #918 — an advisory model outage does not turn green required CI red');
+  } else {
+    console.log(`  FAIL #918 — expected READY with only required CI considered; got:\n       ${line918 ?? '(missing)'}`);
+    failed++;
+  }
+
+  const reasons919 = advisoryRun.stdout
+    .split('\n')
+    .slice(advisoryRun.stdout.split('\n').findIndex((line) => line.includes('#919 ')) + 1)
+    .join('\n');
+  if (/checks_green: required check.*PR gates/i.test(reasons919)) {
+    console.log('  ok   #919 — a missing required context remains a hard block');
+  } else {
+    console.log(`  FAIL #919 — missing required CI was not reported:\n${reasons919}`);
+    failed++;
+  }
+}
+
+const levelled = spawnSync(process.execPath, [gate, '--fixture', fixture], {
+  encoding: 'utf8',
+  cwd: scratch,
+});
+
+if (levelled.status !== 0) {
+  console.log(`  FAIL — the gate exited ${levelled.status} under a level-3 policy\n${levelled.stderr || levelled.stdout}`);
+  failed++;
+} else {
+  // [pr, the verdict its line must carry, what this case is protecting]
+  const routing = [
+    [908, 'STALE', 'a PR that passes every gate but freshness must be offered a branch update'],
+    [909, 'BLOCK', 'a conflicted PR must never be routed to update-branch'],
+    [910, 'BLOCK', 'behind AND unapproved must stay blocked — updating it spends a CI run to learn nothing'],
+  ];
+
+  for (const [number, verdict, why] of routing) {
+    const line = levelled.stdout.split('\n').find((l) => l.includes(`#${number} `));
+    if (line === undefined) {
+      console.log(`  FAIL #${number} — not present in the level-3 output at all`);
+      failed++;
+    } else if (new RegExp(`^\\s{2}${verdict}\\b`).test(line)) {
+      console.log(`  ok   #${number} — ${why}`);
+    } else {
+      console.log(`  FAIL #${number} — expected ${verdict}, got:\n       ${line.trim()}\n       ${why}`);
+      failed++;
+    }
+  }
+}
+
+// ── `--fixture --merge` must never touch the network ─────────────────────────
+// Fixture data describes pull requests numbered 901-910 that exist nowhere. If `--merge` did not
+// degrade to a simulation, running this very test file with the merge flag would try to squash
+// pull request #901 in whatever repo the runner happened to be sitting in — and on a product repo
+// those numbers are real. The failure mode is not a wrong verdict, it is a wrong merge.
+const simulated = spawnSync(process.execPath, [gate, '--fixture', fixture, '--merge'], {
+  encoding: 'utf8',
+  cwd: scratch,
+});
+
+if (simulated.status !== 0) {
+  console.log(`  FAIL — \`--fixture --merge\` exited ${simulated.status}; it must simulate, not call gh\n${(simulated.stderr || simulated.stdout).split('\n').slice(0, 4).join('\n')}`);
+  failed++;
+} else if (!/WOULD (MERGE|UPDATE)/.test(simulated.stdout)) {
+  console.log(`  FAIL — \`--fixture --merge\` produced no WOULD MERGE/UPDATE line, so nothing proves it simulated`);
+  failed++;
+} else if (/^\s{2}(MERGED|UPDATE) /m.test(simulated.stdout)) {
+  console.log(`  FAIL — \`--fixture --merge\` reported a REAL merge or branch update on fixture data`);
+  failed++;
+} else if (!/WOULD CLOSE other-org\/Other#151 with --repo other-org\/Other/.test(simulated.stdout)) {
+  console.log('  FAIL — `--fixture --merge` did not preserve the linked issue repository in its simulated close command');
+  failed++;
+} else {
+  console.log('  ok   simulate — `--fixture --merge` simulates, never reaches the network, and preserves issue ownership');
+}
+
 if (failed) {
   console.log(`\n${failed} rollup case(s) wrong. merge-gate is the last automated thing before main — do not merge this.\n`);
   process.exit(1);
 }
-console.log(`\nOK — ${cases.length} rollup case(s) behave correctly.\n`);
+console.log(`\nOK — ${cases.length} rollup, ${closeCases.length} linked-issue, ${mergeableCases.length} mergeable, 3 platform-policy, 2 required-context, 3 stale-routing and 1 simulation case(s) behave correctly.\n`);

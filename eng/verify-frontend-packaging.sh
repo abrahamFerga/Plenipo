@@ -118,6 +118,7 @@ import {
   type AuthAdapter,
   type SecureStorageAdapter,
   type AuthConfig,
+  type LocalUserAdmin,
   type PlenipoModuleUi,
   type ModuleTabProps,
   type PlenipoBranding,
@@ -151,6 +152,16 @@ const store: SecureStorageAdapter = {
 };
 const shellProps: AppShellProps = { branding };
 
+// Local auth ships an admin panel, so its API row type must be available from the packed consumer
+// surface too. This catches the export regression even when no in-repo application imports it.
+const localUser: LocalUserAdmin = {
+  userId: "u-1",
+  email: "someone@example.com",
+  isActive: true,
+  mustChangePassword: false,
+  totpEnabled: false,
+};
+
 export async function signInFlow() {
   const config: AuthConfig = { mode: "oidc", authority: "https://idp.example.com", clientId: "spa" };
   const oidc = createOidcAuth({ authority: config.authority!, clientId: config.clientId! });
@@ -162,7 +173,7 @@ export async function signInFlow() {
 }
 
 export function App() {
-  void [AppShell, ChatPanel, api, createAgentConnection, ApiError, useActiveModule, sampleModule, currentUser];
+  void [AppShell, ChatPanel, api, createAgentConnection, ApiError, useActiveModule, sampleModule, currentUser, localUser];
   // The one-liner a product writes to let someone log in.
   return <PlenipoApp moduleUi={[finance]} branding={branding} config={{ auth: byoAuth }} />;
 }
