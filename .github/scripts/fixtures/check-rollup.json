@@ -1,87 +1,337 @@
 [
-  {
-    "number": 901,
-    "title": "stale FAILURE superseded by a fresh SUCCESS — must NOT block",
-    "body": "plenipo-agent envelope",
-    "isDraft": false,
-    "headRefName": "fix/901-stale-then-green",
-    "baseRefName": "main",
-    "labels": [{ "name": "agent:approved" }],
-    "mergeable": "MERGEABLE",
-    "mergeStateStatus": "CLEAN",
-    "reviewDecision": "",
-    "statusCheckRollup": [
-      { "name": "PR gates", "workflowName": "Agent gates", "conclusion": "FAILURE", "startedAt": "2026-08-06T01:29:48Z", "completedAt": "2026-08-06T01:29:53Z" },
-      { "name": "PR gates", "workflowName": "Agent gates", "conclusion": "SUCCESS", "startedAt": "2026-08-06T01:31:56Z", "completedAt": "2026-08-06T01:32:05Z" }
-    ],
-    "files": [{ "path": "tests/X.cs" }]
-  },
-  {
-    "number": 902,
-    "title": "completed SUCCESS with a QUEUED re-run — must block as still running",
-    "body": "plenipo-agent envelope",
-    "isDraft": false,
-    "headRefName": "fix/902-queued-rerun",
-    "baseRefName": "main",
-    "labels": [{ "name": "agent:approved" }],
-    "mergeable": "MERGEABLE",
-    "mergeStateStatus": "CLEAN",
-    "reviewDecision": "",
-    "statusCheckRollup": [
-      { "name": "PR gates", "workflowName": "Agent gates", "conclusion": "SUCCESS", "startedAt": "2026-08-06T01:31:56Z", "completedAt": "2026-08-06T01:32:05Z" },
-      { "name": "PR gates", "workflowName": "Agent gates", "status": "QUEUED", "conclusion": null }
-    ],
-    "files": [{ "path": "tests/X.cs" }]
-  },
-  {
-    "number": 903,
-    "title": "identical timestamps, FAILURE first — must block, not resolve by position",
-    "body": "plenipo-agent envelope",
-    "isDraft": false,
-    "headRefName": "fix/903-tie",
-    "baseRefName": "main",
-    "labels": [{ "name": "agent:approved" }],
-    "mergeable": "MERGEABLE",
-    "mergeStateStatus": "CLEAN",
-    "reviewDecision": "",
-    "statusCheckRollup": [
-      { "name": "PR gates", "workflowName": "Agent gates", "conclusion": "FAILURE", "startedAt": "2026-08-06T01:18:42Z", "completedAt": "2026-08-06T01:18:48Z" },
-      { "name": "PR gates", "workflowName": "Agent gates", "conclusion": "SUCCESS", "startedAt": "2026-08-06T01:18:42Z", "completedAt": "2026-08-06T01:18:48Z" }
-    ],
-    "files": [{ "path": "tests/X.cs" }]
-  },
-  {
-    "number": 904,
-    "title": "two workflows sharing a job name, one FAILS — must block",
-    "body": "plenipo-agent envelope",
-    "isDraft": false,
-    "headRefName": "fix/904-name-collision",
-    "baseRefName": "main",
-    "labels": [{ "name": "agent:approved" }],
-    "mergeable": "MERGEABLE",
-    "mergeStateStatus": "CLEAN",
-    "reviewDecision": "",
-    "statusCheckRollup": [
-      { "name": "build", "workflowName": "ci", "conclusion": "SUCCESS", "startedAt": "2026-08-06T01:00:00Z", "completedAt": "2026-08-06T01:01:00Z" },
-      { "name": "build", "workflowName": "nightly", "conclusion": "FAILURE", "startedAt": "2026-08-06T00:50:00Z", "completedAt": "2026-08-06T00:51:00Z" }
-    ],
-    "files": [{ "path": "tests/X.cs" }]
-  },
-  {
-    "number": 905,
-    "title": "legacy StatusContext with no startedAt, FAILURE first — must block",
-    "body": "plenipo-agent envelope",
-    "isDraft": false,
-    "headRefName": "fix/905-status-context",
-    "baseRefName": "main",
-    "labels": [{ "name": "agent:approved" }],
-    "mergeable": "MERGEABLE",
-    "mergeStateStatus": "CLEAN",
-    "reviewDecision": "",
-    "statusCheckRollup": [
-      { "context": "external/ci", "state": "FAILURE", "createdAt": "2026-08-06T02:00:00Z" },
-      { "context": "external/ci", "state": "SUCCESS", "createdAt": "2026-08-06T01:00:00Z" }
-    ],
-    "files": [{ "path": "tests/X.cs" }]
-  }
+ {
+  "number": 901,
+  "title": "stale FAILURE superseded by a fresh SUCCESS — must NOT block",
+  "body": "plenipo-agent envelope",
+  "isDraft": false,
+  "headRefName": "fix/901-stale-then-green",
+  "baseRefName": "main",
+  "labels": [
+   {
+    "name": "agent:approved"
+   }
+  ],
+  "mergeable": "MERGEABLE",
+  "mergeStateStatus": "CLEAN",
+  "reviewDecision": "",
+  "statusCheckRollup": [
+   {
+    "name": "PR gates",
+    "workflowName": "Agent gates",
+    "conclusion": "FAILURE",
+    "startedAt": "2026-08-06T01:29:48Z",
+    "completedAt": "2026-08-06T01:29:53Z"
+   },
+   {
+    "name": "PR gates",
+    "workflowName": "Agent gates",
+    "conclusion": "SUCCESS",
+    "startedAt": "2026-08-06T01:31:56Z",
+    "completedAt": "2026-08-06T01:32:05Z"
+   }
+  ],
+  "files": [
+   {
+    "path": "tests/X.cs"
+   }
+  ]
+ },
+ {
+  "number": 902,
+  "title": "completed SUCCESS with a QUEUED re-run — must block as still running",
+  "body": "plenipo-agent envelope",
+  "isDraft": false,
+  "headRefName": "fix/902-queued-rerun",
+  "baseRefName": "main",
+  "labels": [
+   {
+    "name": "agent:approved"
+   }
+  ],
+  "mergeable": "MERGEABLE",
+  "mergeStateStatus": "CLEAN",
+  "reviewDecision": "",
+  "statusCheckRollup": [
+   {
+    "name": "PR gates",
+    "workflowName": "Agent gates",
+    "conclusion": "SUCCESS",
+    "startedAt": "2026-08-06T01:31:56Z",
+    "completedAt": "2026-08-06T01:32:05Z"
+   },
+   {
+    "name": "PR gates",
+    "workflowName": "Agent gates",
+    "status": "QUEUED",
+    "conclusion": null
+   }
+  ],
+  "files": [
+   {
+    "path": "tests/X.cs"
+   }
+  ]
+ },
+ {
+  "number": 903,
+  "title": "identical timestamps, FAILURE first — must block, not resolve by position",
+  "body": "plenipo-agent envelope",
+  "isDraft": false,
+  "headRefName": "fix/903-tie",
+  "baseRefName": "main",
+  "labels": [
+   {
+    "name": "agent:approved"
+   }
+  ],
+  "mergeable": "MERGEABLE",
+  "mergeStateStatus": "CLEAN",
+  "reviewDecision": "",
+  "statusCheckRollup": [
+   {
+    "name": "PR gates",
+    "workflowName": "Agent gates",
+    "conclusion": "FAILURE",
+    "startedAt": "2026-08-06T01:18:42Z",
+    "completedAt": "2026-08-06T01:18:48Z"
+   },
+   {
+    "name": "PR gates",
+    "workflowName": "Agent gates",
+    "conclusion": "SUCCESS",
+    "startedAt": "2026-08-06T01:18:42Z",
+    "completedAt": "2026-08-06T01:18:48Z"
+   }
+  ],
+  "files": [
+   {
+    "path": "tests/X.cs"
+   }
+  ]
+ },
+ {
+  "number": 904,
+  "title": "two workflows sharing a job name, one FAILS — must block",
+  "body": "plenipo-agent envelope",
+  "isDraft": false,
+  "headRefName": "fix/904-name-collision",
+  "baseRefName": "main",
+  "labels": [
+   {
+    "name": "agent:approved"
+   }
+  ],
+  "mergeable": "MERGEABLE",
+  "mergeStateStatus": "CLEAN",
+  "reviewDecision": "",
+  "statusCheckRollup": [
+   {
+    "name": "build",
+    "workflowName": "ci",
+    "conclusion": "SUCCESS",
+    "startedAt": "2026-08-06T01:00:00Z",
+    "completedAt": "2026-08-06T01:01:00Z"
+   },
+   {
+    "name": "build",
+    "workflowName": "nightly",
+    "conclusion": "FAILURE",
+    "startedAt": "2026-08-06T00:50:00Z",
+    "completedAt": "2026-08-06T00:51:00Z"
+   }
+  ],
+  "files": [
+   {
+    "path": "tests/X.cs"
+   }
+  ]
+ },
+ {
+  "number": 905,
+  "title": "legacy StatusContext with no startedAt, FAILURE first — must block",
+  "body": "plenipo-agent envelope",
+  "isDraft": false,
+  "headRefName": "fix/905-status-context",
+  "baseRefName": "main",
+  "labels": [
+   {
+    "name": "agent:approved"
+   }
+  ],
+  "mergeable": "MERGEABLE",
+  "mergeStateStatus": "CLEAN",
+  "reviewDecision": "",
+  "statusCheckRollup": [
+   {
+    "context": "external/ci",
+    "state": "FAILURE",
+    "createdAt": "2026-08-06T02:00:00Z"
+   },
+   {
+    "context": "external/ci",
+    "state": "SUCCESS",
+    "createdAt": "2026-08-06T01:00:00Z"
+   }
+  ],
+  "files": [
+   {
+    "path": "tests/X.cs"
+   }
+  ]
+ },
+ {
+  "number": 906,
+  "title": "a linked issue must be named in the run log",
+  "body": "plenipo-agent envelope",
+  "isDraft": false,
+  "headRefName": "fix/906-x",
+  "baseRefName": "main",
+  "labels": [
+   {
+    "name": "agent:approved"
+   }
+  ],
+  "mergeable": "MERGEABLE",
+  "mergeStateStatus": "CLEAN",
+  "reviewDecision": "",
+  "statusCheckRollup": [
+   {
+    "name": "PR gates",
+    "workflowName": "Agent gates",
+    "conclusion": "SUCCESS",
+    "startedAt": "2026-08-06T01:31:56Z",
+    "completedAt": "2026-08-06T01:32:05Z"
+   }
+  ],
+  "files": [
+   {
+    "path": "tests/X.cs"
+   }
+  ],
+  "closingIssuesReferences": [
+   {
+    "number": 150
+   }
+  ]
+ },
+ {
+  "number": 907,
+  "title": "a pull request linked to nothing must say so",
+  "body": "plenipo-agent envelope",
+  "isDraft": false,
+  "headRefName": "fix/907-x",
+  "baseRefName": "main",
+  "labels": [
+   {
+    "name": "agent:approved"
+   }
+  ],
+  "mergeable": "MERGEABLE",
+  "mergeStateStatus": "CLEAN",
+  "reviewDecision": "",
+  "statusCheckRollup": [
+   {
+    "name": "PR gates",
+    "workflowName": "Agent gates",
+    "conclusion": "SUCCESS",
+    "startedAt": "2026-08-06T01:31:56Z",
+    "completedAt": "2026-08-06T01:32:05Z"
+   }
+  ],
+  "files": [
+   {
+    "path": "tests/X.cs"
+   }
+  ],
+  "closingIssuesReferences": []
+ },
+ {
+  "number": 908,
+  "title": "behind main but otherwise clean — must be repaired, not refused",
+  "headRefName": "fix/908-behind",
+  "labels": [
+   {
+    "name": "agent:approved"
+   }
+  ],
+  "mergeStateStatus": "BEHIND",
+  "body": "plenipo-agent envelope",
+  "isDraft": false,
+  "baseRefName": "main",
+  "mergeable": "MERGEABLE",
+  "reviewDecision": "",
+  "statusCheckRollup": [
+   {
+    "name": "PR gates",
+    "workflowName": "Agent gates",
+    "conclusion": "SUCCESS",
+    "startedAt": "2026-08-06T01:31:56Z",
+    "completedAt": "2026-08-06T01:32:05Z"
+   }
+  ],
+  "files": [
+   {
+    "path": "tests/X.cs"
+   }
+  ],
+  "closingIssuesReferences": []
+ },
+ {
+  "number": 909,
+  "title": "a real conflict must still block — BEHIND is not a licence to merge DIRTY",
+  "headRefName": "fix/909-dirty",
+  "labels": [
+   {
+    "name": "agent:approved"
+   }
+  ],
+  "mergeStateStatus": "DIRTY",
+  "body": "plenipo-agent envelope",
+  "isDraft": false,
+  "baseRefName": "main",
+  "mergeable": "MERGEABLE",
+  "reviewDecision": "",
+  "statusCheckRollup": [
+   {
+    "name": "PR gates",
+    "workflowName": "Agent gates",
+    "conclusion": "SUCCESS",
+    "startedAt": "2026-08-06T01:31:56Z",
+    "completedAt": "2026-08-06T01:32:05Z"
+   }
+  ],
+  "files": [
+   {
+    "path": "tests/X.cs"
+   }
+  ],
+  "closingIssuesReferences": []
+ },
+ {
+  "number": 910,
+  "title": "behind AND unapproved — updating it would burn a CI run to learn nothing",
+  "headRefName": "fix/910-behind-unapproved",
+  "labels": [],
+  "mergeStateStatus": "BEHIND",
+  "body": "plenipo-agent envelope",
+  "isDraft": false,
+  "baseRefName": "main",
+  "mergeable": "MERGEABLE",
+  "reviewDecision": "",
+  "statusCheckRollup": [
+   {
+    "name": "PR gates",
+    "workflowName": "Agent gates",
+    "conclusion": "SUCCESS",
+    "startedAt": "2026-08-06T01:31:56Z",
+    "completedAt": "2026-08-06T01:32:05Z"
+   }
+  ],
+  "files": [
+   {
+    "path": "tests/X.cs"
+   }
+  ],
+  "closingIssuesReferences": []
+ }
 ]
