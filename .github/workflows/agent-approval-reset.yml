@@ -1,0 +1,70 @@
+# Approval expiry. Deterministic — no AI, no secrets, no third-party actions.
+#
+# `agent:approved` is a statement about a diff, not about a pull request. Without this, a PR reviewed
+# at commit A keeps the label through commit B, and the scheduled merger — which re-reads the world
+# but cannot tell a fresh label from a stale one — merges code nothing ever looked at. That is the
+# one way the whole gate list can be green over unreviewed changes.
+#
+# `add-labels` in the reviewer can only ADD, so expiry has to live here. The reviewer re-runs on the
+# same events and re-labels from scratch; this job finishes in seconds while that takes minutes, so
+# the new verdict lands after the reset, not before it. If that race ever inverts, it loses an
+# approval rather than keeping a stale one — the safe direction.
+name: Reset agent approval
+
+on:
+  # `synchronize` alone is NOT enough. A base-branch retarget arrives as `edited` carrying
+  # `changes.base`, and it changes the effective diff without changing the head SHA. `reopened`
+  # can also republish a different head. Keep this set aligned with agent-gates.yml.
+  # Use the trusted default-branch workflow definition. This job never checks out or executes the
+  # PR; it only removes labels through the API, so a PR cannot edit the expiry control that governs
+  # its own earlier verdict.
+  pull_request_target:
+    types: [synchronize, edited, reopened]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to clear the verdict on.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: approval-reset-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: false
+
+jobs:
+  reset:
+    name: Drop a verdict the new commits have not earned
+    runs-on: ubuntu-latest
+    # A title or body edit is not a diff change. Only react to `edited` when the base moved.
+    if: >-
+      github.event_name != 'pull_request_target'
+      || github.event.action != 'edited'
+      || github.event.changes.base != null
+    steps:
+      # A missing label is normal and must never fail a pull request. Any other API failure must be
+      # visible: otherwise the stale approval survives and the merge cron cannot tell.
+      - name: Clear the review verdict
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number || inputs.pr_number }}
+          REPO: ${{ github.repository }}
+        run: |
+          failed=
+          for label in 'agent:approved' 'agent:changes-requested'; do
+            if out=$(gh api -X DELETE "repos/$REPO/issues/$PR/labels/$label" 2>&1); then
+              echo "cleared  $label"
+              continue
+            fi
+            case "$out" in
+              *'(HTTP 404)'*) echo "not set  $label" ;;
+              *) echo "::error::could not clear $label — the approval may be stale: $out"; failed=1 ;;
+            esac
+          done
+          if [ -n "$failed" ]; then
+            echo "Failing the run: a verdict that could not be cleared must not look cleared." >&2
+            exit 1
+          fi

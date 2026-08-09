@@ -23,16 +23,16 @@ of one setup — they have different gates and a different answer to "who may me
 | | **Platform repo** (this one) | **Product repo** (built on the packages) |
 |---|---|---|
 | Identified by | `Plenipo.slnx` at the root | `Plenipo.*` PackageReferences, `workflow.json` |
-| Who merges | **a human, always** — every level, every change | the merge gate, up to the recorded autonomy level |
-| Branch protection | required CI contexts | required CI contexts **+ `PR gates`** |
-| Deterministic gates | — | `pr-gates.mjs` + `merge-gate.mjs` |
-| Autonomy block | **never** | `workflow.json` → `autonomy`, starting at `0` |
+| Who merges | the deterministic merger after a valid agent verdict and consumer conformance | the merge gate, up to the recorded autonomy level |
+| Branch protection | required CI contexts **+ `PR gates`** | required CI contexts **+ `PR gates`** |
+| Deterministic gates | `pr-gates.mjs` + `merge-gate.mjs` + consumer conformance | `pr-gates.mjs` + `merge-gate.mjs` |
+| Autonomy block | `workflow.json` → `autonomy`, chosen deliberately | `workflow.json` → `autonomy`, starting at `0` |
 | Request surface | issue form + triage labels + `consumers.json` + conformance gate | files *into* the platform's surface |
 | Board | optional | required — the loops read it, not `PLAN.md` |
 
-> **Never install autonomy in the platform repo.** A product merging its own feature risks one
-> product. The platform merging its own change risks every product that consumes it, including ones
-> that have not upgraded yet.
+> A platform merge has a wider blast radius, so its agent verdict is necessary but never sufficient:
+> required CI, a settled merge state, and consumer conformance for every platform-surface change
+> still have to pass. The scheduled merger does not bypass any of them.
 
 ---
 
@@ -124,12 +124,14 @@ done
 `triage:accepted`, `triage:deferred`, `triage:rejected`, `demand:multi`, plus one `from:<product>`
 label per registered consumer.
 
-Two labels carry real authority and are worth knowing by heart:
+Four labels carry real authority and are worth knowing by heart:
 
 | Label | Effect |
 |---|---|
 | `human-hold` | the merge gate refuses the PR unconditionally, at any autonomy level |
-| `human-approved` | the documented override for a `pr-gates` evidence failure — a human vouching for the evidence |
+| `agent:approved` | the only model verdict that can satisfy the deterministic merger; it is reset on every changed head |
+| `agent:changes-requested` / `needs-human` | withdraw or withhold automatic approval; the retry dispatcher leaves them alone |
+| `human-approved` | a manual emergency evidence override for `pr-gates`; it does not replace `agent:approved` at merge time |
 
 `from:<product>` labels are **provenance**: they are what an agentic workflow's `approval-labels`
 list trusts. Only the router may apply them; a label allowlist is a security boundary, not decoration.
@@ -236,8 +238,8 @@ gh api "repos/$OWNER/$NAME/branches/$DEFAULT/protection" --jq '.required_status_
 
 **Requiring an approving review and expecting the scheduled merger to work are mutually exclusive.**
 
-- **Require reviews** → merging stays manual. Correct for the platform repo and for any product at
-  autonomy level 0. Add *Require review from Code Owners* to force a named human onto spine changes.
+- **Require reviews** → merging stays manual. Use this only for a repository that intentionally
+  disables autonomous merging; it cannot be combined with the scheduled merger.
 - **No required reviews** → the merge gate is the gate, and it is only as good as the required
   status checks you just configured.
 
@@ -245,7 +247,7 @@ Configuring both and assuming the automation still runs is how a queue silently 
 
 ---
 
-## 7. The deterministic gates (product repos)
+## 7. The deterministic gates (agent-enabled repos)
 
 Skill prose is advisory in every tool that reads it; a required status check is not. `/plenipo:setup`
 copies two node scripts and two workflows into the repo **verbatim** — the property that matters is
@@ -254,13 +256,15 @@ that the same file runs in CI and locally, so "improving" one in transit breaks 
 | Where | Script / workflow | Gates |
 |---|---|---|
 | CI, as a **required check** on every push | `.github/scripts/pr-gates.mjs` via `.github/workflows/agent-gates.yml` | `closes_an_issue` · `has_runtime_evidence` · `has_red_before_green` · `spine_untouched` |
-| A `*/15` schedule, and `/plenipo:ship` locally | `.github/scripts/merge-gate.mjs` via `.github/workflows/agent-merge.yml` | `is_loop_pr` · `not_draft` · `checks_exist` · `checks_green` · `mergeable` · `no_blocking_review` · `agent_approved` · `no_human_hold` · `main_is_green` · `level_permits` · `under_cap` |
+| On a changed head/base | `.github/workflows/agent-approval-reset.yml` | removes a prior `agent:approved`/`agent:changes-requested` verdict before the fresh review can run |
+| A `*/15` schedule, and `/plenipo:ship` locally | `.github/scripts/merge-gate.mjs` via `.github/workflows/agent-merge.yml` | `is_loop_pr` · `not_draft` · required `checks_green` · `mergeable` · `no_blocking_review` · `agent_approved` · `no_human_hold` · `main_is_green` · `level_permits` · `under_cap` |
 
 The split is not arbitrary. The first four are assertions about **the body and the diff**, so they
-run where they cannot be skipped, including on a human's PR. The rest are assertions about **the
-world right now** — is CI green, is a hold set, is `main` healthy — so they are re-read at merge time
-rather than trusted from an earlier event. `agent-merge.yml` is deliberately *not* `pull_request`
--triggered for exactly this reason.
+run where they cannot be skipped, including on a human's PR. A protected diff additionally needs a
+live, uncontradicted `agent:approved` verdict. The rest are assertions about **the world right now**
+— are the *required* CI contexts green, is a hold set, is `main` healthy — so they are re-read at
+merge time rather than trusted from an earlier event. `agent-merge.yml` is deliberately not
+`pull_request`-triggered for exactly this reason.
 
 `spine_untouched` is **content-based, not path-based**: *adding* a `HasQueryFilter` is ordinary
 feature work, *deleting or editing* one is a tenant-isolation change. A path rule would either block
@@ -293,7 +297,7 @@ printf 'diff --git a/x.cs b/x.cs\n--- a/x.cs\n+++ b/x.cs\n-  b.HasQueryFilter(x 
 PR_HEAD_REF=feat/1-x PR_BODY='' node .github/scripts/pr-gates.mjs /tmp/d      # expect exit 1, 4 gates
 
 # then green
-PR_HEAD_REF=feat/1-x PR_LABELS=human-approved \
+PR_HEAD_REF=feat/1-x PR_LABELS=agent:approved \
   PR_BODY="$(printf 'Closes #1\n## Runtime evidence\nPOST /api/agui/x streamed RUN_FINISHED, no RUN_ERROR.\n## Regression test\nXTests.Y seen red before, green after.\n')" \
   node .github/scripts/pr-gates.mjs /tmp/d                                    # expect exit 0
 
@@ -324,6 +328,7 @@ authoritative control on merging — the permission deny-list is the belt, this 
   "level": 0,              // 0 nothing · 1 docs+tests · 2 features on review · 3 unattended
   "maxOpenPRs": 3,         // build back-pressure: the ceiling /plenipo:deliver stops at
   "maxMergesPerTick": 2,   // blast radius per ship tick
+  "maxVerdictRequestsPerTick": 2, // bounded recovery after a transient model failure
   "readyFloor": 3,         // /plenipo:define refills below this
   "maxIssuesPerSweep": 8,  // /plenipo:test flood protection
   "maxNewCapabilities": 5  // /plenipo:define scope cap per tick
@@ -333,12 +338,13 @@ authoritative control on merging — the permission deny-list is the belt, this 
 | Level | May merge | Requires |
 |---|---|---|
 | **0** | nothing — review and label only | the default for any repo without a proven runbook |
-| **1** | docs, `RUNBOOK.md`, test-only additions, a green version bump | every gate except `agent_approved` |
+| **1** | docs, `RUNBOOK.md`, test-only additions, a green version bump | every gate, including `agent_approved` |
 | **2** | product features | all gates, including `agent:approved` from the PR reviewer |
 | **3** | as level 2, unattended, inside a revert budget | all gates, plus a clean level-2 stretch |
 
-**Never at any level:** anything in the platform repo, and anything `spine_untouched` catches. Those
-do not get safer as a track record improves, because the cost of being wrong does not shrink.
+At levels 2 and 3, a `spine_untouched` hit is eligible for an agent verdict but stays behind all
+deterministic gates. A platform source/package change also requires consumer conformance; a
+workflow-only platform change does not pretend a path-filtered conformance workflow ran.
 
 Absent means **0**. Only a human writes this field, only upward one step at a time, and never
 because the loop has been doing well — that judgement is the one thing a loop is structurally unfit
@@ -349,8 +355,9 @@ to make.
 ## 9. CODEOWNERS and the permission list
 
 `CODEOWNERS` is the human-visibility half of the spine policy; `pr-gates.mjs` is the enforcing half.
-Keep both — the check is what stops an agent, the ownership is what tells you it happened. It only
-*blocks* if you also enable *Require review from Code Owners* in branch protection.
+Keep both — the check verifies a live agent verdict, while ownership tells people a protected surface
+changed. Do not enable *Require review from Code Owners* in a repo using the scheduled merger: that
+would intentionally convert it back to manual merging.
 
 ```
 * @<owner>
@@ -452,8 +459,9 @@ The mechanics that matter:
 - **The agent is read-only.** Every write is declared in `safe-outputs:` and constrained by type,
   target, maximum, and label/repository allowlist.
 - **Issues, PRs, comments and linked pages are untrusted input.** Keep `min-integrity: approved`.
-- **Keep `allowed-events: [COMMENT]` on review workflows.** A model must never become a merge gate —
-  it can leave a comment, it cannot Approve, and it therefore satisfies no required-reviewers rule.
+- **Keep `allowed-events: [COMMENT]` on review workflows.** A model never submits GitHub's own
+  `APPROVE` or merges a PR. The opt-in `pr-approval-verdict` workflow may emit only its bounded
+  `agent:approved` label; the deterministic merger independently verifies every other live gate.
 - **Cross-repo routing uses a GitHub App, never a broad PAT**: metadata read, `Contents: read`,
   `Issues: read/write`, `Pull requests: read/write` — no administration, no workflows, no contents
   write. Its `repositories:` list must equal the explicit safe-output target list.
@@ -526,6 +534,8 @@ Run this list before pointing a timer at a new repo. Every line is a command, no
 | Force-push and delete are off | `... --jq '.allow_force_pushes.enabled, .allow_deletions.enabled'` | `false false` |
 | `pr-gates` fails on a bad PR | §7.2 first command | exit 1, four gates named |
 | `pr-gates` passes on a good PR | §7.2 second command | exit 0 |
+| Approval expiry exists | `.github/workflows/agent-approval-reset.yml` | an old verdict is removed on synchronize, retarget, and reopen |
+| Verdict retry is bounded | `node .github/scripts/verdict-retry.test.mjs` | only eligible, unheld missing verdicts are re-dispatched |
 | The merge gate refuses at level 0 | `node .github/scripts/merge-gate.mjs` | every PR `BLOCK`ed on `level_permits` |
 | Autonomy is recorded | `jq .autonomy.level workflow.json` | a number a human chose |
 | Labels exist | `gh label list --limit 100` | the three families from §4 |
@@ -549,6 +559,8 @@ Run this list before pointing a timer at a new repo. Every line is a command, no
 | Installing the cloud agentic surface first | a secret, a bill, and flags nobody verified | the local reviewer is the default |
 | Editing a `.lock.yml` | the next compile discards it | edit the `.md`, then compile |
 | Letting a review workflow Approve or Request-changes | a model becomes an unsafe policy gate | `allowed-events: [COMMENT]` |
+| Letting `agent:approved` survive a new commit | the merger can act on a diff the reviewer never read | install `agent-approval-reset.yml` and keep its failures visible |
+| Treating a model 429 as approval | an unavailable reviewer becomes a silent bypass | requeue a bounded verdict request; merge only after a real label arrives |
 | Skipping the runbook because the code builds | nothing can produce runtime evidence, so `has_runtime_evidence` blocks every PR forever | `/deliver:install-runbook` first |
 | Registering a stale consumer as `required` | a permanently red gate everyone learns to ignore | `"conformance": false` plus a note |
 | Hardcoding the owner in CODEOWNERS or a template | works for exactly one GitHub account | read it from `workflow.json` or `gh api user` |

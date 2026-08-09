@@ -3,10 +3,11 @@
 #
 # CODEOWNERS is the human-visibility half of the spine policy: it puts a named person on the review
 # of anything touching the five guarantees the platform exists to provide. The ENFORCING half is
-# `pr-gates.mjs`, which fails as a required status check — CODEOWNERS only requests a review, and
-# only blocks if you also turn on "Require review from Code Owners" in branch protection.
+# `pr-gates.mjs`, which requires a live, uncontradicted agent verdict for a protected diff.
+# CODEOWNERS only requests visibility; do not turn on "Require review from Code Owners" when the
+# scheduled merger is enabled, because that converts the queue back to manual merging.
 #
-# Keep both. The check is what stops an agent; the ownership is what tells you it happened.
+# Keep both. The check is what verifies the agent verdict; the ownership is what tells you it happened.
 
 * @abrahamFerga
 

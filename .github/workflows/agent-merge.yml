@@ -4,8 +4,10 @@
 # machine that wrote the code is asleep, and so there is exactly ONE implementation of the gate list.
 #
 # It merges nothing until `autonomy.level` in workflow.json is >= 1, and it can never merge a PR that
-# lacks the `agent:approved` label — which only a review can add. Turn the whole thing off with the
-# repository variable AGENT_AUTOMERGE=off (Settings -> Variables), no commit required.
+# lacks the `agent:approved` label — which only a review can add. A bounded retry re-dispatches a
+# missing verdict after a transient model failure; it never treats the failure as approval. Turn the
+# whole thing off with the repository variable AGENT_AUTOMERGE=off (Settings -> Variables), no commit
+# required.
 #
 # Deliberately NOT `pull_request`-triggered: a schedule re-reads the world instead of trusting an
 # event payload, so a check that turns red after the review still blocks the merge.
@@ -17,8 +19,14 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
+  # Not optional, and not obvious. GitHub closes a `Closes #N` issue AS THE MERGING ACTOR, so a
+  # `GITHUB_TOKEN` merge without this closes the pull request and silently leaves the issue open —
+  # the board then advertises merged work forever and the next tick re-reads it as still to do.
+  # It fails quietly, on the happy path, which is why it survived eight days of green runs.
+  issues: write
 
 concurrency:
   group: agent-merge
@@ -30,11 +38,19 @@ jobs:
     if: vars.AGENT_AUTOMERGE != 'off'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7.0.1
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
+
+      # A 429 from the review model means no label, not a negative judgement. Re-request only an
+      # eligible, unheld PR whose same-head verdict has aged out; workflow_dispatch is intentionally
+      # allowed to trigger another run when called with GITHUB_TOKEN.
+      - name: Re-request missing approval verdicts
+        run: node .github/scripts/verdict-retry.mjs --dispatch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Dry run first, so the log always records what WOULD have happened even when the merge step
       # is skipped or fails. `--merge` re-evaluates every gate before touching anything.

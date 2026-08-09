@@ -4,8 +4,8 @@
 # opinion, and a required status check cannot. Make it a REQUIRED check on the default branch or it
 # gates nothing.
 #
-# `edited` and `labeled` are in the trigger list on purpose: the PR body is one of the gates, and
-# `human-approved` is the documented override, so both must re-run the check.
+# `edited` and `labeled` are in the trigger list on purpose: the PR body is one of the gates, and a
+# fresh `agent:approved` verdict is the normal autonomous override for a protected diff.
 name: Agent gates
 
 on:
@@ -20,11 +20,11 @@ jobs:
     name: PR gates
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
 
