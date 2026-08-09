@@ -112,13 +112,20 @@ public static class ApprovalEndpoints
 
     private static ApprovalDto ToDto(PendingApproval p, ModuleTool? tool) =>
         new(
-            p.Id, p.ConversationId, p.ModuleId, p.ToolName, p.ArgumentsJson, p.UserDisplay, p.CreatedAt,
+            p.Id, p.ConversationId, p.ModuleId, p.ToolName, p.ArgumentsJson,
+            // UserDisplay is a best-effort label captured at block time and is NOT an identifier —
+            // two people can share one, and under dev-auth every subject shares "Dev User". UserId
+            // is the stable one, so an approver can tell whose work they are signing off. Projected
+            // rather than looked up: the model already holds it, so this costs no query and no
+            // migration. Null only for the pre-identity rows that predate it.
+            p.UserId, p.UserDisplay, p.CreatedAt,
             // Lowercase string literal on the wire (the shell switches on it), same contract style
             // as the chart kind. Unresolvable → high: never render less ceremony than declared.
             tool?.Risk == ApprovalRisk.Low ? "low" : "high",
             tool?.Function.Description is { Length: > 0 } d ? d : null);
 
     private sealed record ApprovalDto(
-        Guid Id, Guid ConversationId, string ModuleId, string ToolName, string? ArgumentsJson, string? UserDisplay, DateTimeOffset CreatedAt,
+        Guid Id, Guid ConversationId, string ModuleId, string ToolName, string? ArgumentsJson,
+        Guid? UserId, string? UserDisplay, DateTimeOffset CreatedAt,
         string Risk, string? Description);
 }
