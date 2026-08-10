@@ -94,6 +94,9 @@ const PATH_RULES = [
   [/(^|\/)CODEOWNERS$/, 'CODEOWNERS'],
   [/(^|\/)nuget\.config$/i, 'the package feed'],
   [/appsettings[^/]*\.json$/i, 'runtime configuration'],
+  [/^eng\//, 'the verifier itself'],
+  [/(^|\/)\.claude-plugin\//, 'plugin and marketplace manifests'],
+  [/^workflow\.json$/, 'the autonomy policy'],
 ];
 
 if (!diffPath || !existsSync(diffPath)) {
@@ -102,12 +105,26 @@ if (!diffPath || !existsSync(diffPath)) {
 }
 
 const hits = [];
+let oldFile = '';
 let file = '';
 for (const line of readFileSync(diffPath, 'utf8').split('\n')) {
+  if (line.startsWith('--- ')) {
+    oldFile = line.slice(4).replace(/^a\//, '').trim();
+    if (oldFile !== '/dev/null') {
+      file = oldFile;
+      for (const [re, what] of PATH_RULES) {
+        if (re.test(oldFile)) hits.push(`${oldFile} — ${what}`);
+      }
+    }
+    continue;
+  }
   if (line.startsWith('+++ ')) {
-    file = line.slice(4).replace(/^b\//, '').trim();
-    for (const [re, what] of PATH_RULES) {
-      if (re.test(file)) hits.push(`${file} — ${what}`);
+    const newFile = line.slice(4).replace(/^b\//, '').trim();
+    file = newFile === '/dev/null' ? oldFile : newFile;
+    if (newFile !== '/dev/null') {
+      for (const [re, what] of PATH_RULES) {
+        if (re.test(newFile)) hits.push(`${newFile} — ${what}`);
+      }
     }
     continue;
   }

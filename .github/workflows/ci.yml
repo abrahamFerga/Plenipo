@@ -1,7 +1,7 @@
 # =============================================================================
 # ci.yml — Continuous Integration
 # -----------------------------------------------------------------------------
-# Runs on pull requests and pushes to non-main branches. Builds + tests BOTH the
+# Runs once per pull request. Builds + tests BOTH the
 # platform (Plenipo.slnx) and the samples (samples/Plenipo.Samples.slnx — the three
 # demo verticals plus the integration tests that guard the RBAC/approval pipeline),
 # builds (does NOT push) the Docker image, scans with Trivy, verifies both the NuGet
@@ -15,9 +15,6 @@ name: CI
 
 on:
   pull_request:
-  push:
-    branches-ignore:
-      - main
 
 # Cancel superseded runs on the same ref.
 concurrency:

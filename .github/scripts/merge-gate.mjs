@@ -5,20 +5,21 @@
 //   node .github/scripts/merge-gate.mjs --pr 131         evaluate one
 //   node .github/scripts/merge-gate.mjs --merge          merge what passes, up to the cap
 //   node .github/scripts/merge-gate.mjs --fixture f.json evaluate fixture data (used to test itself)
-//   node .github/scripts/merge-gate.mjs --runs-fixture r.json   feed main_is_green a run list
 //
 // This file is the ONE implementation of the merge gates. `/plenipo:ship` runs it rather than
 // re-deriving the list in prose, and `agent-merge.yml` runs it on a schedule so merging keeps
 // working when the machine that wrote the code is off. An agent can be argued out of a judgement;
 // an exit code cannot.
 //
-// It deliberately does NOT re-check the PR body or the diff. Those are `pr-gates.mjs`, running as a
-// REQUIRED status check — so `checks_green` already subsumes them. If `pr-gates` is not required on
-// the default branch, this gate is weaker than it looks: `checks_exist` is the only thing standing
-// between you and a vacuous green.
+// Required checks are necessary but not a root of trust for changes to the workflows themselves:
+// a pull_request workflow wrapper comes from the proposed merge commit. For control-plane changes
+// this merger downloads and runs `pr-gates.mjs` from the protected base again before merging.
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createApprovalProofClient } from './approval-proof.mjs';
 
 const argv = process.argv.slice(2);
 const flag = (name) => argv.includes(name);
@@ -30,7 +31,6 @@ const value = (name) => {
 const DO_MERGE = flag('--merge');
 const ONE_PR = value('--pr');
 const FIXTURE = value('--fixture');
-const RUNS_FIXTURE = value('--runs-fixture');
 
 // Fixture data describes pull requests that do not exist. Nothing driven by it may reach the
 // network — so `--fixture` degrades `--merge` to a simulation rather than being ignored by it.
@@ -38,9 +38,13 @@ const RUNS_FIXTURE = value('--runs-fixture');
 // whatever repo it happens to be run from.
 const SIMULATE = Boolean(FIXTURE);
 
+const runGh = (args) =>
+  spawnSync('gh', args, { encoding: 'utf8', shell: process.platform === 'win32' });
 const gh = (args) => {
-  const r = spawnSync('gh', args, { encoding: 'utf8', shell: process.platform === 'win32' });
-  if (r.status !== 0) throw new Error(`gh ${args.join(' ')} failed:\n${r.stderr || r.stdout}`);
+  const r = runGh(args);
+  if (r.error || r.status !== 0) {
+    throw new Error(`gh ${args.join(' ')} failed:\n${r.error?.message || r.stderr || r.stdout}`);
+  }
   return r.stdout;
 };
 
@@ -65,6 +69,20 @@ const LOOP_BRANCH = /^(feat|fix|chore)\//;
 const HOLD_LABELS = ['human-hold', 'needs-human', 'agent:blocked'];
 // Docs, tests and the runbook are the only class a level-1 product may land on its own.
 const LOW_RISK = [/\.md$/i, /^tests\//, /\.http$/i, /^\.http$/i];
+// Changes to the loop's own controls need a verdict run by the policy already on the protected
+// base. The PR may propose the next policy, but it cannot use that proposal to approve itself.
+const CONTROL_PATHS = [
+  /^\.github\//,
+  /^\.claude\//,
+  /^\.codex\//,
+  /^eng\//,
+  /(^|\/)\.claude-plugin\//,
+  /^workflow\.json$/,
+  /(^|\/)AGENTS\.md$/,
+  /(^|\/)CLAUDE\.md$/,
+  /(^|\/)CODEOWNERS$/,
+  /^\.gitattributes$/,
+];
 
 // ── Platform repos are gated differently, not more leniently ─────────────────
 // A product merge risks one product; a platform merge risks every product built on it, and that
@@ -77,9 +95,11 @@ const CONFORMANCE_CHECK = /consumer.?conformance|conformance verdict/i;
 // was skipped is a deadlock; accepting a source change without that check is a consumer break.
 const CONFORMANCE_PATHS = [/^src\//, /^Directory\.(?:Packages|Build)\.props$/];
 const SURFACE_RE = /^\s*(?:public[- ])?surface:\s*(additive|breaking|none)\b/im;
+const INFRA_PATHS = [/^infra\//];
+const TERRAFORM_CHECK = /terraform|fmt\s*\/\s*validate\s*\/\s*plan/i;
 
 const PR_FIELDS = [
-  'number', 'title', 'body', 'isDraft', 'headRefName', 'baseRefName', 'labels',
+  'number', 'title', 'body', 'isDraft', 'headRefName', 'headRefOid', 'baseRefName', 'labels',
   'mergeable', 'mergeStateStatus', 'reviewDecision', 'statusCheckRollup', 'files', 'changedFiles', 'author',
   // Only ever reported, never gated on. A queue that stops moving looks identical to a healthy one
   // in a run log that prints no ages — which is how this went unnoticed for weeks.
@@ -107,84 +127,115 @@ if (FIXTURE) {
 }
 
 // Branch protection, not every check that happens to appear in a rollup, defines the CI contract.
-// Agentic intent review is deliberately advisory: a 429 there means no extra comment, not a failed
-// build. The approval verdict is enforced separately by its label. Read the required contexts from
-// the protected base so a PR cannot nominate its own optional check set. GitHub itself still checks
-// the required App identity at merge time; this list only decides which rollup entries are CI gates.
+// Agentic review is deliberately separate: a provider outage means no approval label, not failed
+// product CI. `gh pr checks --required` reads CheckRun.isRequired through the pull-request GraphQL
+// surface, which the scheduled GITHUB_TOKEN can read. The Administration-only branch-protection
+// REST endpoint cannot be read by that token and used to leave every scheduled merge green-but-idle.
 const requiredContextsCache = new Map();
-let repoSlug;
-function requiredContextsFor(base) {
+const infrastructureFailures = new Set();
+function requiredContextsFor(pr) {
   if (FIXTURE) return { contexts: fixtureRequiredCheckContexts };
-  if (requiredContextsCache.has(base)) return requiredContextsCache.get(base);
+  if (requiredContextsCache.has(pr.number)) return requiredContextsCache.get(pr.number);
 
   let result;
   try {
-    repoSlug ??= JSON.parse(gh(['repo', 'view', '--json', 'nameWithOwner'])).nameWithOwner;
-    const protection = JSON.parse(
-      gh(['api', `repos/${repoSlug}/branches/${encodeURIComponent(base)}/protection/required_status_checks`])
-    );
-    const contexts = [
-      ...(protection.checks ?? []).map((check) => check.context),
-      ...(protection.contexts ?? []),
-    ].filter(Boolean);
-    result = contexts.length
-      ? { contexts: [...new Set(contexts)] }
-      : { error: `base branch ${base} has no required status-check contexts` };
+    const args = ['pr', 'checks', String(pr.number), '--required', '--json', 'name'];
+    const query = runGh(args);
+    if (query.error || ![0, 1, 8].includes(query.status)) {
+      throw new Error(`gh ${args.join(' ')} failed: ${query.error?.message || query.stderr || query.stdout}`);
+    }
+
+    const output = query.stdout.trim();
+    if (!output && !(query.status === 1 && /no (required )?checks/i.test(query.stderr))) {
+      throw new Error(`gh ${args.join(' ')} returned no parseable check data: ${query.stderr || '(empty output)'}`);
+    }
+    const required = output ? JSON.parse(output) : [];
+    if (!Array.isArray(required)) throw new Error(`gh ${args.join(' ')} returned a non-array payload`);
+    result = { contexts: [...new Set(required.map((check) => check.name).filter(Boolean))] };
   } catch (error) {
-    result = { error: `could not read required status checks for ${base}: ${error.message.split('\n')[0]}` };
+    const message = `could not read required checks for #${pr.number}: ${error.message.split('\n')[0]}`;
+    infrastructureFailures.add(message);
+    result = { error: message };
   }
-  requiredContextsCache.set(base, result);
+  requiredContextsCache.set(pr.number, result);
   return result;
 }
 
-// ── The default branch must be green before anything lands on it ─────────────
-// Merging onto a red base multiplies one failure into N, and the next agent cannot tell which
-// change broke what.
-//
-// Only a run triggered BY the branch's code can speak to whether that code is healthy — an
-// issue-triggered triage agent or a nightly maintenance job cannot. Reading a single run across
-// every workflow let whichever job finished most recently decide the entire queue, in BOTH
-// directions: a cancelled triage run blocked every merge, and a successful one would have waved a
-// merge onto genuinely red CI. So this reads `push` events only, and takes the latest verdict per
-// WORKFLOW rather than one run overall.
-//
-// `cancelled` and `skipped` are not evidence of breakage — concurrency groups cancel superseded
-// runs constantly — so only a real failure blocks. A gate that blocks on the ABSENCE of evidence
-// stops the queue permanently the first time a workflow is skipped.
-const BROKEN = ['failure', 'timed_out', 'startup_failure'];
+const approvalProof = FIXTURE ? null : createApprovalProofClient({ gh, runGh });
+let repoSlug;
+const diffCache = new Map();
 
-// `gh run list` returns newest first, so the first entry per workflow name is that workflow's
-// current verdict. Kept out of the gh call so `--runs-fixture` can prove it red before green.
-function brokenWorkflows(runs) {
-  const latest = new Map();
-  for (const r of runs) if (!latest.has(r.name)) latest.set(r.name, r);
-  return [...latest.values()].filter((r) => BROKEN.includes(String(r.conclusion ?? '').toLowerCase()));
+function repository() {
+  repoSlug ??= JSON.parse(gh(['repo', 'view', '--json', 'nameWithOwner'])).nameWithOwner;
+  return repoSlug;
 }
 
-let mainGreen = true;
-let mainWhy = '';
+function diffFor(pr) {
+  if (FIXTURE) return pr.diffError ? { error: pr.diffError } : { text: pr.diff ?? '' };
+  const key = `${pr.number}:${pr.headRefOid ?? ''}`;
+  if (diffCache.has(key)) return diffCache.get(key);
+  let result;
+  try {
+    result = { text: gh(['pr', 'diff', String(pr.number), '--patch']) };
+  } catch (error) {
+    const message = `could not read the full diff for #${pr.number}: ${error.message.split('\n')[0]}`;
+    infrastructureFailures.add(message);
+    result = { error: message };
+  }
+  diffCache.set(key, result);
+  return result;
+}
 
-// A function rather than a one-shot block: a merge earlier in this same run puts a new commit on
-// the base, so this has to be answerable again rather than answered once. See the re-check in the
-// merge loop below.
-function refreshMainGreen() {
-  mainGreen = true;
-  mainWhy = '';
-  if (FIXTURE && !RUNS_FIXTURE) return;
-  const base = prs[0]?.baseRefName ?? JSON.parse(gh(['repo', 'view', '--json', 'defaultBranchRef']))
-    .defaultBranchRef.name;
-  const runs = RUNS_FIXTURE
-    ? JSON.parse(readFileSync(RUNS_FIXTURE, 'utf8'))
-    : JSON.parse(gh(['run', 'list', '--branch', base, '--event', 'push', '--status', 'completed',
-      '--limit', '30', '--json', 'conclusion,name']));
-  const broken = brokenWorkflows(runs);
-  if (broken.length) {
-    mainGreen = false;
-    mainWhy = `on ${base}: ${broken.map((r) => `${r.name} concluded "${r.conclusion}"`).join(', ')}`;
+// GitHub's `files[].path` is the destination path. Both headers are required to classify a rename
+// out of `.github/` and a deletion whose destination is `/dev/null`.
+function pathsFromDiff(diff) {
+  const paths = [];
+  for (const line of String(diff ?? '').split('\n')) {
+    if (!line.startsWith('--- ') && !line.startsWith('+++ ')) continue;
+    const path = line.slice(4).trim().replace(/^[ab]\//, '');
+    if (path && path !== '/dev/null') paths.push(path);
+  }
+  return [...new Set(paths)];
+}
+
+function trustedPrGatesFor(pr, diff) {
+  if (FIXTURE) {
+    return pr.trustedPrGates === false
+      ? { ok: false, why: 'the protected-base PR gate rejected this control-plane diff' }
+      : { ok: true };
+  }
+
+  const scratch = mkdtempSync(join(tmpdir(), `plenipo-pr-gates-${pr.number}-`));
+  const script = join(scratch, 'pr-gates.mjs');
+  const patch = join(scratch, 'pr.diff');
+  try {
+    const source = gh(['api', '-H', 'Accept: application/vnd.github.raw+json',
+      `repos/${repository()}/contents/.github/scripts/pr-gates.mjs?ref=${encodeURIComponent(pr.baseRefName)}`]);
+    writeFileSync(script, source);
+    writeFileSync(patch, diff);
+    const labels = (pr.labels ?? []).map((label) => typeof label === 'string' ? label : label.name).join(',');
+    const result = spawnSync(process.execPath, [script, patch], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        PR_BODY: pr.body ?? '',
+        PR_HEAD_REF: pr.headRefName ?? '',
+        PR_LABELS: labels,
+      },
+    });
+    if (result.error || result.status !== 0) {
+      const output = `${result.stderr || ''}\n${result.stdout || ''}`.trim().replace(/\s+/g, ' ').slice(0, 500);
+      return { ok: false, why: output || result.error?.message || `base evaluator exited ${result.status}` };
+    }
+    return { ok: true };
+  } catch (error) {
+    const message = `could not execute protected-base PR gates for #${pr.number}: ${error.message.split('\n')[0]}`;
+    infrastructureFailures.add(message);
+    return { ok: false, why: message };
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
   }
 }
-
-refreshMainGreen();
 
 // ── Gates ────────────────────────────────────────────────────────────────────
 function evaluate(pr) {
@@ -208,13 +259,10 @@ function evaluate(pr) {
   // unrecoverable. An earlier version of this collapsed to "latest by startedAt", which merged a PR
   // whose re-run was still QUEUED — the queued entry has no timestamp, lost the comparison, and was
   // dropped. That sequence is routine here by design: `agent-gates.yml` re-triggers on `labeled`,
-  // ship adds `agent:approved`, and the merge cron fires minutes later.
+  // the reviewer adds `agent:approved`, and the merge cron fires minutes later.
   //
-  // NOTE: this is deliberately NOT the same rule as `brokenWorkflows` below, despite operating on
-  // the same idea. That one keys on the WORKFLOW name, takes the first entry trusting `gh run list`
-  // to be newest-first, and excludes `cancelled`. This keys on workflow+job (two workflows may both
-  // define `build`), cannot trust rollup ordering (observed: the earliest-started entry appearing
-  // last), and treats `cancelled` as broken.
+  // This keys on workflow+job (two workflows may both define `build`), cannot trust rollup ordering
+  // (observed: the earliest-started entry appearing last), and treats `cancelled` as broken.
   const groups = new Map();
   for (const c of pr.statusCheckRollup ?? []) {
     // Job name alone collides across workflows; qualify it.
@@ -244,22 +292,32 @@ function evaluate(pr) {
 
   const files = (pr.files ?? []).map((f) => f.path ?? f.filename ?? '');
   const filesAreComplete = !Number.isInteger(pr.changedFiles) || files.length >= pr.changedFiles;
-  const conformanceRequired = !filesAreComplete || files.some((file) => CONFORMANCE_PATHS.some((re) => re.test(file)));
+  const isLoopBranch = LOOP_BRANCH.test(pr.headRefName ?? '');
+  const diff = isLoopBranch ? diffFor(pr) : { text: '' };
+  const allPaths = [...new Set([...files, ...pathsFromDiff(diff.text)])];
+  const conformanceRequired = !filesAreComplete || allPaths.some((file) => CONFORMANCE_PATHS.some((re) => re.test(file)));
+  const infraRequired = !filesAreComplete || allPaths.some((file) => INFRA_PATHS.some((re) => re.test(file)));
+  // A diff-read error is classified conservatively as a control change. The explicit failure below
+  // keeps it from becoming a level-1 docs PR by omission.
+  const controlsChanged = Boolean(diff.error) || !filesAreComplete ||
+    allPaths.some((file) => CONTROL_PATHS.some((re) => re.test(file)));
 
   const state = (c) => (c.conclusion || c.state || c.status || '').toUpperCase();
   const context = (c) => c.name || c.context || '';
-  const required = requiredContextsFor(pr.baseRefName);
+  const required = requiredContextsFor(pr);
   const requiredChecks = required.contexts ? checks.filter((c) => required.contexts.includes(context(c))) : checks;
   const missingRequired = required.contexts?.filter((name) => !checks.some((c) => context(c) === name)) ?? [];
   const pending = requiredChecks.filter((c) => ['PENDING', 'IN_PROGRESS', 'QUEUED', 'WAITING', ''].includes(state(c)));
   const broken = requiredChecks.filter((c) => ['FAILURE', 'ERROR', 'CANCELLED', 'TIMED_OUT', 'ACTION_REQUIRED'].includes(state(c)));
 
-  const isLowRisk = files.length > 0 && files.every((f) => LOW_RISK.some((re) => re.test(f)));
+  const isLowRisk = filesAreComplete && !controlsChanged && allPaths.length > 0 &&
+    allPaths.every((file) => LOW_RISK.some((re) => re.test(file)));
   const changeClass = isLowRisk ? 'low-risk' : 'feature';
 
-  if (!LOOP_BRANCH.test(pr.headRefName)) fail.push(`is_loop_pr: "${pr.headRefName}" is not a loop branch — not ours to merge`);
+  if (!isLoopBranch) fail.push(`is_loop_pr: "${pr.headRefName}" is not a loop branch — not ours to merge`);
   if (!/plenipo-agent/.test(pr.body ?? '')) fail.push('is_loop_pr: the body carries no plenipo-agent envelope');
   if (pr.isDraft) fail.push('not_draft: the PR is a draft');
+  if (diff.error) fail.push(`diff_inspected: ${diff.error}`);
   if (required.error) fail.push(`checks_configured: ${required.error}`);
   else if (missingRequired.length) {
     fail.push(`checks_green: required check(s) missing from the rollup: ${missingRequired.join(', ')}`);
@@ -282,18 +340,32 @@ function evaluate(pr) {
   // `agent:approved` — the system had decided they should merge and then could not.
   const mergeState = String(pr.mergeStateStatus ?? '').toUpperCase();
   const stale = mergeState === 'BEHIND';
-  // BEHIND is the only non-CLEAN state this gate can repair. UNKNOWN, UNSTABLE and HAS_HOOKS
-  // are not benign aliases for clean: they mean GitHub has not produced a settled merge verdict,
-  // so accepting any of them would merge on less evidence than a blocked PR.
-  if (mergeState && !['CLEAN', 'BEHIND'].includes(mergeState)) {
+  // UNSTABLE means a non-required check failed. Required checks were read independently above, so
+  // rejecting it would let an advisory model/provider outage become a second, accidental CI gate.
+  // UNKNOWN and HAS_HOOKS remain unsettled; DIRTY and BLOCKED remain real merge blockers.
+  if (mergeState && !['CLEAN', 'BEHIND', 'UNSTABLE'].includes(mergeState)) {
     fail.push(`mergeable: mergeStateStatus=${mergeState}`);
   }
   if (pr.reviewDecision === 'CHANGES_REQUESTED') fail.push('no_blocking_review: a review requested changes');
   if (!labels.includes('agent:approved')) fail.push('agent_approved: no `agent:approved` label — nothing has reviewed this');
   if (labels.includes('agent:changes-requested')) fail.push('agent_approved: `agent:changes-requested` is still set');
   for (const h of HOLD_LABELS) if (labels.includes(h)) fail.push(`no_human_hold: \`${h}\` is set`);
-  if (!mainGreen) fail.push(`main_is_green: ${mainWhy}`);
-
+  // Every unattended merge needs approval-specific provenance. A successful reviewer run is not
+  // sufficient: requesting changes is also a successful workflow execution, and a label can be
+  // supplied independently. The proof binds the applied output to this head/base/body revision.
+  if (agentApproved) {
+    const trusted = FIXTURE
+      ? (pr.trustedApproval === false
+          ? { ok: false, why: 'no approval-specific proof covers this revision' }
+          : { ok: true })
+      : approvalProof.prove(pr);
+    if (trusted.infrastructure) infrastructureFailures.add(trusted.why);
+    if (!trusted.ok) fail.push(`trusted_agent_approval: ${trusted.why}`);
+  }
+  if (agentApproved && controlsChanged && !diff.error) {
+    const trustedGates = trustedPrGatesFor(pr, diff.text);
+    if (!trustedGates.ok) fail.push(`trusted_pr_gates: ${trustedGates.why}`);
+  }
   if (LEVEL === 0) fail.push('level_permits: autonomy level 0 merges nothing — a human decides');
   else if (LEVEL === 1 && changeClass !== 'low-risk') {
     fail.push('level_permits: level 1 may merge docs, tests and the runbook only');
@@ -320,6 +392,19 @@ function evaluate(pr) {
           `consumers_green: ${notGreen.map((c) => `${c.name || c.context} (${state(c) || 'no conclusion'})`).join(', ')} ` +
             '— a registered consumer does not build or does not pass against this change'
         );
+      }
+    }
+
+    // Terraform is path-filtered and therefore cannot be globally required without deadlocking
+    // every non-infra PR. It is still deterministic and blocking whenever `infra/**` changes.
+    if (infraRequired) {
+      const terraform = checks.filter((check) =>
+        TERRAFORM_CHECK.test(`${check.workflowName ?? ''} ${check.name || check.context || ''}`));
+      const notGreen = terraform.filter((check) => state(check) !== 'SUCCESS');
+      if (terraform.length === 0) {
+        fail.push('infra_green: no Terraform PR Check ran on this infra change');
+      } else if (notGreen.length) {
+        fail.push(`infra_green: ${notGreen.map((check) => `${context(check)} (${state(check) || 'no conclusion'})`).join(', ')} not passing`);
       }
     }
 
@@ -459,41 +544,6 @@ for (const { pr, fail, changeClass, stale } of results) {
     } else if (merged >= MAX_MERGES) {
       console.log(`  HELD   #${pr.number} — under_cap: ${MAX_MERGES} already merged this run`);
     } else {
-      // ── Re-read the world before the SECOND merge of a run ──────────────────
-      // Gates were evaluated once, up front, for every pull request. `mergeable`, `checks_green`
-      // and `main_is_green` are assertions about the world RIGHT NOW — that is exactly why they
-      // live here rather than in `pr-gates.mjs` — so the moment one merge lands, all three are
-      // stale for everything still queued: the base moved, and this PR's checks ran against a
-      // commit that is no longer the tip.
-      //
-      // `/plenipo:ship` documents this script as re-evaluating "every gate before touching
-      // anything". That was true PER RUN and false WITHIN one, so with `maxMergesPerTick >= 2` the
-      // second merge landed on a verdict nothing re-checked.
-      if (merged > 0) {
-        console.log(`  RECHECK #${pr.number} — an earlier merge moved the base; re-reading it`);
-        if (!SIMULATE) {
-          refreshMainGreen();
-          const fresh = evaluate(JSON.parse(gh(['pr', 'view', String(pr.number), '--json', PR_FIELDS])));
-          if (fresh.fail.length) {
-            console.log(`  BLOCK  #${pr.number} ${pr.title} [${changeClass}] — stale verdict, re-checked`);
-            for (const f of fresh.fail) console.log(`         - ${f}`);
-            continue;
-          }
-          // The overwhelmingly common outcome of that earlier merge: this PR is now behind the base
-          // it would land on. Repair it and let the next tick merge it — the same rule as the
-          // top-of-loop stale path, and the reason that path exists at all. Before it did, this
-          // re-check reported BEHIND as a hard block, which was correct and permanent.
-          if (fresh.stale) {
-            const { ok, out } = ghSoft(['pr', 'update-branch', String(pr.number)]);
-            updated++;
-            console.log(ok
-              ? `  UPDATE #${pr.number} ${pr.title} — the earlier merge left it behind; updated, merges next tick`
-              : `  BLOCK  #${pr.number} — behind after an earlier merge and the update failed: ${out}`);
-            continue;
-          }
-        }
-      }
-
       if (SIMULATE) {
         merged++;
         console.log(`  WOULD MERGE #${pr.number} ${pr.title} [${changeClass}]`);
@@ -502,7 +552,27 @@ for (const { pr, fail, changeClass, stale } of results) {
         continue;
       }
 
-      gh(['pr', 'merge', String(pr.number), '--squash', '--delete-branch']);
+      // The queue snapshot above is for reporting. Re-read every gate immediately before every
+      // mutation, including the first merge, then make GitHub reject the operation if the author
+      // moves the head between this evaluation and the merge API call.
+      console.log(`  VERIFY #${pr.number} — re-reading every gate immediately before merge`);
+      const fresh = evaluate(JSON.parse(gh(['pr', 'view', String(pr.number), '--json', PR_FIELDS])));
+      if (fresh.fail.length) {
+        console.log(`  BLOCK  #${pr.number} ${pr.title} [${changeClass}] — verdict changed during this run`);
+        for (const failure of fresh.fail) console.log(`         - ${failure}`);
+        continue;
+      }
+      if (fresh.stale) {
+        const { ok, out } = ghSoft(['pr', 'update-branch', String(pr.number)]);
+        updated++;
+        console.log(ok
+          ? `  UPDATE #${pr.number} ${pr.title} — base moved; updated, merges next tick after fresh checks`
+          : `  BLOCK  #${pr.number} — behind after re-check and the update failed: ${out}`);
+        continue;
+      }
+
+      gh(['pr', 'merge', String(pr.number), '--squash', '--delete-branch',
+        '--match-head-commit', fresh.pr.headRefOid]);
       merged++;
       console.log(`  MERGED #${pr.number} ${pr.title} [${changeClass}]`);
       console.log(`         ${closesNote}`);
@@ -537,6 +607,13 @@ if (staleQueue.length) {
   if (process.env.GITHUB_ACTIONS) console.log(`::warning title=Merge queue is not moving::${msg}`);
 }
 
-// Blocked PRs are the normal state of a healthy queue, not an error — a non-zero exit here would
-// turn "waiting for CI" into a failed scheduled run every fifteen minutes.
+// Blocked PRs are the normal state of a healthy queue. A broken policy read is not: if the merger
+// cannot discover which checks are required, a green scheduled run would falsely claim the control
+// loop is healthy while it is incapable of merging anything.
+if (infrastructureFailures.size) {
+  for (const failure of infrastructureFailures) {
+    if (process.env.GITHUB_ACTIONS) console.log(`::error title=Merge gate infrastructure failure::${failure}`);
+  }
+  process.exit(1);
+}
 process.exit(0);
