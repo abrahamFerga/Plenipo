@@ -4,7 +4,7 @@
 //   node .github/scripts/verdict-retry.test.mjs
 
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { delimiter, dirname, join } from 'node:path';
@@ -244,9 +244,28 @@ if (disabled.status === 0 && /autonomy level 0.*no verdicts requested/i.test(dis
   failed++;
 }
 
+const assetMergeWorkflow = join(here, 'agent-merge.yml');
+const installedMergeWorkflow = join(here, '..', 'workflows', 'agent-merge.yml');
+const mergeWorkflow = readFileSync(
+  existsSync(assetMergeWorkflow) ? assetMergeWorkflow : installedMergeWorkflow,
+  'utf8'
+);
+const recoveryStep = /- name: Recover missing approval verdicts([\s\S]*?)(?=\n\s+- name: Report verdict recovery failure)/
+  .exec(mergeWorkflow)?.[1] ?? '';
+const mergeStep = /- name: Merge([\s\S]*?)$/.exec(mergeWorkflow)?.[1] ?? '';
+if (
+  recoveryStep.includes('GH_TOKEN: ${{ github.token }}') &&
+  mergeStep.includes('GH_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN || github.token }}')
+) {
+  console.log('  ok   verdict dispatch uses scoped Actions write while PR mutations retain the event-producing PAT');
+} else {
+  console.log('  FAIL — verdict dispatch and PR mutations do not use their least-privilege token split');
+  failed++;
+}
+
 if (failed) {
   console.log(`\n${failed} verdict-retry case(s) wrong. Recovery must be bounded and must not revive a held PR.\n`);
   process.exit(1);
 }
 
-console.log(`\nOK — ${expected.length + 2} verdict-retry policy case(s) behave correctly.\n`);
+console.log(`\nOK — ${expected.length + 3} verdict-retry policy case(s) behave correctly.\n`);

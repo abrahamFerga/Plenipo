@@ -54,9 +54,10 @@ jobs:
         continue-on-error: true
         run: node .github/scripts/verdict-retry.mjs --dispatch
         env:
-          # A user/App token is intentional. GITHUB_TOKEN-authored labels, branch updates and
-          # merges do not trigger the downstream workflows that make the loop converge.
-          GH_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN || github.token }}
+          # Dispatch/rerun needs Actions write, which the workflow's scoped token has. A PAT that
+          # can mutate PRs may still lack this permission (observed live as HTTP 403). GitHub permits
+          # workflow_dispatch recursion, and the verdict workflow explicitly allows github-actions.
+          GH_TOKEN: ${{ github.token }}
 
       # Recovery grants no merge permission. An Actions API outage must be visible, but it must not
       # prevent a different, already-approved PR from reaching the deterministic merger.

@@ -23,13 +23,15 @@ protected base; it cannot approve itself with the workflow wrapper or reviewer i
 
 | Name | Kind | Description |
 | ---- | ---- | ----------- |
-| `COPILOT_GITHUB_TOKEN` | secret | Fine-grained user PAT for Copilot inference and loop mutations; requires Copilot Requests read plus Actions, Contents, Issues and Pull requests write on this repo |
+| `COPILOT_GITHUB_TOKEN` | secret | Fine-grained user PAT for Copilot inference and loop mutations; requires Copilot Requests read, Actions read, and Contents, Issues and Pull requests write on this repo |
 | `AGENT_AUTOMERGE` | variable | Optional kill switch; set to `off` to make the scheduled merger no-op |
 
 The mutation path deliberately uses `COPILOT_GITHUB_TOKEN`: GitHub suppresses downstream workflow
 events caused by the built-in `GITHUB_TOKEN`, which otherwise strands approval-label reruns, branch
 updates and post-merge deploy/publish runs. No token needs Administration access because required
-contexts are read through `gh pr checks --required`.
+contexts are read through `gh pr checks --required`. Verdict dispatch/rerun is the exception: it
+uses the workflow's scoped `GITHUB_TOKEN` with Actions write, while the reviewer explicitly allows
+`github-actions[bot]` as its bootstrap actor.
 
 ## Required secrets
 
