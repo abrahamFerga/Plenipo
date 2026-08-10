@@ -1,9 +1,8 @@
 # Approval expiry. Deterministic — no AI, no secrets, no third-party actions.
 #
-# `agent:approved` is a statement about a diff, not about a pull request. Without this, a PR reviewed
-# at commit A keeps the label through commit B, and the scheduled merger — which re-reads the world
-# but cannot tell a fresh label from a stale one — merges code nothing ever looked at. That is the
-# one way the whole gate list can be green over unreviewed changes.
+# `agent:approved` is a statement about a diff and its runtime evidence, not about a pull request.
+# Without this, a PR reviewed at commit A keeps the label through commit B — or after its evidence
+# body changes — and the scheduled merger can land something the verdict never covered.
 #
 # `add-labels` in the reviewer can only ADD, so expiry has to live here. The reviewer re-runs on the
 # same events and re-labels from scratch; this job finishes in seconds while that takes minutes, so
@@ -39,10 +38,12 @@ jobs:
   reset:
     name: Drop a verdict the new commits have not earned
     runs-on: ubuntu-latest
-    # A title or body edit is not a diff change. Only react to `edited` when the base moved.
+    # Title-only edits do not affect the verdict. The body carries runtime evidence, so body and
+    # base edits both expire it and the verdict workflow re-runs on the same event.
     if: >-
       github.event_name != 'pull_request_target'
       || github.event.action != 'edited'
+      || github.event.changes.body != null
       || github.event.changes.base != null
     steps:
       # A missing label is normal and must never fail a pull request. Any other API failure must be

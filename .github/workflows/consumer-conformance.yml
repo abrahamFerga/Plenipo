@@ -114,7 +114,20 @@ jobs:
         working-directory: consumer
         # Docker is available on the runner, so the consumer's Testcontainers E2E suite runs here
         # too — a compile-clean break in the approval gate or RBAC surfaces only at this rung.
-        run: dotnet test ${{ matrix.solution }} -c Release -p:PlenipoVersion=${{ steps.pack.outputs.rc }}
+        # PlatformShimGuardTests are inverse guards: they fail when a previously missing platform
+        # capability now exists. That is a product-maintenance signal, not a candidate regression.
+        run: >-
+          dotnet test ${{ matrix.solution }} -c Release
+          -p:PlenipoVersion=${{ steps.pack.outputs.rc }}
+          --filter 'FullyQualifiedName!~PlatformShimGuardTests'
+
+      - name: Report product shims the platform may have retired
+        continue-on-error: true
+        working-directory: consumer
+        run: >-
+          dotnet test ${{ matrix.solution }} -c Release
+          -p:PlenipoVersion=${{ steps.pack.outputs.rc }}
+          --filter 'FullyQualifiedName~PlatformShimGuardTests'
 
   verdict:
     name: Conformance verdict

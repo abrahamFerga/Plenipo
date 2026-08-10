@@ -17,6 +17,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const gate = join(here, 'pr-gates.mjs');
 const scratch = mkdtempSync(join(tmpdir(), 'pr-gates-'));
 const diff = join(scratch, 'protected.diff');
+const renameDiff = join(scratch, 'rename-out.diff');
+const deleteDiff = join(scratch, 'delete.diff');
 
 writeFileSync(
   diff,
@@ -31,6 +33,25 @@ writeFileSync(
   ].join('\n')
 );
 
+writeFileSync(renameDiff, [
+  'diff --git a/.github/workflows/agent-merge.yml b/docs/agent-merge.yml',
+  'similarity index 100%',
+  'rename from .github/workflows/agent-merge.yml',
+  'rename to docs/agent-merge.yml',
+  '--- a/.github/workflows/agent-merge.yml',
+  '+++ b/docs/agent-merge.yml',
+  '',
+].join('\n'));
+writeFileSync(deleteDiff, [
+  'diff --git a/.github/workflows/agent-merge.yml b/.github/workflows/agent-merge.yml',
+  'deleted file mode 100644',
+  '--- a/.github/workflows/agent-merge.yml',
+  '+++ /dev/null',
+  '@@ -1 +0,0 @@',
+  '-name: Agent merge',
+  '',
+].join('\n'));
+
 const body = [
   'Closes #1',
   '',
@@ -41,8 +62,8 @@ const body = [
   'The case was seen red before the policy repair and green after the agent verdict was accepted.',
 ].join('\n');
 
-const run = (labels) => {
-  const result = spawnSync(process.execPath, [gate, diff], {
+const run = (labels, diffPath = diff) => {
+  const result = spawnSync(process.execPath, [gate, diffPath], {
     encoding: 'utf8',
     env: {
       ...process.env,
@@ -95,9 +116,19 @@ for (const test of cases) {
   }
 }
 
+for (const [name, diffPath] of [['rename out of the control tree', renameDiff], ['control deletion', deleteDiff]]) {
+  const result = run('', diffPath);
+  if (result.status === 1 && /spine_untouched/.test(result.output) && /agent-merge\.yml/.test(result.output)) {
+    console.log(`  ok   ${name} keeps the protected old path`);
+  } else {
+    console.log(`  FAIL ${name} evaded the old-path guard:\n${result.output}`);
+    failed++;
+  }
+}
+
 if (failed) {
   console.log(`\n${failed} PR-gate policy case(s) wrong. A label must not turn a contradictory verdict into permission.\n`);
   process.exit(1);
 }
 
-console.log(`\nOK — ${cases.length} protected-diff agent-verdict case(s) behave correctly.\n`);
+console.log(`\nOK — ${cases.length + 2} protected-diff agent-verdict case(s) behave correctly.\n`);

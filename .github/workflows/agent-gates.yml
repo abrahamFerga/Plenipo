@@ -34,10 +34,12 @@ jobs:
         run: |
           git fetch --no-tags origin "${{ github.base_ref }}"
           git diff --unified=0 "origin/${{ github.base_ref }}...HEAD" > "$RUNNER_TEMP/pr.diff"
+          git show "origin/${{ github.base_ref }}:.github/scripts/pr-gates.mjs" > "$RUNNER_TEMP/pr-gates.mjs"
 
-      # Values arrive as env, never interpolated into the shell — a PR body is untrusted input.
+      # Execute the evaluator from the trusted base, never the PR's proposed copy. Values arrive as
+      # env, never interpolated into the shell — a PR body is untrusted input.
       - name: Evaluate gates
-        run: node .github/scripts/pr-gates.mjs "$RUNNER_TEMP/pr.diff"
+        run: node "$RUNNER_TEMP/pr-gates.mjs" "$RUNNER_TEMP/pr.diff"
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}

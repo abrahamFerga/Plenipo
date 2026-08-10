@@ -5,20 +5,24 @@
 //
 // This workflow is deliberately tiny and does not execute PR code, so the meaningful regression
 // test is that its event wiring continues to clear a verdict precisely when a PR's effective diff
-// changes. A title/body edit must not discard an otherwise-current review.
+// or evidence changes. A title edit must not discard a review; a body edit must, because runtime
+// evidence is part of the verdict.
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const source = readFileSync(join(here, '..', 'workflows', 'agent-approval-reset.yml'), 'utf8');
+const assetWorkflow = join(here, 'agent-approval-reset.yml');
+const installedWorkflow = join(here, '..', 'workflows', 'agent-approval-reset.yml');
+const source = readFileSync(existsSync(assetWorkflow) ? assetWorkflow : installedWorkflow, 'utf8');
 
 const expectations = [
   [/pull_request_target:\s*\r?\n\s+types:\s*\[synchronize, edited, reopened\]/, 'uses trusted default-branch event wiring for every diff-changing PR event'],
   [/github\.event_name != 'pull_request_target'/, 'does not accidentally treat every edited PR-target event as a reset'],
   [/github\.event\.action != 'edited'/, 'resets synchronizations and reopen events'],
-  [/github\.event\.changes\.base != null/, 'resets only base-retarget edits, not title/body edits'],
+  [/github\.event\.changes\.body != null/, 'expires a verdict when its evidence-bearing body changes'],
+  [/github\.event\.changes\.base != null/, 'expires a verdict when retargeting changes the effective diff'],
   [/for label in 'agent:approved' 'agent:changes-requested'; do/, 'clears both mutually exclusive verdict labels'],
   [/\*'\(HTTP 404\)'\*\) echo "not set/, 'treats only a missing label as a successful delete'],
   [/exit 1/, 'fails visibly when a stale verdict cannot be cleared'],

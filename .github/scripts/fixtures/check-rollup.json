@@ -373,7 +373,7 @@
  },
  {
   "number": 912,
-  "title": "an UNSTABLE merge state must block — wait for a settled state",
+  "title": "UNSTABLE with green required checks must not promote advisory failures into gates",
   "headRefName": "fix/912-unstable",
   "labels": [
    {
