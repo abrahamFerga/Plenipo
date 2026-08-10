@@ -41,6 +41,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7.0.1
 
+      - name: Agent loop policy regression
+        run: |
+          node .github/scripts/pr-gates.test.mjs
+          node .github/scripts/approval-proof.test.mjs
+          node .github/scripts/merge-gate.test.mjs
+          node .github/scripts/verdict-retry.test.mjs
+          node .github/scripts/triage-retry.test.mjs
+          node .github/scripts/agent-approval-reset.test.mjs
+
       - name: Setup .NET ${{ env.DOTNET_VERSION }}
         uses: actions/setup-dotnet@v6.0.0
         with:

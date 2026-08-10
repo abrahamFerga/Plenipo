@@ -25,6 +25,7 @@ protected base; it cannot approve itself with the workflow wrapper or reviewer i
 | ---- | ---- | ----------- |
 | `COPILOT_GITHUB_TOKEN` | secret | Fine-grained user PAT for Copilot inference and loop mutations; requires Copilot Requests read, Actions read, and Contents, Issues and Pull requests write on this repo |
 | `AGENT_AUTOMERGE` | variable | Optional kill switch; set to `off` to make the scheduled merger no-op |
+| `AGENT_TRIAGE_RECOVERY` | variable | Optional independent kill switch; set to `off` to stop scheduled issue-triage recovery without disabling PR merging |
 
 The mutation path deliberately uses `COPILOT_GITHUB_TOKEN`: GitHub suppresses downstream workflow
 events caused by the built-in `GITHUB_TOKEN`, which otherwise strands approval-label reruns, branch
@@ -32,6 +33,36 @@ updates and post-merge deploy/publish runs. No token needs Administration access
 contexts are read through `gh pr checks --required`. Verdict dispatch/rerun is the exception: it
 uses the workflow's scoped `GITHUB_TOKEN` with Actions write, while the reviewer explicitly allows
 `github-actions[bot]` as its bootstrap actor.
+
+## Bounded triage recovery
+
+`agent-merge.yml` has a separate `triage-recovery` job on the same 15-minute schedule and manual
+dispatch as the merger. It is independent of `AGENT_AUTOMERGE`, has no merge permission, and uses
+the scoped `GITHUB_TOKEN` only to dispatch or re-run an active triage workflow. Set the repository
+variable `AGENT_TRIAGE_RECOVERY=off` to disable this repair path without stopping approved PRs from
+merging.
+
+Issue events remain the fast path. A new request runs when its `platform-request` label is applied,
+a request with no final verdict runs when reopened, and a request carrying `triage:needs-info` runs
+again when the requester edits the issue body. The scheduler repairs missed or incomplete events:
+it considers only open target-labeled issues, skips `needs-human`, `human-hold`, `agent:blocked` and
+every final `triage:*` verdict, and queues at most two actions per tick. If no run exists under the
+current versioned title (`Triage platform request v2 #<issue>`), it dispatches the exact workflow
+from the default branch with that `issue_number`. If a completed run produced no final verdict, it
+re-runs that same attempt after exponential backoff: 30, 60, 120, 240, then at most 360 minutes.
+Before GitHub's 30-day or 50-attempt rerun ceiling can strand it, recovery renews the issue with a
+fresh current-policy dispatch. Active runs are never duplicated.
+
+`triage:needs-info` is deliberately non-terminal. After a successful needs-info run, recovery waits
+until the issue body was edited after that run began, then starts a fresh targeted dispatch so the
+workflow reads the revised request. The requesting product's normal `deliver` or `fleet` tick finds
+the request through its `TODO(plenipo#N)` tag, consumes the machine-readable question, and edits the
+existing body; harness reports use their equivalent local-note marker. A final verdict removes
+`needs-info` and `triage:needs-info`. This body-edit handshake supplies missing evidence without a
+human relay or an old run being mistaken for current-policy triage. The requester accepts only a
+`github-actions[bot]` comment carrying the exact issue/run marker, then verifies that run's v2 title,
+success, event and protected default-branch provenance before treating its question as untrusted
+factual input.
 
 ## Required secrets
 
