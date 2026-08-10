@@ -35,6 +35,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  triage-recovery:
+    name: Recover incomplete issue triage
+    if: vars.AGENT_TRIAGE_RECOVERY != 'off'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      # Issue events are still the fast path. This job bootstraps or renews a current-policy run,
+      # or re-runs a completed no-verdict attempt behind exponential backoff and a two-item cap.
+      - name: Recover missing triage verdicts
+        run: node .github/scripts/triage-retry.mjs --recover
+        env:
+          GH_TOKEN: ${{ github.token }}
+
   merge:
     name: Merge what passes every gate
     if: vars.AGENT_AUTOMERGE != 'off'
