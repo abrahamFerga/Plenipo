@@ -4,13 +4,13 @@
 # opinion, and a required status check cannot. Make it a REQUIRED check on the default branch or it
 # gates nothing.
 #
-# `edited` and `labeled` are in the trigger list on purpose: the PR body is one of the gates, and a
-# fresh `agent:approved` verdict is the normal autonomous override for a protected diff.
+# `edited` is in the trigger list on purpose: the PR body carries the deterministic runtime and
+# red-before-green evidence required for loop PRs and protected diffs.
 name: Agent gates
 
 on:
   pull_request:
-    types: [opened, edited, reopened, synchronize, labeled, unlabeled]
+    types: [opened, edited, reopened, synchronize]
 
 permissions:
   contents: read
@@ -43,4 +43,3 @@ jobs:
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
