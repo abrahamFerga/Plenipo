@@ -6,7 +6,9 @@
     "visibility": "public"
   },
   "autonomy": {
-    "level": 3,
+    "level": 3,
+    "//trustedAuthors": "Who may merge unattended. merge-gate.mjs authorizes by author identity now, not by a mutable `agent:approved` label anyone with write access could apply; an empty list means nothing merges. Adding a login here grants exactly what the old label lane already granted this repo.",
+    "trustedAuthors": ["abrahamFerga"],
     "maxOpenPRs": 3,
     "maxMergesPerTick": 2,
     "maxVerdictRequestsPerTick": 2,
