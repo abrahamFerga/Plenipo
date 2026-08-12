@@ -306,6 +306,13 @@ export interface PendingApproval {
   moduleId: string;
   toolName: string;
   argumentsJson?: string;
+  /**
+   * The proposer's stable identifier — who parked this write, not who is reading the queue.
+   * Prefer it over {@link userDisplay} whenever you need identity rather than a label:
+   * `userDisplay` is best-effort, captured at block time, and two subjects can share one
+   * (under dev-auth every subject renders as "Dev User"). Null on rows that predate the field.
+   */
+  userId?: string | null;
   userDisplay?: string;
   createdAt: string;
   /**
