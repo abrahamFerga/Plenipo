@@ -1,11 +1,14 @@
 {
-  "//": "Product repo .claude/settings.json. Replace abrahamFerga. Every plugin is enabled because an unattended run cannot reload its own plugin set mid-flight; the cost is each skill's ~250-token description, and nothing else until a skill is invoked.",
+  "//": "Platform repo .claude/settings.json. Every plugin is enabled because an unattended run cannot reload its own plugin set mid-flight; the cost is each skill's ~250-token description, and nothing else until a skill is invoked. `steward` is enabled HERE and nowhere else — this is the one repo with a request queue instead of a product board.",
 
   "extraKnownMarketplaces": {
     "plenipo-agents": {
-      "source": { "source": "github", "repo": "abrahamFerga/plenipo-agents" }
+      "source": { "source": "github", "repo": "abrahamFerga/plenipo-agents" },
+      "autoUpdate": true
     }
   },
+
+  "model": "claude-sonnet-5",
 
   "enabledPlugins": {
     "plenipo@plenipo-agents": true,
