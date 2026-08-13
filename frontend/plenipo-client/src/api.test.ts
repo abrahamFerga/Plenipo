@@ -105,4 +105,28 @@ describe("api client", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe(`${BASE}/api/admin/users/u-1/roles/tenant%20admin`);
     expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("DELETE");
   });
+
+  // The proposer's identity is what the approvals queue exists to show, so it must survive the
+  // published type and not just the wire. Reading `userId` off the returned row is the point: drop
+  // the field from `PendingApproval` and `pnpm -r typecheck` fails here, which is the same error a
+  // @plenipo/client consumer would hit.
+  it("carries the proposer's userId through the typed approvals queue", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve([
+            { id: "a-1", moduleId: "finance", toolName: "pay", userId: "u-7", userDisplay: "Dev User", createdAt: "2026-08-12T00:00:00Z" },
+            // Rows parked before the field exists project null rather than omitting it.
+            { id: "a-2", moduleId: "finance", toolName: "pay", userId: null, userDisplay: "Dev User", createdAt: "2026-08-12T00:00:00Z" },
+          ]),
+      } as unknown as Response),
+    );
+
+    const [proposed, legacy] = await api.approvals.list();
+
+    expect(proposed?.userId).toBe("u-7");
+    expect(legacy?.userId).toBeNull();
+  });
 });

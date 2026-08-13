@@ -130,6 +130,15 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
 
 ### Added
 
+- **The approvals queue names who proposed the write.** `GET /api/chat/approvals` returns a new
+  `userId` field, and `PendingApproval` in `@plenipo/client` carries it. The queue previously
+  identified the proposer only by `userDisplay`, a best-effort label captured at block time that two
+  subjects can share — under dev-auth every subject renders as `"Dev User"` — so an approver could
+  not tell whose work they were signing off, which is the separation the propose/approve split rests
+  on. Purely additive: projected from identity the model already held, so no schema change, no
+  migration, and no write-path behaviour change; a consumer that ignores the field is unaffected.
+  `userId` is null on rows that predate it.
+
 - **Built-in sign-in: `Auth:Mode=Local` makes the host its own OpenID Connect issuer (ADR 0003).**
   On-prem and mini-PC deployments were left choosing between standing up Entra External ID — the
   single biggest install-time cliff — or bundling a Keycloak-class sidecar that duplicates the
