@@ -25,6 +25,25 @@ on:
 engine: copilot
 timeout-minutes: 18
 max-ai-credits: 240K
+# The compiled agent command spawns /usr/local/bin/copilot by absolute path, but the upstream
+# installer only extends PATH when it activates a build already in the runner toolcache — it never
+# writes that absolute path. Whichever branch it takes is decided by the runner image, so the agent
+# job dies with a 0-second `spawn /usr/local/bin/copilot ENOENT` on some runners and works on
+# others. Re-run the same installer with the toolcache hidden, which forces a real install to
+# /usr/local/bin (checksum-verified by the installer itself). Delete once upstream writes that path
+# on both branches.
+pre-agent-steps:
+  - name: Ensure /usr/local/bin/copilot exists
+    shell: bash
+    run: |
+      set -euo pipefail
+      if [ -x /usr/local/bin/copilot ]; then
+        echo "/usr/local/bin/copilot already present — nothing to repair"
+        exit 0
+      fi
+      echo "::warning::copilot was activated from the runner toolcache, leaving /usr/local/bin/copilot absent; reinstalling"
+      RUNNER_TOOL_CACHE="$(mktemp -d)" bash "${RUNNER_TEMP}/gh-aw/actions/install_copilot_cli.sh"
+      /usr/local/bin/copilot --version
 concurrency:
   group: pr-approval-verdict-${{ github.event.pull_request.number || inputs.pr_number }}
   cancel-in-progress: true
