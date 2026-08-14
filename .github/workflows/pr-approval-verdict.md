@@ -25,6 +25,10 @@ on:
 engine: copilot
 timeout-minutes: 18
 max-ai-credits: 240K
+# Repairs the copilot binary path this workflow's agent job spawns. Shared with every other
+# engine:copilot workflow so the defect and its eventual removal live in one file.
+imports:
+  - shared/copilot-binary-path.md
 concurrency:
   group: pr-approval-verdict-${{ github.event.pull_request.number || inputs.pr_number }}
   cancel-in-progress: true
