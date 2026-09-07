@@ -98,7 +98,8 @@ CI verifies the "base, not fork" promise itself on every run:
   the release's assets by `eng/fetch-baseline.sh`). A removed or changed public member fails the
   build until the project's `CompatibilitySuppressions.xml` names it, so a breaking change is a
   reviewed diff rather than a surprise in a consumer. Without the baseline folder (a plain clone)
-  validation is skipped; CI fetches it before restore.
+  validation is skipped; `eng/verify-packaging.sh` fetches it first, so CI's packaging job
+  validates every pull request.
 
 ## What a downstream vertical inherits
 

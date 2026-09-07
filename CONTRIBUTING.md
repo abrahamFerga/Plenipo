@@ -69,7 +69,7 @@ what the next release breaks, reviewed like code, and what the release notes and
 instructions are written from.
 
 ```bash
-bash eng/fetch-baseline.sh                                   # once per clone; CI does this before restore
+bash eng/fetch-baseline.sh                                   # once per clone; verify-packaging.sh (and so CI) does it too
 dotnet pack Plenipo.slnx -c Release -o artifacts/packages    # fails on an undeclared break
 dotnet pack src/Plenipo.Core -c Release -p:GenerateCompatibilitySuppressionFile=true   # declare it
 ```

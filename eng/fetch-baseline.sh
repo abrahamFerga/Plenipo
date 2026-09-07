@@ -11,11 +11,14 @@
 # The baseline has to be restorable. Plenipo's primary package channel is the GitHub Release assets
 # (anonymously downloadable, no feed credentials), so this script downloads that release's nupkgs
 # into artifacts/baseline-feed, which the targets add as a restore source when the folder exists.
-# Validation is skipped wherever the folder is absent, so a plain clone still builds; CI runs this
-# before restore so every pull request is validated.
+# Validation is skipped wherever the folder is absent, so a plain clone still builds;
+# eng/verify-packaging.sh runs this first, and CI's package job runs that script, so every pull
+# request is validated without a workflow edit.
 #
 #   eng/fetch-baseline.sh            # version read from Directory.Build.targets
 #   eng/fetch-baseline.sh 0.1.0-alpha.28
+#
+# The assets are public: with a GH_TOKEN/GITHUB_TOKEN the gh CLI is used, otherwise plain curl.
 # =============================================================================
 set -euo pipefail
 
@@ -35,12 +38,18 @@ fi
 
 mkdir -p "$FEED"
 echo "==> Downloading the v$VERSION release packages into $FEED"
-if command -v gh >/dev/null 2>&1; then
-  gh release download "v$VERSION" -R abrahamFerga/Plenipo -p "*.nupkg" -D "$FEED" --clobber
+if command -v gh >/dev/null 2>&1 && [ -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ]; then
+  GH_TOKEN="${GH_TOKEN:-$GITHUB_TOKEN}" gh release download "v$VERSION" -R abrahamFerga/Plenipo -p "*.nupkg" -D "$FEED" --clobber
 else
-  # No gh: the assets are public, so plain curl over the release's asset list works too.
+  # Anonymous: the assets are public, so the release's asset list and plain curl are enough.
   api="https://api.github.com/repos/abrahamFerga/Plenipo/releases/tags/v$VERSION"
-  curl -fsSL "$api" | grep -o '"browser_download_url": *"[^"]*\.nupkg"' | sed 's/.*"\(https[^"]*\)"/\1/' | while read -r url; do
+  urls="$(curl -fsSL -H "Accept: application/vnd.github+json" "$api" \
+    | grep -o '"browser_download_url": *"[^"]*\.nupkg"' | sed 's/.*"\(https[^"]*\)"/\1/')"
+  if [ -z "$urls" ]; then
+    echo "No .nupkg assets found on release v$VERSION." >&2
+    exit 1
+  fi
+  printf '%s\n' "$urls" | while read -r url; do
     curl -fsSL -o "$FEED/$(basename "$url")" "$url"
   done
 fi

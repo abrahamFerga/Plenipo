@@ -55,15 +55,6 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      # Package validation compares every packed public surface against the last release; the
-      # baseline packages come from that release's assets (eng/fetch-baseline.sh). Fetched before
-      # restore so the baseline is a restore source, and only here: publish and conformance pack
-      # without the folder and so skip validation, which this job has already done for the same tree.
-      - name: Fetch the package-validation baseline
-        run: bash eng/fetch-baseline.sh
-        env:
-          GH_TOKEN: ${{ github.token }}
-
       - name: Restore (platform + samples)
         run: |
           dotnet restore Plenipo.slnx

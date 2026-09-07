@@ -24,9 +24,9 @@
 
     The baseline is restored from artifacts/baseline-feed, which eng/fetch-baseline.sh fills from
     the release's assets (the platform's primary, credential-free package channel). When the folder
-    is absent — a plain clone — validation is skipped so the build still works; ci.yml fetches it
-    before restore so every pull request is validated. Set PlenipoPackageValidation=false to skip
-    it deliberately with the folder present.
+    is absent — a plain clone — validation is skipped so the build still works; eng/verify-packaging.sh
+    fetches it first, and CI's package job runs that script, so every pull request is validated.
+    Set PlenipoPackageValidation=false to skip it deliberately with the folder present.
   -->
   <PropertyGroup Condition="'$(IsPackable)' == 'true'">
     <PlenipoBaselineFeed>$(MSBuildThisFileDirectory)artifacts/baseline-feed</PlenipoBaselineFeed>
