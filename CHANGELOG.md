@@ -163,6 +163,15 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   resolver, the tool, the requester, the approval id and the outcome, so "who released this write" is
   answerable from the append-only trail and not only from the pending-approval row the disclosure
   view reads (hireworthy#46).
+- **Served shells carry a per-request CSP nonce, so a product never pins a hash of platform HTML.**
+  Both SPAs have one inline script (the theme initializer), and a product shipping a strict
+  `script-src` pinned its SHA-256 — so any platform change to the shell's HTML white-screened the
+  product, and `consumer-conformance.yml`'s own header had to admit that no gate could see it. The
+  host now serves `index.html` (at `/`, `/index.html`, deep links, and `/admin/…`) through
+  `PlenipoCsp`, stamping `nonce="…"` onto every `<script>` and marking the response `no-store`; a
+  product's CSP middleware calls `PlenipoCsp.NonceFor(context)` and emits `'nonce-…'` instead. The
+  platform sets no policy header itself. `BUILDING_A_PRODUCT.md` shows the middleware; the kit's
+  `S15` invariant checks a served shell's scripts carry a nonce the policy admits. (#197)
 
 - **`Plenipo.Testing` — the platform publishes its tests, the products execute them.** Every product
   on the fleet carried a private copy of the sample suite's integration fixture, AG-UI stream parser

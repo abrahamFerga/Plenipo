@@ -409,6 +409,55 @@ public abstract class PlenipoSpineConformance<TProgram>(PlenipoHostFixture<TProg
         Assert.Fail($"Timed out waiting for {expectation}.");
     }
 
+    [Fact]
+    public async Task S15_A_served_shell_carries_per_request_nonces_that_the_policy_admits()
+    {
+        // #197: a product that ships a strict CSP must never have to pin a hash of platform-authored
+        // HTML. Wherever this host serves a shell, every script carries a fresh nonce, the response
+        // is uncacheable, and a policy the host emits admits that nonce. A host serving no shell
+        // (UI from a dev server, API-only) has nothing to prove here.
+        using var client = fixture.RawClient();
+        foreach (var route in new[] { "/", "/admin/" })
+        {
+            using var response = await client.GetAsync(new Uri(route, UriKind.Relative));
+            if (response.StatusCode != HttpStatusCode.OK
+                || !string.Equals(response.Content.Headers.ContentType?.MediaType, "text/html", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var html = await response.Content.ReadAsStringAsync();
+            var scripts = System.Text.RegularExpressions.Regex.Matches(html, "<script\\b([^>]*)>", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (scripts.Count == 0)
+            {
+                continue;
+            }
+
+            var nonces = new HashSet<string>(StringComparer.Ordinal);
+            foreach (System.Text.RegularExpressions.Match script in scripts)
+            {
+                var nonce = System.Text.RegularExpressions.Regex.Match(script.Groups[1].Value, "\\bnonce=\"([^\"]+)\"").Groups[1].Value;
+                Assert.False(string.IsNullOrEmpty(nonce), $"GET {route}: a <script> tag carries no nonce: <script{script.Groups[1].Value}>");
+                nonces.Add(nonce);
+            }
+
+            var stamped = Assert.Single(nonces);
+            Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
+
+            if (response.Headers.TryGetValues("Content-Security-Policy", out var policies))
+            {
+                var policy = string.Join("; ", policies);
+                if (policy.Contains("script-src", StringComparison.OrdinalIgnoreCase))
+                {
+                    Assert.Contains($"'nonce-{stamped}'", policy, StringComparison.Ordinal);
+                }
+            }
+
+            using var again = await client.GetAsync(new Uri(route, UriKind.Relative));
+            Assert.DoesNotContain(stamped, await again.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        }
+    }
+
     private static async Task<HashSet<string>> PendingIdsAsync(HttpClient client)
     {
         var pending = await client.GetFromJsonAsync<JsonElement>("/api/chat/approvals");

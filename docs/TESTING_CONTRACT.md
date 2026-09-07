@@ -105,7 +105,7 @@ Status: S1–S7, S9, S11–S14 ship in `PlenipoSpineConformance` (S3 also assert
 event and the disclosure view's requester and resolver; S4a is the approvals-permission gate on its
 own). S10 holds by construction — connector tools release through the same requester scope — and
 has no generic test because the kit cannot assume a connector. S8 waits on #121, which is still
-`needs-human`. S15 waits on #197.
+`needs-human`. S15 ships with #197: served shells carry a per-request nonce and the pack checks it.
 
 ### 3.3 How a product uses it
 
@@ -261,7 +261,7 @@ Design rules for all four:
 | Changed JSON shape a product reads | the product's `<product>.http` catalog test and the `@plenipo/client` type-check in `verify-frontend-packaging.sh` |
 | Flipped default | contract eval cases pinning the old behaviour, e.g. `Rag:Reranker` |
 | Raised dependency floor | the floor diff in conformance; NU1605 in the consumer build |
-| Changed inline HTML behind a CSP hash | S15 and the frontend CSP smoke |
+| Changed inline HTML behind a CSP hash | no longer a class: served shells carry a per-request nonce (`PlenipoCsp`), products emit `'nonce-…'` instead of a hash; S15 checks it |
 | Advisory in a test-only dependency | the kit's props: fixed once |
 | A product merely lagging | rung 0 version-lag check |
 
