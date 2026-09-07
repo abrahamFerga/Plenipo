@@ -107,14 +107,16 @@ release safe for every product at once.
 // tests/<Product>.IntegrationTests/Fixture.cs — the only file a product writes for the harness
 public sealed class Fixture : PlenipoHostFixture<Program>
 {
-    protected override ProductContract Contract => new(
+    public override ProductContract Contract { get; } = new(
         ModuleId:      "finance",
         ReadTool:      "summarize_spending",
         WriteTool:     "record_transaction",   // must be RequiresApproval = true
-        ApproverRole:  "household-admin",
-        NarrowRole:    "household-member",
+        ApproverRole:  "household-admin",      // may chat, call both tools, decide approvals
+        NarrowRole:    "household-member",     // may chat, must not hold the write tool's permission
         ReadEndpoints: ["/api/finance/transactions", "/api/finance/budgets"]);
 }
+
+[CollectionDefinition("api")] public sealed class ApiCollection : ICollectionFixture<Fixture>;
 
 [Collection("api")] public sealed class Spine(Fixture f)    : PlenipoSpineConformance<Program>(f);
 [Collection("api")] public sealed class Manifest(Fixture f) : PlenipoManifestConformance<Program>(f);
@@ -272,20 +274,20 @@ test pins, or for reasoning quality — that is rung 5, and rung 5 is a trend. S
 
 In order. Each item names its owner and the check that proves it landed.
 
-| # | Item | Owner | Done when |
-|---|---|---|---|
-| 1 | Merge #174, then move the sample suite and the kit to Testcontainers ≥ 4.15 (ships SSH.NET 2026.0.0, the first patched version) | platform, human merge | `ci.yml` green on a `src/**` PR |
-| 2 | Cut `v0.1.0-alpha.29` from `main` with migration notes for the three breaking changes in the changelog; run `announce-release` | platform, human tag | every consumer has an upgrade issue |
-| 3 | Continuous prerelease on merge to `main` (§4.2) | platform | a merge produces a numbered package on the feed within 15 minutes |
-| 4 | `Plenipo.Testing` v1: fixture, parser, eval runner, manifest and tenancy conformance, the props with pins and suppressions | platform | the sample host's suite runs on it; `eng/verify-packaging.sh` compiles a consumer against it |
-| 5 | Spine pack S1–S15, each seen red on the sample host before its fix where the fix has not shipped yet | platform | the accepted requests #145 #153 #111 #115 #167 #176 each close naming a test |
-| 6 | Package validation with baseline = last tag; suppression file reviewed like code | platform | a deliberate public-member removal fails the PR until suppressed |
-| 7 | Conformance: `frontend/**` trigger, floor diff, retired-shim annotation, `PATH_RULES` for the spine | platform | #128, #137, #144 closed by tests in `pr-gates.test.mjs` |
-| 8 | `install-runbook` writes the §3.3 files instead of copying the fixture; `plenipo-runbook` and `RUNBOOK.md` cite this contract; `validate-product` gains the version-lag and quarantine-age checks; `upgrade-platform` step 7 runs the kit | `plenipo-agents` | a fresh `/deliver:scaffold-product` passes the kit's invariants with no copied harness code |
-| 9 | Each product: adopt the kit, delete the copied fixture and runner, keep only journeys and domain tests; networthy first as the reference | products | `PlatformShimGuardTests` is the only platform-shaped test left in the product |
-| 10 | Rung 5 nightly on the sample host: `EVAL_PROVIDER_KEY` secret, `Microsoft.Extensions.AI.Evaluation` 10.9, baseline committed, trend page published | platform | a deliberate instruction regression on the legal module is reported the next morning |
-| 11 | Red-team pack and the RAG fixture | platform | both run in `ci.yml` |
-| 12 | Nonce-based CSP for platform inline HTML | platform | S15 and the hash sweep in `upgrade-platform` become unnecessary and are removed |
+| # | Item | Owner | Tracked | Done when |
+|---|---|---|---|---|
+| 1 | Merge the restore unblocker (#174, or the Testcontainers ≥ 4.15 bump that ships with the kit and pulls the first patched SSH.NET) | platform, human merge | #173 | `ci.yml` green on a `src/**` PR |
+| 2 | Cut `v0.1.0-alpha.29` from `main` with migration notes for the three breaking changes in the changelog; run `announce-release` | platform, human tag | #189 | every consumer has an upgrade issue |
+| 3 | Continuous prerelease on merge to `main` (§4.2) | platform | #190 | a merge produces a numbered package on the feed within 15 minutes |
+| 4 | `Plenipo.Testing` v1: fixture, parser, eval runner, manifest and tenancy conformance, the first five spine invariants, the eval-case targets | platform | #191 | the sample host's suite runs on it; `eng/verify-packaging.sh` compiles a consumer against it |
+| 5 | Spine pack S3–S15, each seen red on the sample host before its fix where the fix has not shipped yet | platform | #192 | the accepted requests #145 #153 #111 #115 #167 #176 each close naming a test |
+| 6 | Package validation with baseline = last tag; suppression file reviewed like code | platform | #193 | a deliberate public-member removal fails the PR until suppressed |
+| 7 | Conformance: `frontend/**` trigger, floor diff, retired-shim annotation, `PATH_RULES` for the spine | platform | #194 | #128, #137, #144 closed by tests in `pr-gates.test.mjs` |
+| 8 | `install-runbook` writes the §3.3 files instead of copying the fixture; `plenipo-runbook` and `RUNBOOK.md` cite this contract; `validate-product` gains the version-lag and quarantine-age checks; `upgrade-platform` step 7 runs the kit | `plenipo-agents` | plenipo-agents#44 | a fresh `/deliver:scaffold-product` passes the kit's invariants with no copied harness code |
+| 9 | Each product: adopt the kit, delete the copied fixture and runner, keep only journeys and domain tests; networthy first as the reference | products | created by `announce-release` when item 4 ships | `PlatformShimGuardTests` is the only platform-shaped test left in the product |
+| 10 | Rung 5 nightly on the sample host: `EVAL_PROVIDER_KEY` secret, `Microsoft.Extensions.AI.Evaluation` 10.9, baseline committed, trend page published | platform | #195 | a deliberate instruction regression on the legal module is reported the next morning |
+| 11 | Red-team pack and the RAG fixture | platform | #196 | both run in `ci.yml` |
+| 12 | Nonce-based CSP for platform inline HTML | platform | #197 | S15 and the hash sweep in `upgrade-platform` become unnecessary and are removed |
 
 Items 1 and 2 are human acts and unblock everything else. Items 3–7 are platform PRs the steward loop
 can carry. Item 8 is one `plenipo-agents` PR. Item 9 is one PR per product, produced by

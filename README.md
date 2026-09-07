@@ -76,6 +76,7 @@ Plenipo.slnx                          # the base platform (publishable)
     ├── Plenipo.Infrastructure/       # EF Core, audit interceptor, RBAC, AI providers (+ Mock), the agent runner
     ├── Plenipo.AspNetCore/           # Host integration: auth, middleware, SignalR + Redis, AG-UI, platform/chat/admin endpoints
     ├── Plenipo.ServiceDefaults/      # Aspire: OpenTelemetry, health checks, resilience
+    ├── Plenipo.Testing/              # Conformance kit: the host fixture, AG-UI parser, eval runner, spine/manifest/tenancy invariants
     ├── Plenipo.Api/                  # Minimal runnable host — a thin shell with NO domain modules
     └── Plenipo.AppHost/              # Aspire orchestration for the bare platform
 tests/                               # Plenipo.Application.Tests, Plenipo.Infrastructure.Tests

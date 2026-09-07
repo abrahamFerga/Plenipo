@@ -145,7 +145,7 @@ public sealed class DeadlineDocketingTests(IntegrationFixture fixture)
         using var chat = await client.PostAsJsonAsync("/api/agui/legal",
             new { messages = new[] { new { id = "m1", role = "user", content = "List the upcoming deadlines" } } });
         chat.EnsureSuccessStatusCode();
-        var run = Evals.EvalRun.Parse(await chat.Content.ReadAsStringAsync());
+        var run = EvalRun.Parse(await chat.Content.ReadAsStringAsync());
 
         Assert.DoesNotContain("RUN_ERROR", run.EventTypes);
         Assert.Contains("list_deadlines", run.ToolCalls);

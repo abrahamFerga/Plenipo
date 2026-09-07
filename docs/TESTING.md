@@ -56,6 +56,13 @@ dotnet test samples/Plenipo.Samples.slnx    # requires Docker (Testcontainers)
 When you add a platform capability, add its integration test here — a module-shaped consumer is
 the test fixture, which is exactly the guarantee downstream verticals need.
 
+The fixture itself, the AG-UI stream parser (`EvalRun` is an alias for `AgUiRun`), the eval runner
+and the three conformance packs the suite runs against the finance module come from
+`src/Plenipo.Testing` — the same package a product's test project references. The platform is the
+kit's first consumer: a kit change that cannot pass here never ships. When a platform request is
+accepted, its acceptance test is added to the kit's `PlenipoSpineConformance`, not to this suite,
+so every product inherits it on upgrade.
+
 Two things only this layer can prove, both worth knowing about:
 
 - **Behaviour that only exists on a relational provider.** The role-storage conversion claims each tenant

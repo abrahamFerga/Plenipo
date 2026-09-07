@@ -1,0 +1,14 @@
+<Project>
+
+  <!--
+    Golden eval cases are data, not code: Evals/cases/*.json in the consuming test project are
+    copied to the output directory so PlenipoGoldenEvals can discover them at run time. A project
+    that already declares the same Content item is left alone (Exclude dedupes on identity), so
+    adopting the kit never produces NETSDK1022 duplicate-item errors. Opt out with
+    <PlenipoTestingEvalCases>false</PlenipoTestingEvalCases>.
+  -->
+  <ItemGroup Condition="'$(PlenipoTestingEvalCases)' != 'false'">
+    <Content Include="Evals\cases\*.json" Exclude="@(Content)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
