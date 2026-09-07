@@ -142,7 +142,27 @@ public sealed class RequestEnricher(
             }
 
             db.Users.Add(user);
-            await db.SaveChangesAsync(cancellationToken);
+            try
+            {
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException)
+            {
+                // A shell fans out several first requests for a brand-new subject at once and the unique
+                // index on (TenantId, Subject) arbitrates. The losers adopt the winner's row instead of
+                // surfacing a 500 (networthy#215); the winner already audited the provisioning and
+                // redeemed any invite.
+                db.Entry(user).State = EntityState.Detached;
+                var winner = await db.Users.FirstOrDefaultAsync(u => u.Subject == subject, cancellationToken);
+                if (winner is null)
+                {
+                    throw;
+                }
+
+                requestContext.SetUser(winner.Id, subject, name);
+                requestContext.SetPermissions(await permissionResolver.ResolveAsync(principal, cancellationToken));
+                return true;
+            }
 
             await auditLog.RecordAuthEventAsync(new AuthAuditEntry
             {

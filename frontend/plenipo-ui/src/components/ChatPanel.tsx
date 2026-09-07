@@ -693,6 +693,9 @@ export function ChatPanel({
       <div className="mt-3">
         <PendingApprovals
           moduleId={moduleId}
+          // Only THIS conversation's parked writes: a fresh chat with no conversation yet shows none,
+          // rather than another thread's action with live buttons (#111).
+          conversationId={conversationIdRef.current ?? null}
           // An approval resolving is a conversation event: show the outcome IN the transcript the
           // moment the click lands (the server persists the same note, so reloads agree).
           onResolved={(note) =>

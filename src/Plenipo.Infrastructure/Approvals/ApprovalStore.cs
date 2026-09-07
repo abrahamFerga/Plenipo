@@ -17,11 +17,19 @@ public sealed class ApprovalStore(PlatformDbContext db) : IApprovalStore
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<PendingApproval>> ListPendingAsync(CancellationToken cancellationToken = default) =>
-        await db.PendingApprovals
-            .Where(p => p.Status == ApprovalStatus.Pending)
-            .OrderByDescending(p => p.CreatedAt)
-            .ToListAsync(cancellationToken);
+    public Task<IReadOnlyList<PendingApproval>> ListPendingAsync(CancellationToken cancellationToken = default) =>
+        ListPendingAsync(conversationId: null, cancellationToken);
+
+    public async Task<IReadOnlyList<PendingApproval>> ListPendingAsync(Guid? conversationId, CancellationToken cancellationToken = default)
+    {
+        var query = db.PendingApprovals.Where(p => p.Status == ApprovalStatus.Pending);
+        if (conversationId is { } id)
+        {
+            query = query.Where(p => p.ConversationId == id);
+        }
+
+        return await query.OrderByDescending(p => p.CreatedAt).ToListAsync(cancellationToken);
+    }
 
     public Task<PendingApproval?> GetAsync(Guid id, CancellationToken cancellationToken = default) =>
         db.PendingApprovals.FirstOrDefaultAsync(p => p.Id == id, cancellationToken);

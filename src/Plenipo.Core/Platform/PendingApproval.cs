@@ -34,6 +34,22 @@ public sealed class PendingApproval : TenantEntityBase
 
     public string? UserDisplay { get; set; }
 
+    /// <summary>
+    /// The requester's identity-provider subject, captured when the action was parked so the tool
+    /// can later run <em>as the requester</em> even if the user row has changed. Null on rows written
+    /// before this column existed; the requester's current row supplies it then.
+    /// </summary>
+    public string? RequesterSubject { get; set; }
+
+    /// <summary>
+    /// The requester's permissions at the moment the action was parked, serialized as a JSON string
+    /// array — the same snapshot convention as <see cref="BackgroundJob.PermissionsSnapshotJson"/>.
+    /// The approved tool runs under exactly this authority, which is what the runner already checked
+    /// before the model saw the tool; token-asserted roles have no database rows, so re-resolving at
+    /// release time would under-authorize. Null on rows written before this column existed.
+    /// </summary>
+    public string? PermissionsSnapshotJson { get; set; }
+
     public Guid ConversationId { get; set; }
 
     public required string ModuleId { get; set; }
