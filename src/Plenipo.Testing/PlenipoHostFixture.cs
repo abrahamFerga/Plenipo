@@ -127,7 +127,7 @@ public abstract class PlenipoHostFixture<TProgram> : IAsyncLifetime
     /// <see cref="AuthorizedScopeAsync"/>: it goes through the real pipeline, so it is the only way
     /// to prove RBAC, the approval gate, and the AG-UI protocol. Pass a narrower role to assert a 403.
     /// </summary>
-    public HttpClient ClientFor(string role, string? tenant = null, string? subject = null)
+    public HttpClient ClientFor(string role, string? tenant = null, string? subject = null, string? displayName = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(role);
         tenant ??= Contract.DevTenant;
@@ -137,8 +137,38 @@ public abstract class PlenipoHostFixture<TProgram> : IAsyncLifetime
         client.DefaultRequestHeaders.Add("X-Dev-Subject", subject);
         client.DefaultRequestHeaders.Add("X-Dev-Tenant", tenant);
         client.DefaultRequestHeaders.Add("X-Dev-Roles", role);
+        if (displayName is not null)
+        {
+            client.DefaultRequestHeaders.Add("X-Dev-Name", displayName);
+        }
+
         return client;
     }
+
+    /// <summary>A client with no dev-auth headers at all, for tests about the headers themselves.</summary>
+    public HttpClient RawClient() => Factory.CreateClient();
+
+    /// <summary>
+    /// The settings that let the host boot in <c>Production</c> without a reachable identity
+    /// provider: an authority and audience nothing can mint a token for, and a throwaway key ring.
+    /// Override to add what the product's own Production configuration requires.
+    /// </summary>
+    protected virtual IReadOnlyDictionary<string, string?> ProductionSettings => new Dictionary<string, string?>(StringComparer.Ordinal)
+    {
+        ["Auth:Authority"] = "https://login.example.com/00000000-0000-0000-0000-000000000000/v2.0",
+        ["Auth:Audience"] = "api://plenipo-tests",
+        ["DataProtection:KeysPath"] = Path.Combine(Path.GetTempPath(), $"plenipo-dp-{Guid.NewGuid():N}"),
+    };
+
+    /// <summary>A second host in the Production environment over the same database (no dev auth).</summary>
+    public WebApplicationFactory<TProgram> DeriveProduction() => Derive(builder =>
+    {
+        builder.UseEnvironment("Production");
+        foreach (var (key, value) in ProductionSettings)
+        {
+            builder.UseSetting(key, value);
+        }
+    });
 
     /// <summary>A client for the given role in an arbitrary tenant, which must exist (<see cref="EnsureTenantAsync"/>).</summary>
     public HttpClient ClientForTenant(string role, string tenant) => ClientFor(role, tenant);

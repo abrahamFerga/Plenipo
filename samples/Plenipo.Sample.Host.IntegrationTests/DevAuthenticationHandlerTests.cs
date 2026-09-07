@@ -3,6 +3,7 @@ using System.Text.Encodings.Web;
 using Plenipo.AspNetCore.Auth;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -30,9 +31,18 @@ public sealed class DevAuthenticationHandlerTests
     private static async Task<ClaimsPrincipal> AuthenticateAsync(Action<IHeaderDictionary>? setHeaders = null) =>
         await AuthenticateRequestAsync(context => setHeaders?.Invoke(context.Request.Headers));
 
-    private static async Task<ClaimsPrincipal> AuthenticateRequestAsync(Action<HttpContext> configure)
+    private static async Task<ClaimsPrincipal> AuthenticateRequestAsync(
+        Action<HttpContext> configure, string? rolesWhenAbsent = null)
     {
-        var handler = new DevAuthenticationHandler(new SchemeOptionsMonitor(), NullLoggerFactory.Instance, UrlEncoder.Default);
+        // The handler reads Auth:Dev:RolesWhenAbsent from configuration; null leaves it unset.
+        var settings = new Dictionary<string, string?>(StringComparer.Ordinal);
+        if (rolesWhenAbsent is not null)
+        {
+            settings[DevAuthenticationHandler.RolesWhenAbsentKey] = rolesWhenAbsent;
+        }
+
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
+        var handler = new DevAuthenticationHandler(new SchemeOptionsMonitor(), NullLoggerFactory.Instance, UrlEncoder.Default, configuration);
         var context = new DefaultHttpContext();
         configure(context);
         await handler.InitializeAsync(
@@ -52,6 +62,24 @@ public sealed class DevAuthenticationHandlerTests
             context.Request.QueryString = QueryString.Create(
                 query.Select(q => new KeyValuePair<string, string?>(q.Key, q.Value)));
         };
+
+    [Fact]
+    public async Task AbsentRolesHeader_YieldsNoRoles_WhenTheProductSaysAbsenceMeansNone()
+    {
+        // #167: an absent header is what a header-stripping proxy produces; a product must be able to
+        // make it degrade the caller rather than escalate them to system_admin.
+        var principal = await AuthenticateRequestAsync(_ => { }, rolesWhenAbsent: "");
+
+        Assert.Empty(principal.FindAll("roles"));
+    }
+
+    [Fact]
+    public async Task AbsentRolesHeader_YieldsTheConfiguredRoles_WhenTheProductNamesThem()
+    {
+        var principal = await AuthenticateRequestAsync(_ => { }, rolesWhenAbsent: "user, auditor");
+
+        Assert.Equal(["user", "auditor"], principal.FindAll("roles").Select(c => c.Value).ToArray());
+    }
 
     [Fact]
     public async Task ParsesMultipleRoles_TrimmingAndDroppingEmpties()

@@ -89,17 +89,23 @@ release safe for every product at once.
 | S2 | A write tool is parked with `approval_required`; the reply does not claim the write happened | existing |
 | S3 | Approving executes the tool **once, as the requester**, and audits three rows: proposal, decision with a non-null approver, execution success | #153, #88, casewell#74, networthy#151, auditworthy#23, hireworthy#46 |
 | S4 | An approver who lacks the tool's own permission gets 403 and nothing executes | #145, hireworthy#51 |
-| S5 | A pending approval can only be decided from the conversation that produced it | #111 |
+| S5 | A conversation's pending approvals can be listed alone, so a chat never offers another thread's write | #111 |
 | S6 | Rejecting executes nothing and is audited as a rejection | existing |
 | S7 | A permission denial is recorded in the auth audit | #115 |
 | S8 | An ungated tool that refuses to act is not audited as a success | #121, networthy#184 |
-| S9 | Dev-auth: an absent or empty `X-Dev-Roles` yields no roles, never `*` | #167, networthy#227 |
+| S9 | Dev-auth: an empty `X-Dev-Roles` yields no roles; an absent one yields `Auth:Dev:RolesWhenAbsent`, which a product sets to empty so a stripped header can never escalate | #167, networthy#227 |
 | S10 | A connector tool approved by a human executes as the requester too | casewell#89 |
 | S11 | The AG-UI turn streams `RUN_STARTED … CUSTOM(token_usage) … RUN_FINISHED`, no `RUN_ERROR`, and a usage row exists afterwards | existing |
 | S12 | Malformed or absent JSON is a 400, never a 500, on every mapped endpoint | #176, networthy#216 |
 | S13 | `/alive` and `/health` answer 200 with `ASPNETCORE_ENVIRONMENT=Production` | runbook §6 |
 | S14 | A first-touch user is provisioned exactly once under concurrent requests | networthy#215 |
 | S15 | The product's pinned CSP `sha256-` for platform inline HTML matches what the platform serves, or the product pins none | conformance header, `announce-release` |
+
+Status: S1–S7, S9, S11–S14 ship in `PlenipoSpineConformance` (S3 also asserts the `ApprovalDecided`
+event and the disclosure view's requester and resolver; S4a is the approvals-permission gate on its
+own). S10 holds by construction — connector tools release through the same requester scope — and
+has no generic test because the kit cannot assume a connector. S8 waits on #121, which is still
+`needs-human`. S15 waits on #197.
 
 ### 3.3 How a product uses it
 

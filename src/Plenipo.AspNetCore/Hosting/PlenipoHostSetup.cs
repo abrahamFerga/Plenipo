@@ -13,6 +13,7 @@ using Plenipo.AspNetCore.Setup;
 using Plenipo.Infrastructure;
 using Plenipo.Infrastructure.Channels;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.DataProtection;
 using StackExchange.Redis;
@@ -134,7 +135,16 @@ public static class PlenipoHostSetup
     /// </summary>
     public static WebApplication UsePlenipoPlatform(this WebApplication app)
     {
-        app.UseExceptionHandler();
+        // A request the framework could not read — no body, unparseable JSON — is the client's mistake,
+        // and ASP.NET says so with a BadHttpRequestException that carries 400. The parameterless handler
+        // discarded that status and answered 500 for every product on the platform (#176); the status
+        // the exception nominated is honoured, and everything else is still a server fault.
+        app.UseExceptionHandler(new ExceptionHandlerOptions
+        {
+            StatusCodeSelector = exception => exception is BadHttpRequestException badRequest
+                ? badRequest.StatusCode
+                : StatusCodes.Status500InternalServerError,
+        });
         app.UseStatusCodePages();
 
         app.Use(async (context, next) =>

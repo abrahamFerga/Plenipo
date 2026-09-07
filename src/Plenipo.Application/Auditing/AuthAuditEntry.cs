@@ -69,6 +69,14 @@ public enum AuthAuditEventType
 
     /// <summary>TOTP was removed from a local credential (by the user or an admin reset).</summary>
     LocalMfaDisabled = 23,
+
+    /// <summary>
+    /// A human approved or rejected a parked side-effecting tool call. The actor is the resolver;
+    /// <see cref="AuthAuditEntry.Detail"/> names the tool, the requester, the approval id and the
+    /// outcome — the append-only half of "who released this write", alongside the pending-approval
+    /// row the disclosure view reads.
+    /// </summary>
+    ApprovalDecided = 24,
 }
 
 /// <summary>Append-only record of an identity / authorization event.</summary>

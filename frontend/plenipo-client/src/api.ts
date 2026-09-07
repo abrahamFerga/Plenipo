@@ -1118,7 +1118,17 @@ export const api = {
 
   // Human-in-the-loop: side-effecting tool calls the agent was blocked from auto-running.
   approvals: {
-    list: () => apiGet<PendingApproval[]>("/api/chat/approvals"),
+    /**
+     * Pending approvals the caller may decide. Pass a conversation id to get only that conversation's
+     * — the chat surface must never offer a write from another thread — or nothing for the tenant-wide
+     * review queue.
+     */
+    list: (conversationId?: string) =>
+      apiGet<PendingApproval[]>(
+        conversationId
+          ? `/api/chat/approvals?conversationId=${encodeURIComponent(conversationId)}`
+          : "/api/chat/approvals",
+      ),
     approve: (id: string) => apiPost<ApprovalResolution>(`/api/chat/approvals/${id}/approve`, undefined),
     reject: (id: string) => apiPost<ApprovalResolution>(`/api/chat/approvals/${id}/reject`, undefined),
   },

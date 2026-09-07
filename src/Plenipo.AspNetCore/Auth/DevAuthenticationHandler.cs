@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 
 namespace Plenipo.AspNetCore.Auth;
@@ -13,9 +14,19 @@ namespace Plenipo.AspNetCore.Auth;
 public sealed class DevAuthenticationHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options,
     ILoggerFactory logger,
-    UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+    UrlEncoder encoder,
+    IConfiguration configuration) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
     public const string SchemeName = "Dev";
+
+    /// <summary>
+    /// The roles an ABSENT <c>X-Dev-Roles</c> header asserts. Unset: <c>system_admin</c>, the
+    /// development convenience that makes a fresh clone fully operable with no headers at all. A
+    /// product sets it to an empty string so that absence means <em>no roles</em> — because an absent
+    /// header is exactly what a header-stripping proxy produces, and a proxy must be able to degrade a
+    /// caller, never escalate one (#167). A present-but-empty header always means no roles.
+    /// </summary>
+    public const string RolesWhenAbsentKey = "Auth:Dev:RolesWhenAbsent";
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
@@ -23,17 +34,18 @@ public sealed class DevAuthenticationHandler(
         var email = Value("X-Dev-Email", "dev@plenipo.local");
         var name = Value("X-Dev-Name", "Dev User");
         var tenant = Value("X-Dev-Tenant", "dev");
-        // Roles: an ABSENT value defaults to system_admin (dev convenience); a PRESENT-but-empty
-        // one is an explicitly role-less token — how a real IdP presents an unscoped principal
-        // (exercises the Auth:DefaultRole JIT path). The query fallback must preserve that
-        // asymmetry: collapsing the two would hand system_admin to a caller who asked for nothing.
+        // Roles: an ABSENT value defaults to Auth:Dev:RolesWhenAbsent (system_admin unless the product
+        // says otherwise); a PRESENT-but-empty one is an explicitly role-less token — how a real IdP
+        // presents an unscoped principal (exercises the Auth:DefaultRole JIT path). The query fallback
+        // must preserve that asymmetry: collapsing the two would hand system_admin to a caller who
+        // asked for nothing.
         var rawRoles = Request.Headers.TryGetValue("X-Dev-Roles", out var rolesHeader)
             ? rolesHeader.ToString()
             : IsHubPath && Request.Query.TryGetValue("X-Dev-Roles", out var rolesQuery)
                 ? rolesQuery.ToString()
                 : null;
         var roles = rawRoles is null
-            ? ["system_admin"]
+            ? RolesWhenAbsent()
             : rawRoles.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         var claims = new List<Claim>
@@ -49,6 +61,14 @@ public sealed class DevAuthenticationHandler(
         var identity = new ClaimsIdentity(claims, SchemeName, "name", "roles");
         var ticket = new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName);
         return Task.FromResult(AuthenticateResult.Success(ticket));
+    }
+
+    private string[] RolesWhenAbsent()
+    {
+        var configured = configuration[RolesWhenAbsentKey];
+        return configured is null
+            ? ["system_admin"]
+            : configured.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 
     /// <summary>

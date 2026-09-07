@@ -1,5 +1,6 @@
 using Plenipo.Application.Agents;
 using Plenipo.Application.Approvals;
+using Plenipo.Application.Auditing;
 using Plenipo.Application.Authorization;
 using Plenipo.Application.Connectors;
 using Plenipo.Core.Identity;
@@ -13,7 +14,7 @@ namespace Plenipo.AspNetCore.Endpoints;
 /// The human-in-the-loop approval surface. When the agent tries to call a side-effecting tool it is
 /// blocked and recorded as a pending approval (see <c>ToolInvocationMiddleware</c>). These endpoints let
 /// an authorized human review the pending action, then either approve it — which re-executes that exact
-/// tool call with its recorded arguments — or reject it.
+/// tool call with its recorded arguments, as the requester — or reject it.
 /// </summary>
 public static class ApprovalEndpoints
 {
@@ -21,14 +22,18 @@ public static class ApprovalEndpoints
     {
         var group = app.MapGroup("/api/chat/approvals").WithTags("Approvals").RequireAuthorization();
 
+        // conversationId narrows the queue to one conversation (#111): "approve this" is informed
+        // consent only when the caller can see what asked for it. Absent, this is the tenant-wide
+        // review queue the admin surface renders.
         group.MapGet("/", async (
+                Guid? conversationId,
                 IApprovalStore store,
                 IToolRegistry toolRegistry,
                 IConnectorToolCatalog connectorTools,
                 IServiceProvider services,
                 CancellationToken ct) =>
             {
-                var pending = await store.ListPendingAsync(ct);
+                var pending = await store.ListPendingAsync(conversationId, ct);
                 // Each item is enriched from its DECLARING tool (risk tier + human description) at
                 // read time — the declaration is the living source of truth, so a re-tiered tool
                 // renders at its current risk without a data migration. An unresolvable tool
@@ -54,9 +59,41 @@ public static class ApprovalEndpoints
             .WithName("Approvals_ListPending");
 
         group.MapPost("/{id:guid}/approve", async (
-                Guid id, IApprovalStore store, ApprovalExecutor executor, ApprovalResolutionAnnouncer announcer,
-                ICurrentUser current, IServiceProvider services, CancellationToken ct) =>
+                Guid id, HttpContext http, IApprovalStore store, ApprovalExecutor executor, ApprovalRelease release,
+                ApprovalResolutionAnnouncer announcer, IAuditLog auditLog, ICurrentUser current,
+                IServiceProvider services, CancellationToken ct) =>
             {
+                var parked = await store.GetAsync(id, ct);
+                if (parked is null || parked.Status != ApprovalStatus.Pending)
+                {
+                    return Results.NotFound();
+                }
+
+                // The approvals permission opens the queue; it does not grant the tool (#145). The
+                // permission that gated the tool when it was proposed gates it again at release, so
+                // the queue is never a way to perform an action the role model withholds. Refused
+                // before the claim, so the action stays pending for someone who may release it.
+                var tool = await executor.ResolveToolAsync(parked, services, ct);
+                if (tool is not null && !current.HasPermission(tool.Permission))
+                {
+                    var detail = $"POST /api/chat/approvals/{id}/approve requires {tool.Permission} to release " +
+                                 $"'{tool.Name}' ({parked.ModuleId}); the caller holds {Permissions.ManageApprovals} only";
+                    await auditLog.RecordAuthEventAsync(new AuthAuditEntry
+                    {
+                        TenantId = current.TenantId,
+                        UserId = current.UserId,
+                        Subject = current.Subject,
+                        UserDisplay = current.DisplayName,
+                        EventType = AuthAuditEventType.AccessDenied,
+                        Detail = detail,
+                        IpAddress = IpOf(http),
+                    }, ct);
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status403Forbidden,
+                        title: "Releasing this action needs the tool's own permission.",
+                        detail: detail);
+                }
+
                 var pending = await store.TryBeginExecutionAsync(
                     id, current.UserId, current.DisplayName, ct);
                 if (pending is null)
@@ -64,7 +101,9 @@ public static class ApprovalEndpoints
                     return Results.NotFound();
                 }
 
-                var outcome = await executor.ExecuteAsync(pending, services, ct);
+                // Runs as the REQUESTER (identity + snapshotted authority), never as the approver, and
+                // audits both the execution and the decision (#153, #88).
+                var outcome = await release.ExecuteAsRequesterAsync(pending, current, IpOf(http), ct);
                 // The resolver's identity is part of the oversight record — "approved by whom" is
                 // exactly what the ADMT disclosure view (DisclosureEndpoints) has to answer.
                 var status = outcome.Success ? ApprovalStatus.Executed : ApprovalStatus.Failed;
@@ -84,8 +123,8 @@ public static class ApprovalEndpoints
             .WithName("Approvals_Approve");
 
         group.MapPost("/{id:guid}/reject", async (
-                Guid id, IApprovalStore store, ApprovalResolutionAnnouncer announcer,
-                ICurrentUser current, CancellationToken ct) =>
+                Guid id, HttpContext http, IApprovalStore store, ApprovalResolutionAnnouncer announcer,
+                IAuditLog auditLog, ICurrentUser current, CancellationToken ct) =>
             {
                 // Fetched before the atomic reject so the announcement has the tool/conversation
                 // context; the reject itself still decides who won a race.
@@ -99,6 +138,19 @@ public static class ApprovalEndpoints
                 string? note = null;
                 if (pending is not null)
                 {
+                    // A "no" is a decision too, and belongs on the append-only trail next to the "yes".
+                    await auditLog.RecordAuthEventAsync(new AuthAuditEntry
+                    {
+                        TenantId = current.TenantId,
+                        UserId = current.UserId,
+                        Subject = current.Subject,
+                        UserDisplay = current.DisplayName,
+                        EventType = AuthAuditEventType.ApprovalDecided,
+                        Detail = $"rejected {pending.ToolName} ({pending.ModuleId}) requested by " +
+                                 $"{pending.UserDisplay ?? pending.RequesterSubject ?? "an unknown user"}; approval {pending.Id}",
+                        IpAddress = IpOf(http),
+                    }, ct);
+
                     note = await announcer.AnnounceAsync(
                         pending, ApprovalStatus.Rejected, result: null, error: null,
                         current.UserId, current.DisplayName, ct);
@@ -109,6 +161,8 @@ public static class ApprovalEndpoints
             .RequireAuthorization(PermissionRequirement.PolicyName(Permissions.ManageApprovals))
             .WithName("Approvals_Reject");
     }
+
+    private static string? IpOf(HttpContext http) => http.Connection.RemoteIpAddress?.ToString();
 
     private static ApprovalDto ToDto(PendingApproval p, ModuleTool? tool) =>
         new(

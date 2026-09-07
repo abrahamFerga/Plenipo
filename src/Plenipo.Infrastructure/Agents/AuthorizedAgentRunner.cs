@@ -524,6 +524,10 @@ public sealed class AuthorizedAgentRunner(
                 ModuleId = request.ModuleId,
                 ToolName = blocked.ToolName,
                 ArgumentsJson = blocked.ArgumentsJson,
+                // Captured so the release runs AS THIS USER with THIS authority (ApprovalRelease),
+                // not as whoever later clicks approve.
+                RequesterSubject = currentUser.Subject,
+                PermissionsSnapshotJson = JsonSerializer.Serialize(currentUser.Permissions),
             };
             await approvalStore.RecordPendingAsync(pending, cancellationToken);
 

@@ -10,6 +10,19 @@ public interface IApprovalStore
     /// <summary>Pending approvals for the current tenant, newest first.</summary>
     public Task<IReadOnlyList<PendingApproval>> ListPendingAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Pending approvals for the current tenant, newest first, narrowed to one conversation when
+    /// <paramref name="conversationId"/> is given. "Approve this" is informed consent only when the
+    /// caller can see what asked for it, so a chat surface lists its own conversation's approvals;
+    /// the tenant-wide review queue passes null. Implementations should push the filter into the
+    /// query; the default narrows the unscoped list.
+    /// </summary>
+    public async Task<IReadOnlyList<PendingApproval>> ListPendingAsync(Guid? conversationId, CancellationToken cancellationToken = default)
+    {
+        var pending = await ListPendingAsync(cancellationToken);
+        return conversationId is { } id ? pending.Where(p => p.ConversationId == id).ToList() : pending;
+    }
+
     public Task<PendingApproval?> GetAsync(Guid id, CancellationToken cancellationToken = default);
 
     /// <summary>Atomically transitions one pending action to executing. Only one caller can win.</summary>
