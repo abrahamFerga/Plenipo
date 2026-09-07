@@ -15,7 +15,7 @@ Between 2026-08-13 and 2026-09-07 the fleet stopped merging. None of it was a do
 
 | What happened | Root cause | Class of failure |
 |---|---|---|
-| Platform CI red on every PR for 3+ weeks; nothing merged to `main` after #171 | Testcontainers 3.10 → SSH.NET 2023.0.0 hit GHSA-q939-rpr3-3284; `TreatWarningsAsErrors` turned NU1903 into a restore failure. The fix (#174) was green and unmerged. | One transitive advisory in a **test-only** dependency froze the fleet |
+| Platform CI red on every PR from 2026-08-13 to 2026-09-07; nothing merged to `main` in between | Testcontainers 3.10 → SSH.NET 2023.0.0 hit GHSA-q939-rpr3-3284; `TreatWarningsAsErrors` turned NU1903 into a restore failure. The fix (#174) sat green and unmerged for three weeks. | One transitive advisory in a **test-only** dependency froze the fleet |
 | hireworthy `main` red for the same advisory (SSH.NET 2024.2.0) | Each product pins its own Testcontainers in its own copy of the fixture | The same fix has to be made N+1 times |
 | Consumer conformance red on every platform dependency bump | The platform raised the `Microsoft.Extensions.AI` floor to 10.9.0; networthy pins 10.8.3 directly → NU1605 | A **dependency-floor raise** is a breaking change nobody classifies |
 | `consumers_green` red for every `src/**` PR since 2026-07-29 (#140) | `LinkTemplate` shipped to `main`, never to a tag; conformance tests consumers against unreleased `main`, so the consumer cannot act | **52 unreleased commits** since alpha.28, with breaking API changes |
@@ -276,7 +276,7 @@ In order. Each item names its owner and the check that proves it landed.
 
 | # | Item | Owner | Tracked | Done when |
 |---|---|---|---|---|
-| 1 | Merge the restore unblocker (#174, or the Testcontainers ≥ 4.15 bump that ships with the kit and pulls the first patched SSH.NET) | platform, human merge | #173 | `ci.yml` green on a `src/**` PR |
+| 1 | Merge the restore unblocker — done: #174 merged 2026-09-07; the kit's Testcontainers ≥ 4.15 bump then retires the pin by pulling the first patched SSH.NET | platform, human merge | #173 | `ci.yml` green on a `src/**` PR |
 | 2 | Cut `v0.1.0-alpha.29` from `main` with migration notes for the three breaking changes in the changelog; run `announce-release` | platform, human tag | #189 | every consumer has an upgrade issue |
 | 3 | Continuous prerelease on merge to `main` (§4.2) | platform | #190 | a merge produces a numbered package on the feed within 15 minutes |
 | 4 | `Plenipo.Testing` v1: fixture, parser, eval runner, manifest and tenancy conformance, the first five spine invariants, the eval-case targets | platform | #191 | the sample host's suite runs on it; `eng/verify-packaging.sh` compiles a consumer against it |
