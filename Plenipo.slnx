@@ -24,6 +24,7 @@
     <Project Path="src/Plenipo.Infrastructure/Plenipo.Infrastructure.csproj" />
     <Project Path="src/Plenipo.AspNetCore/Plenipo.AspNetCore.csproj" />
     <Project Path="src/Plenipo.ServiceDefaults/Plenipo.ServiceDefaults.csproj" />
+    <Project Path="src/Plenipo.Testing/Plenipo.Testing.csproj" />
     <Project Path="src/Plenipo.Api/Plenipo.Api.csproj" />
     <Project Path="src/Plenipo.Cli/Plenipo.Cli.csproj" />
     <Project Path="src/Plenipo.AppHost/Plenipo.AppHost.csproj" />

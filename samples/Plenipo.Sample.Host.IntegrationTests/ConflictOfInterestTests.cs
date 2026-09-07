@@ -66,12 +66,12 @@ public sealed class ConflictOfInterestTests(IntegrationFixture fixture)
         Assert.Contains("CONFLICT CHECK CLEAR", clearRun.AssistantText, StringComparison.Ordinal);
     }
 
-    private static async Task<Evals.EvalRun> ChatAsync(HttpClient client, string message)
+    private static async Task<EvalRun> ChatAsync(HttpClient client, string message)
     {
         using var chat = await client.PostAsJsonAsync("/api/agui/legal",
             new { messages = new[] { new { id = "m1", role = "user", content = message } } });
         chat.EnsureSuccessStatusCode();
-        var run = Evals.EvalRun.Parse(await chat.Content.ReadAsStringAsync());
+        var run = EvalRun.Parse(await chat.Content.ReadAsStringAsync());
         Assert.DoesNotContain("RUN_ERROR", run.EventTypes);
         return run;
     }

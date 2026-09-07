@@ -90,5 +90,58 @@ EOF
 echo "==> Building a throwaway consumer module against the packed packages"
 dotnet build "$(to_native "$CONSUMER/Consumer.csproj")" -c Release
 
+# The conformance kit is a package too, and the one a product's test project consumes. A fresh
+# test project deriving the four kit classes must compile against Plenipo.Testing alone — its
+# transitive test dependencies (xunit, Mvc.Testing, Testcontainers) included. Compile-only: the
+# fixture needs a real host and Docker to run, which the samples suite proves.
+KIT="$WORK/kit-consumer"
+mkdir -p "$KIT"
+cp "$CONSUMER/nuget.config" "$KIT/nuget.config"
+
+cat > "$KIT/KitConsumer.csproj" <<EOF
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Plenipo.Testing" Version="$VERSION" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+</Project>
+EOF
+
+cat > "$KIT/Conformance.cs" <<'EOF'
+using Plenipo.Testing;
+using Plenipo.Testing.Conformance;
+using Plenipo.Testing.Evals;
+using Xunit;
+
+namespace KitConsumer;
+
+// A product host's entry point stands in here; the kit only needs the type at compile time.
+public sealed class Program;
+
+public sealed class Fixture : PlenipoHostFixture<Program>
+{
+    public override ProductContract Contract { get; } = new(
+        ModuleId: "demo", ReadTool: "list_things", WriteTool: "record_thing",
+        ReadEndpoints: ["/api/demo/things"]);
+}
+
+[CollectionDefinition("api")] public sealed class ApiCollection : ICollectionFixture<Fixture>;
+
+[Collection("api")] public sealed class Spine(Fixture f) : PlenipoSpineConformance<Program>(f);
+[Collection("api")] public sealed class Manifest(Fixture f) : PlenipoManifestConformance<Program>(f);
+[Collection("api")] public sealed class Tenancy(Fixture f) : PlenipoTenancyConformance<Program>(f);
+[Collection("api")] public sealed class Evals(Fixture f) : PlenipoGoldenEvals<Program>(f);
+EOF
+
+echo "==> Building a throwaway test project against the packed Plenipo.Testing kit"
+dotnet build "$(to_native "$KIT/KitConsumer.csproj")" -c Release
+
 echo ""
-echo "OK — Plenipo packs cleanly and a fresh module project consumes the packages."
+echo "OK — Plenipo packs cleanly, a fresh module project consumes the packages, and a fresh test project consumes the conformance kit."

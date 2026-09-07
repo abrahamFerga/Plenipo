@@ -16,6 +16,8 @@ ship it. It unifies the patterns proven in two earlier apps — **NutriForge** (
 > [**docs/CONFIGURATION.md**](docs/CONFIGURATION.md) is the single answer to "how is this configured,
 > by whom, and where do secrets (API keys) go" — including the `plenipo init` wizard.
 > [**docs/TESTING.md**](docs/TESTING.md) is how the base platform itself is run and tested.
+> [**docs/TESTING_CONTRACT.md**](docs/TESTING_CONTRACT.md) is the fleet testing contract — what every
+> product must implement and run, and what the platform owes it so a release cannot break a product unseen.
 > [**docs/GITHUB_SETUP.md**](docs/GITHUB_SETUP.md) is how to set up the GitHub side of a repo built on
 > this base — branch protection, merge gates, labels, the board, secrets, and which skill runs each step.
 
@@ -74,6 +76,7 @@ Plenipo.slnx                          # the base platform (publishable)
     ├── Plenipo.Infrastructure/       # EF Core, audit interceptor, RBAC, AI providers (+ Mock), the agent runner
     ├── Plenipo.AspNetCore/           # Host integration: auth, middleware, SignalR + Redis, AG-UI, platform/chat/admin endpoints
     ├── Plenipo.ServiceDefaults/      # Aspire: OpenTelemetry, health checks, resilience
+    ├── Plenipo.Testing/              # Conformance kit: the host fixture, AG-UI parser, eval runner, spine/manifest/tenancy invariants
     ├── Plenipo.Api/                  # Minimal runnable host — a thin shell with NO domain modules
     └── Plenipo.AppHost/              # Aspire orchestration for the bare platform
 tests/                               # Plenipo.Application.Tests, Plenipo.Infrastructure.Tests

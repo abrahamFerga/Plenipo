@@ -130,6 +130,33 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
 
 ### Added
 
+- **`Plenipo.Testing` — the platform publishes its tests, the products execute them.** Every product
+  on the fleet carried a private copy of the sample suite's integration fixture, AG-UI stream parser
+  and golden-eval runner (under three different class names across four repos), so a harness fix
+  reached nobody, an advisory in the fixture's Testcontainers pin had to be fixed once per repo, and
+  a platform invariant proven in one product's suite protected only that product. The new package
+  ships them once, versioned with the family: `PlenipoHostFixture<TProgram>` (Testcontainers
+  pgvector, dev-auth clients per role and tenant, a second-tenant helper, the bypass-everything
+  `AuthorizedScopeAsync()`), `AgUiRun.Parse` and `HttpClient.ChatAsync`, `PlenipoGoldenEvals<TProgram>`
+  over `Evals/cases/*.json` (copied to the output by the package's `buildTransitive` targets), and
+  three conformance packs a product derives in one line each — `PlenipoSpineConformance` (a narrow
+  role never reaches the write tool; a write is parked, not performed; only the approvals permission
+  decides; approve and reject leave the queue; a plain turn completes the AG-UI lifecycle and is
+  metered), `PlenipoManifestConformance` (manifest ↔ tool source agree on name, permission string
+  and approval flag; permissions follow `Permissions.ForTool`; the security catalog lists every
+  tool), and `PlenipoTenancyConformance` (reflection over every registered `DbContext`: each
+  `ITenantOwned` entity has a query filter; a second tenant sees nothing on the data tabs, the
+  declared read routes, or the audit log). A product supplies a `ProductContract` — module id, one
+  read tool, one approval-gated write tool, optional roles and routes — and gets the invariants;
+  upgrading `PlenipoVersion` upgrades the yardstick. The sample host's suite now runs on the kit
+  (the platform is its first consumer) and `eng/verify-packaging.sh` compiles a fresh test project
+  against the packed package. The contract behind it, the full invariant list and the roadmap:
+  [docs/TESTING_CONTRACT.md](docs/TESTING_CONTRACT.md).
+
+  Alongside: `Testcontainers.PostgreSql` moves from 3.10 to 4.15, which pulls the first patched
+  SSH.NET (GHSA-q939-rpr3-3284) and ends the NU1903 restore failure that had blocked every pull
+  request since 2026-08-13 (#173); products get the same floor transitively through the kit.
+
 - **Built-in sign-in: `Auth:Mode=Local` makes the host its own OpenID Connect issuer (ADR 0003).**
   On-prem and mini-PC deployments were left choosing between standing up Entra External ID — the
   single biggest install-time cliff — or bundling a Keycloak-class sidecar that duplicates the

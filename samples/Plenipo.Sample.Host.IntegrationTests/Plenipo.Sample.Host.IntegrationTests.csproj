@@ -7,15 +7,17 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
-    <PackageReference Include="Testcontainers.PostgreSql" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Plenipo.Sample.Host\Plenipo.Sample.Host.csproj" />
+    <!-- The platform is the kit's first consumer: the fixture, the AG-UI parser, the eval runner
+         and the conformance classes come from Plenipo.Testing, exactly as a product gets them.
+         (A ProjectReference does not import the package's buildTransitive targets, hence the
+         explicit eval-case item below; a product on the package needs no such item.) -->
+    <ProjectReference Include="..\..\src\Plenipo.Testing\Plenipo.Testing.csproj" />
   </ItemGroup>
 
   <ItemGroup Label="Golden-conversation eval cases (data, not code)">

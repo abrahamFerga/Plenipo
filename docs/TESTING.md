@@ -56,6 +56,13 @@ dotnet test samples/Plenipo.Samples.slnx    # requires Docker (Testcontainers)
 When you add a platform capability, add its integration test here — a module-shaped consumer is
 the test fixture, which is exactly the guarantee downstream verticals need.
 
+The fixture itself, the AG-UI stream parser (`EvalRun` is an alias for `AgUiRun`), the eval runner
+and the three conformance packs the suite runs against the finance module come from
+`src/Plenipo.Testing` — the same package a product's test project references. The platform is the
+kit's first consumer: a kit change that cannot pass here never ships. When a platform request is
+accepted, its acceptance test is added to the kit's `PlenipoSpineConformance`, not to this suite,
+so every product inherits it on upgrade.
+
 Two things only this layer can prove, both worth knowing about:
 
 - **Behaviour that only exists on a relational provider.** The role-storage conversion claims each tenant
@@ -89,10 +96,15 @@ CI verifies the "base, not fork" promise itself on every run:
 
 ## What a downstream vertical inherits
 
-A product repo (e.g. the-lawyer) repeats only the thin top of this pyramid: its own module tests
-plus a small integration suite over *its* host. The platform behaviours (security spine, budgets,
-audit, sessions) are already defended here, in the base repo — that's why base-level testing is a
-requirement, not a convenience.
+A product repo repeats only the thin top of this pyramid: its own module tests plus a small
+integration suite over *its* host. The platform behaviours (security spine, budgets, audit,
+sessions) are defended here, in the base repo — and, per the fleet contract, they are also
+**shipped to every product as executable tests** in the `Plenipo.Testing` package, so a product
+runs the platform's invariants against its own host on every PR instead of copying this repo's
+fixture. What a product must implement and run, what the platform owes it on every PR and every
+release, and the order in which the missing pieces get built is
+[**TESTING_CONTRACT.md**](TESTING_CONTRACT.md). When this file and the contract disagree, the
+contract wins.
 
 ## Quick matrix
 

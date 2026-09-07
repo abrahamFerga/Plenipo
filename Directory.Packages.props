@@ -88,13 +88,13 @@
   <ItemGroup Label="Testing">
     <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.10" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.10" />
-    <PackageVersion Include="Testcontainers.PostgreSql" Version="3.10.0" />
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.15.0" />
     <!-- Pin the (transitive) SSH.NET past GHSA-q939-rpr3-3284 (ScpClient recursive download writes
          arbitrary files from server-controlled SCP filenames; affects <= 2025.1.0). Testcontainers
-         3.10.0 pulls the vulnerable 2023.0.0 and fails the NuGet audit as warnings-as-errors.
-         Upgrading Testcontainers is NOT a fix: 4.13.0, the newest release, still depends on
-         2025.1.0, which the same advisory covers. 2026.0.0 is the first patched version.
-         Testcontainers uses SSH.NET only for host-port forwarding, which no Plenipo test enables. -->
+         4.15.0 already depends on 2026.0.0, the first patched version; the pin stays as the floor so a
+         later Testcontainers downgrade or a second transitive path cannot reintroduce it. Products
+         inherit the floor through Plenipo.Testing. Testcontainers uses SSH.NET only for host-port
+         forwarding, which no Plenipo test enables. -->
     <PackageVersion Include="SSH.NET" Version="2026.0.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageVersion Include="xunit" Version="2.9.3" />
