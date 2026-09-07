@@ -150,7 +150,7 @@ it separately as "shims this candidate retires".
 |---|---|---|
 | `ci.yml` — build, unit, in-process, integration, evals, image scan, packaging, frontend | exists | unchanged |
 | Deterministic PR gates (`pr-gates.mjs`): `Closes #N`, runtime evidence, red-before-green | exists | add the spine paths to `PATH_RULES` and scan additions as well as removals (#137) |
-| **Package validation against the last release** | missing | `EnablePackageValidation` + `PackageValidationBaselineVersion` = last tag on every packable project. A removed or changed public member fails the build unless a suppression file names it. This is the L1 breaking-change detector the fleet has been doing by hand |
+| **Package validation against the last release** | since #193 | `EnablePackageValidation` + `PackageValidationBaselineVersion` = last tag on every packable project (`Directory.Build.targets`; the baseline comes from the release's assets via `eng/fetch-baseline.sh`). A removed or changed public member fails `dotnet pack` unless the project's `CompatibilitySuppressions.xml` names it — that file is reviewed like code and is the exact breaking list `announce-release` writes migration notes from. Bump the baseline as part of every release |
 | **Dependency-floor diff** | missing | conformance job diffs the RC's transitive floors against the last release's and posts the raised ones; a raised floor is classified **breaking** by `announce-release` |
 | Consumer conformance | exists, `src/**` only | trigger on `frontend/**` too and run the consumer's frontend rungs (#128); post the retired-shim list as an annotation |
 | Frontend | exists | add a CSP check: load the built shell under the platform's real CSP header and assert zero `securitypolicyviolation` events |

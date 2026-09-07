@@ -91,8 +91,14 @@ Add a case whenever a behaviour matters enough to defend. See [EVALS.md](EVALS.m
 CI verifies the "base, not fork" promise itself on every run:
 
 - `eng/verify-packaging.sh` — packs the NuGet family and builds a throwaway module against the
-  produced packages.
+  produced packages, and a throwaway test project against the `Plenipo.Testing` kit.
 - `eng/verify-frontend-packaging.sh` — type-checks a consumer against the built `@plenipo/ui`.
+- **Package validation** — every pack compares each package's public surface against the last
+  published release (`PackageValidationBaselineVersion` in `Directory.Build.targets`, restored from
+  the release's assets by `eng/fetch-baseline.sh`). A removed or changed public member fails the
+  build until the project's `CompatibilitySuppressions.xml` names it, so a breaking change is a
+  reviewed diff rather than a surprise in a consumer. Without the baseline folder (a plain clone)
+  validation is skipped; CI fetches it before restore.
 
 ## What a downstream vertical inherits
 

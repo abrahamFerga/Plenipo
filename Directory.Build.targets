@@ -14,4 +14,28 @@
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
 
+  <!--
+    Package validation (docs/TESTING_CONTRACT.md §4.1, #193): when a packable project is packed, its
+    public surface is compared against the LAST PUBLISHED RELEASE, so a removed or changed public
+    member fails the build until the CompatibilitySuppressions.xml next to the project names it —
+    and that file is then the reviewed, exact list of what the next release breaks, which
+    announce-release turns into migration notes. Bump PackageValidationBaselineVersion as part of
+    every release.
+
+    The baseline is restored from artifacts/baseline-feed, which eng/fetch-baseline.sh fills from
+    the release's assets (the platform's primary, credential-free package channel). When the folder
+    is absent — a plain clone — validation is skipped so the build still works; ci.yml fetches it
+    before restore so every pull request is validated. Set PlenipoPackageValidation=false to skip
+    it deliberately with the folder present.
+  -->
+  <PropertyGroup Condition="'$(IsPackable)' == 'true'">
+    <PlenipoBaselineFeed>$(MSBuildThisFileDirectory)artifacts/baseline-feed</PlenipoBaselineFeed>
+    <PackageValidationBaselineVersion>0.1.0-alpha.28</PackageValidationBaselineVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(IsPackable)' == 'true' and Exists('$(PlenipoBaselineFeed)') and '$(PlenipoPackageValidation)' != 'false'">
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <RestoreAdditionalProjectSources>$(RestoreAdditionalProjectSources);$(PlenipoBaselineFeed)</RestoreAdditionalProjectSources>
+  </PropertyGroup>
+
 </Project>

@@ -163,6 +163,24 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   resolver, the tool, the requester, the approval id and the outcome, so "who released this write" is
   answerable from the append-only trail and not only from the pending-approval row the disclosure
   view reads (hireworthy#46).
+- **Package validation: a public-surface break now fails the pull request, not a consumer.** Every
+  packable project is compared against the last published release when it is packed
+  (`EnablePackageValidation`, baseline `0.1.0-alpha.28` in `Directory.Build.targets`, restored from
+  the release's assets by `eng/fetch-baseline.sh`, which CI runs before restore). A removed or
+  changed public member fails `dotnet pack` until the project's `CompatibilitySuppressions.xml`
+  names it — the reviewed, exact list the release notes are written from. Running it for the first
+  time found **31 breaks since alpha.28**, of which the changelog had named three:
+  `IRagService` (three signatures changed, `ListCollectionsAsync` added) and `RagService` to match,
+  `RagHit` and `RagIngestArgs` positional records, `IConnectorSyncHandler.OnFilesSyncedAsync`,
+  `IAuditLog.RecordAgentRunAsync` added to the interface, `RolePermissionResolution.PermissionsForRoles`
+  (two overloads), `ProvisionTenantCommand`, `ConnectorSyncFile`, `RagTools.SearchKnowledge`,
+  `TextChunker.Chunk`, `DatabaseInitializer.EnsureRolePermissionsSeededAsync`, and the public
+  constructors of `AuthorizedAgentRunner`, `ToolInvocationMiddleware`, `TenantAiSettingsResolver`,
+  `ApprovalNotifier` and `RagService`. All are suppressed as the alpha.29 baseline and listed here so
+  a product upgrading from alpha.28 knows what to expect; from now on each new one arrives with its
+  own suppression and migration note in the PR that makes it. `Plenipo.Testing` is exempt until it
+  has a released baseline. See [CONTRIBUTING.md](CONTRIBUTING.md) and
+  [docs/TESTING_CONTRACT.md §4.1](docs/TESTING_CONTRACT.md).
 
 - **`Plenipo.Testing` — the platform publishes its tests, the products execute them.** Every product
   on the fleet carried a private copy of the sample suite's integration fixture, AG-UI stream parser
