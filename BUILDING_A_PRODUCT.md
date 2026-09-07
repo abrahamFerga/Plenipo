@@ -62,8 +62,9 @@ app.Run();
 - **Tenant isolation by construction**: your entities implement `ITenantOwned` and inherit the
   global query filter; background code sets tenant ids explicitly.
 - **Keyless by default**: everything above is testable with the Mock provider, the fake IdP,
-  and recording seams — a product's CI needs no external accounts. Copy the patterns in
-  `samples/Plenipo.Sample.Host.IntegrationTests`.
+  and recording seams — a product's CI needs no external accounts. Don't copy the platform's
+  fixture: reference the `Plenipo.Testing` kit and run its invariants against your host, as
+  [docs/TESTING_CONTRACT.md](docs/TESTING_CONTRACT.md) specifies.
 
 ## Shipping the web UI (no npm registry needed)
 

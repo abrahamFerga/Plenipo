@@ -89,10 +89,15 @@ CI verifies the "base, not fork" promise itself on every run:
 
 ## What a downstream vertical inherits
 
-A product repo (e.g. the-lawyer) repeats only the thin top of this pyramid: its own module tests
-plus a small integration suite over *its* host. The platform behaviours (security spine, budgets,
-audit, sessions) are already defended here, in the base repo — that's why base-level testing is a
-requirement, not a convenience.
+A product repo repeats only the thin top of this pyramid: its own module tests plus a small
+integration suite over *its* host. The platform behaviours (security spine, budgets, audit,
+sessions) are defended here, in the base repo — and, per the fleet contract, they are also
+**shipped to every product as executable tests** in the `Plenipo.Testing` package, so a product
+runs the platform's invariants against its own host on every PR instead of copying this repo's
+fixture. What a product must implement and run, what the platform owes it on every PR and every
+release, and the order in which the missing pieces get built is
+[**TESTING_CONTRACT.md**](TESTING_CONTRACT.md). When this file and the contract disagree, the
+contract wins.
 
 ## Quick matrix
 

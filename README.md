@@ -16,6 +16,8 @@ ship it. It unifies the patterns proven in two earlier apps — **NutriForge** (
 > [**docs/CONFIGURATION.md**](docs/CONFIGURATION.md) is the single answer to "how is this configured,
 > by whom, and where do secrets (API keys) go" — including the `plenipo init` wizard.
 > [**docs/TESTING.md**](docs/TESTING.md) is how the base platform itself is run and tested.
+> [**docs/TESTING_CONTRACT.md**](docs/TESTING_CONTRACT.md) is the fleet testing contract — what every
+> product must implement and run, and what the platform owes it so a release cannot break a product unseen.
 > [**docs/GITHUB_SETUP.md**](docs/GITHUB_SETUP.md) is how to set up the GitHub side of a repo built on
 > this base — branch protection, merge gates, labels, the board, secrets, and which skill runs each step.
 
