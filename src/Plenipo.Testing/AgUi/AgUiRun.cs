@@ -104,7 +104,17 @@ public static class AgUiClient
         };
 
         using var response = await client.PostAsJsonAsync($"/api/agui/{moduleId}", body, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            // Quote the endpoint's body: a bare status hid the tool's own refusal from the product
+            // that hit it (#216), and the kit's guidance about WritePrompt lives in that detail.
+            var detail = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw new HttpRequestException(
+                $"POST /api/agui/{moduleId} returned {(int)response.StatusCode} {response.StatusCode}: {detail}",
+                inner: null,
+                response.StatusCode);
+        }
+
         return AgUiRun.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
     }
 }

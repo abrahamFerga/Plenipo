@@ -36,6 +36,10 @@ build consumer conformance tested and the one a product pins to consume a fix be
   new frontend conformance rung found it on networthy. Everything under `react/` and `react-dom/` is
   external now, so the host's own React supplies its own runtime, and `react` / `react-dom` are
   declared once, as peers, instead of as both a dependency and a peer.
+- **`AgUiClient.ChatAsync` quotes the endpoint's body when a turn is refused (#216).** The kit's chat helper
+  ended in a bare `EnsureSuccessStatusCode`, so a product whose turn `POST /api/agui/{module}` refused saw
+  a status and nothing else — hireworthy#69 met it from inside S03. The exception now carries the route,
+  the status and the body, where the tool's refusal and the kit's `WritePrompt` guidance actually are.
 - **`PlenipoTenancyConformance` accepts per-tenant seeded reference data (#208).** The pack's "a
   second tenant sees nothing on the read surfaces" was a proxy for "sees none of the first tenant's
   rows", and the proxy was wrong for a product that seeds a starter taxonomy per tenant on first read:
