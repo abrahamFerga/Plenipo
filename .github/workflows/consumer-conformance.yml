@@ -192,6 +192,7 @@ jobs:
           cp "$GITHUB_WORKSPACE"/rc-packages/*.nupkg .packages/
 
       - name: Build the consumer against the candidate
+        id: build
         working-directory: consumer
         run: dotnet build ${{ matrix.solution }} -c Release -p:PlenipoVersion=${{ steps.pack.outputs.rc }}
 
@@ -231,6 +232,9 @@ jobs:
           fi
 
       - name: Test the consumer against the candidate
+        # Runs even when the frontend rung above went red — one red must not hide the other — but
+        # not when the .NET build itself failed, because then there is nothing to test.
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         working-directory: consumer
         # Docker is available on the runner, so the consumer's Testcontainers E2E suite runs here
         # too — a compile-clean break in the approval gate or RBAC surfaces only at this rung.
