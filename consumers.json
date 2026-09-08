@@ -23,8 +23,8 @@
       "ref": "main",
       "module": "compliance",
       "required": false,
-      "conformance": false,
-      "note": "Real Plenipo.* consumer (alpha.28). Its two prerequisites landed with auditworthy#27 (central PlenipoVersion; Microsoft.Extensions.AI 10.8.1 on main). The alpha.29 upgrade is auditworthy#101 — flip conformance on when it reports green against alpha.29."
+      "conformance": true,
+      "note": "Real Plenipo.* consumer on 0.1.0-alpha.29 with the Plenipo.Testing kit running against its host (auditworthy#102, 2026-09-08: 83/83 integration incl. S01–S15, manifest, tenancy, R1–R4, golden evals). Runs in the matrix as a report (required: false → continue-on-error) until it has held green across a few platform PRs; then flip required."
     },
     {
       "repo": "abrahamFerga/hireworthy",
