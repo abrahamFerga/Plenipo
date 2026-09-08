@@ -82,7 +82,7 @@ public abstract class PlenipoSpineConformance<TProgram>(PlenipoHostFixture<TProg
         var executedBefore = (await ToolCallsAsync(admin)).Count(IsExecutedWrite);
 
         using var approve = await approver.PostAsync(new Uri($"/api/chat/approvals/{id}/approve", UriKind.Relative), content: null);
-        approve.EnsureSuccessStatusCode();
+        await AssertSuccessAsync(approve, $"POST /api/chat/approvals/{id}/approve releasing '{Contract.WriteTool}' (a 4xx from the tool itself means it refused the Mock-synthesised arguments: set ProductContract.WritePrompt, a JSON object in the turn is taken verbatim)");
         Assert.DoesNotContain(await PendingIdsAsync(approver), pending => pending == id);
 
         // Exactly one execution row, attributed to the requester — not to the approver, and not a
@@ -118,7 +118,7 @@ public abstract class PlenipoSpineConformance<TProgram>(PlenipoHostFixture<TProg
         var userId = me.GetProperty("userId").GetGuid();
         using (var grant = await admin.PostAsJsonAsync($"/api/admin/users/{userId}/permissions", new { permission = Permissions.ManageApprovals }))
         {
-            grant.EnsureSuccessStatusCode();
+            await AssertSuccessAsync(grant, "granting chat.approvals.manage to the queue-only user");
         }
 
         using var requester = fixture.ClientFor(Contract.ApproverRole, subject: "it-requester", displayName: RequesterName);
@@ -147,7 +147,7 @@ public abstract class PlenipoSpineConformance<TProgram>(PlenipoHostFixture<TProg
         Assert.Contains(Permissions.ForTool(Contract.ModuleId, Contract.WriteTool), denial.GetProperty("detail").GetString() ?? "", StringComparison.Ordinal);
 
         using var reject = await admin.PostAsync(new Uri($"/api/chat/approvals/{id}/reject", UriKind.Relative), content: null);
-        reject.EnsureSuccessStatusCode();
+        await AssertSuccessAsync(reject, $"POST /api/chat/approvals/{id}/reject as system_admin");
     }
 
     [Fact]
@@ -209,7 +209,7 @@ public abstract class PlenipoSpineConformance<TProgram>(PlenipoHostFixture<TProg
         var id = parked.Value.GetProperty("id").GetString();
 
         using var reject = await approver.PostAsync(new Uri($"/api/chat/approvals/{id}/reject", UriKind.Relative), content: null);
-        reject.EnsureSuccessStatusCode();
+        await AssertSuccessAsync(reject, $"POST /api/chat/approvals/{id}/reject as the approver");
 
         Assert.DoesNotContain(await PendingIdsAsync(approver), pending => pending == id);
     }
@@ -456,6 +456,22 @@ public abstract class PlenipoSpineConformance<TProgram>(PlenipoHostFixture<TProg
             using var again = await client.GetAsync(new Uri(route, UriKind.Relative));
             Assert.DoesNotContain(stamped, await again.Content.ReadAsStringAsync(), StringComparison.Ordinal);
         }
+    }
+
+    /// <summary>
+    /// A success assertion that quotes the response body — a bare <c>EnsureSuccessStatusCode</c> hid
+    /// the tool's own 422 behind a status code when a product's write refused the synthesised
+    /// arguments (#209), and the product had to instrument the pack to learn why.
+    /// </summary>
+    private static async Task AssertSuccessAsync(HttpResponseMessage response, string what)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Fail($"{what} returned {(int)response.StatusCode} {response.StatusCode}: {body}");
     }
 
     private static async Task<HashSet<string>> PendingIdsAsync(HttpClient client)

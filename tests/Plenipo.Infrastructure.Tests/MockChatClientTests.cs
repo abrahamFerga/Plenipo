@@ -23,6 +23,9 @@ public sealed class MockChatClientTests
     [Description("Add a task.")]
     private static string AddTask(string title) => $"added {title}";
 
+    [Description("Advance candidates.")]
+    private static string AdvanceCandidates(string reason, string[] references) => $"advanced {references.Length}: {reason}";
+
     private static readonly ChatMessage[] Conversation =
         [new(ChatRole.User, "How much did I spend on groceries?")];
 
@@ -318,6 +321,34 @@ public sealed class MockChatClientTests
 
         Assert.StartsWith("Done", text.TrimStart(), StringComparison.Ordinal);
         Assert.Contains("groceries", text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Streaming_TakesToolArgumentsVerbatim_FromAJsonObjectInTheTurn()
+    {
+        // #209: a required array is otherwise synthesised as [] and a tool that validates it refuses the
+        // call, so no prompt could ever satisfy such a tool. A JSON object in the turn is the explicit
+        // argument seam: declared parameters are taken verbatim (any shape), undeclared keys are
+        // dropped, and the object is not part of the text that fills the remaining string parameters.
+        var client = new MockChatClient();
+        var options = new ChatOptions { Tools = [AIFunctionFactory.Create(AdvanceCandidates, name: "advance_candidates")] };
+        var messages = new[]
+        {
+            new ChatMessage(ChatRole.User, "Please advance candidates for me, using a tool. {\"references\":[\"alice\",\"bob\"],\"ignored\":1}"),
+        };
+
+        FunctionCallContent? call = null;
+        await foreach (var update in client.GetStreamingResponseAsync(messages, options))
+        {
+            call ??= update.Contents.OfType<FunctionCallContent>().FirstOrDefault();
+        }
+
+        Assert.NotNull(call);
+        Assert.Equal("advance_candidates", call!.Name);
+        var references = Assert.IsAssignableFrom<IEnumerable<object?>>(call.Arguments!["references"]);
+        Assert.Equal(new[] { "alice", "bob" }, references.Select(r => r?.ToString()).ToArray());
+        Assert.False(call.Arguments!.ContainsKey("ignored"));
+        Assert.DoesNotContain("{", call.Arguments!["reason"]?.ToString() ?? "", StringComparison.Ordinal);
     }
 
     private static string Trim(string value) => value.Length <= 90 ? value : value[..90] + "…";

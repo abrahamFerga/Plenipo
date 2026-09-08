@@ -18,6 +18,12 @@ namespace Plenipo.Infrastructure.Ai;
 /// routed to human approval. This lets the zero-config demo showcase Plenipo's signature capability
 /// without an API key. Configure a real provider (OpenAI / AzureOpenAI / Ollama) for genuine reasoning.
 /// </para>
+/// <para>
+/// Arguments are synthesised from the tool's schema: quoted spans fill string parameters in order, the
+/// first ISO date and number fill date and numeric ones, and a JSON object in the turn
+/// (<c>… using a tool. {"references":["alice"]}</c>) is taken verbatim for the parameters it names —
+/// the seam a test uses when the tool validates a list or a code (#209).
+/// </para>
 /// </summary>
 public sealed class MockChatClient : IChatClient
 {
@@ -221,6 +227,7 @@ public sealed class MockChatClient : IChatClient
     /// </summary>
     private static AIFunction? SelectTool(string? userText, ChatOptions? options)
     {
+        userText = WithoutArgumentObject(userText); // #209: the argument object names no tool
         var tools = options?.Tools?.OfType<AIFunction>().ToArray() ?? [];
         if (tools.Length == 0 || string.IsNullOrWhiteSpace(userText))
         {
@@ -291,6 +298,12 @@ public sealed class MockChatClient : IChatClient
     private static Dictionary<string, object?> SynthesizeArguments(AIFunction tool, string? userText)
     {
         var args = new Dictionary<string, object?>(StringComparer.Ordinal);
+
+        // #209: the explicit-argument seam. A JSON object in the turn is taken verbatim for the parameters
+        // the tool declares — the only way to hand a validating tool a non-empty list, a nested object or a
+        // code it looks up — and it is removed from the text the heuristics below read.
+        var explicitArgs = ExtractArgumentObject(userText, out var remaining);
+        userText = remaining;
 
         JsonElement schema;
         try
@@ -372,8 +385,73 @@ public sealed class MockChatClient : IChatClient
             }
         }
 
+        if (explicitArgs is { } given)
+        {
+            foreach (var argument in given.EnumerateObject())
+            {
+                if (properties.TryGetProperty(argument.Name, out _))
+                {
+                    args[argument.Name] = ToClr(argument.Value);
+                }
+            }
+        }
+
         return args;
     }
+
+    /// <summary>
+    /// The JSON object in a turn, if any ("… using a tool. {"references":["alice"]}"), with the text
+    /// that remains once it is cut out. Braces that do not parse as an object are left alone, so an
+    /// ordinary message with a brace in it is unaffected.
+    /// </summary>
+    private static JsonElement? ExtractArgumentObject(string? text, out string? remaining)
+    {
+        remaining = text;
+        if (string.IsNullOrEmpty(text))
+        {
+            return null;
+        }
+
+        var start = text.IndexOf('{');
+        var end = text.LastIndexOf('}');
+        if (start < 0 || end <= start)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(text[start..(end + 1)]);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            remaining = (text[..start] + text[(end + 1)..]).Trim();
+            return document.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string? WithoutArgumentObject(string? text)
+    {
+        ExtractArgumentObject(text, out var remaining);
+        return remaining;
+    }
+
+    private static object? ToClr(JsonElement value) => value.ValueKind switch
+    {
+        JsonValueKind.String => value.GetString(),
+        JsonValueKind.Number => value.TryGetInt64(out var whole) ? whole : value.GetDouble(),
+        JsonValueKind.True => true,
+        JsonValueKind.False => false,
+        JsonValueKind.Array => value.EnumerateArray().Select(ToClr).ToList(),
+        JsonValueKind.Object => value.EnumerateObject().ToDictionary(p => p.Name, p => ToClr(p.Value), StringComparer.Ordinal),
+        _ => null,
+    };
 
     /// <summary>
     /// Quoted spans ('…' or "…") in order of appearance — the demo's explicit-argument syntax.
