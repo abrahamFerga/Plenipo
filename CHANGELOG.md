@@ -146,6 +146,19 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
 
 ### Added
 
+- **`PlenipoRedTeamConformance` — the guardrails, probed through the real pipeline on every product.**
+  The agent security controls (`docs/AGENT_SECURITY.md`) were unit-tested and proven once on the bare
+  platform host; nothing drove attack strings through a *product's* host, where a module's own
+  instructions, tools and roles sit in the pipeline. The kit's new pack does, keylessly, with the
+  tenant's controls set through the admin API and cleared afterwards: in `Enforce` mode a prompt
+  injection is stopped before the model with a `RUN_ERROR` naming the policy and an
+  `AgentSecurityBlocked` audit event (R1), an email address is redacted before the model and never
+  appears anywhere in the stream (R2), a Social Security number can be blocked outright (R3); in
+  `Audit` mode the same injection proceeds and is still recorded as `AgentSecurityDetected` (R4).
+  Harmful-content categories need the optional Azure connection and are not probed; the tool-call
+  and tool-result stages are the next cases. The sample host runs it against the finance module
+  alongside the other packs. (#196)
+
 - **`GET /api/chat/approvals?conversationId=…`** narrows the queue to one conversation, pushed into
   `IApprovalStore.ListPendingAsync(Guid? conversationId, …)` (a default interface member, so a
   swapped store keeps compiling). `PendingApprovals` in `@plenipo/ui` takes a `conversationId` prop —
