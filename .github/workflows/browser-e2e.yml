@@ -1,0 +1,94 @@
+# .github/workflows/browser-e2e.yml — the served shell in a real browser against the real host (#218).
+#
+# ci.yml's Playwright jobs mock the platform API at the network layer: they prove the shell's own
+# logic and say nothing about the wire between shell and host — which is where the React runtime
+# bundled into 0.1.0-alpha.29 (#213), a DTO shape, an SSE/SignalR framing change or a CSP refusal
+# of the served shell's scripts actually break. This job runs eng/browser-e2e.sh: build the app
+# shell, put it where the sample host serves it from, start the host on a Postgres service with the
+# Mock provider, and drive one user's core loop in Chromium — the manifest renders, a chat turn
+# streams with its tool chip and token count, an approval-gated write parks, Approve releases it,
+# the data tab shows the row, and no page or console error was raised on the way.
+#
+# It lives in its own workflow rather than in ci.yml because ci.yml is an immutable merge control
+# (LOCKED_CONTROL_PATHS); an owner can promote this check to required once it has held green.
+
+name: Browser E2E (real host)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "samples/**"
+      - "frontend/plenipo-ui/**"
+      - "frontend/plenipo-client/**"
+      - "frontend/package.json"
+      - "frontend/pnpm-lock.yaml"
+      - "frontend/pnpm-workspace.yaml"
+      - "eng/browser-e2e.sh"
+      - ".github/workflows/browser-e2e.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browser-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser:
+    name: Served shell in Chromium against the sample host (Mock provider)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.9.0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install the frontend workspace
+        run: pnpm -C frontend install --frozen-lockfile
+
+      - name: Install Playwright chromium
+        working-directory: frontend
+        run: pnpm --filter @plenipo/ui exec playwright install --with-deps chromium
+
+      - name: Build the shell, start the host, drive the loop in Chromium
+        env:
+          PLENIPO_PG: "Host=127.0.0.1;Port=5432;Username=postgres;Password=postgres"
+        run: bash eng/browser-e2e.sh
+
+      - name: Keep the evidence when it fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-e2e-evidence
+          path: |
+            frontend/plenipo-ui/test-results/
+            artifacts/browser-e2e-host.log
+          if-no-files-found: ignore
+          retention-days: 7
