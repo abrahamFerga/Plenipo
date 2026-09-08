@@ -37,6 +37,15 @@ build consumer conformance tested and the one a product pins to consume a fix be
 
 ### Fixed
 
+- **The agent hub carries the configured client's dev identity, not a frozen `system_admin` (#215).**
+  `createAgentConnection` stamped the shared `devAuthHeaders` constant onto every dev-mode SignalR
+  connection regardless of `configureClient({ authHeaders })`, so a product's dev-identity picker
+  reached every REST call but never the hub: chat turns ran as `dev-user` / `system_admin` while the
+  rest of the session ran as whoever was picked — the split identity #110 fixed on the server,
+  recreated in the client, and the reason networthy could not retire its last dev-auth shim.
+  `agentHubHeaders()` now reads the configured `authHeaders` (synchronously; an async one falls back
+  to the constant), drops any bearer (that travels through `accessTokenFactory`), and sends nothing
+  under `mode: "oidc"`.
 - **`@plenipo/ui` no longer bundles React's JSX runtime (#213).** The library build externalised the
   bare `react` but not `react/jsx-runtime`, so the compiled JSX carried a copy of whichever React the
   platform built with. That was harmless while both sides were React 18; `0.1.0-alpha.29` was built
