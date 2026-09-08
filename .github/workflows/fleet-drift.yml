@@ -1,0 +1,35 @@
+# .github/workflows/fleet-drift.yml — where every consumer's platform pin stands (#220).
+#
+# announce-release pushes an upgrade issue to each product when a tag is cut; nothing measured how
+# far a product had drifted since — casewell reached fifteen releases behind unnoticed. This runs
+# .github/scripts/fleet-drift.mjs weekly and on demand: reads consumers.json, fetches each consumer's
+# pin from its default branch, and reports it against the platform's releases — a table in the step
+# summary, a ::warning per laggard, and one living platform issue edited in place by a hidden marker.
+# Read-only against the products.
+
+name: Fleet drift
+
+on:
+  schedule:
+    - cron: "0 7 * * 1" # Mondays 07:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  drift:
+    name: Consumer pins vs the last release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Measure and report
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/fleet-drift.mjs
