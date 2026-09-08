@@ -272,25 +272,19 @@ importers:
   plenipo-ui:
     dependencies:
       '@microsoft/signalr':
-        specifier: ^8.0.7
+        specifier: '>=8'
         version: 8.0.17
       '@plenipo/client':
         specifier: workspace:*
         version: link:../plenipo-client
       '@tanstack/react-query':
-        specifier: ^5.101.4
+        specifier: '>=5'
         version: 5.101.4(react@19.2.8)
-      react:
-        specifier: ^19.2.8
-        version: 19.2.8
-      react-dom:
-        specifier: ^19.2.8
-        version: 19.2.8(react@19.2.8)
       react-markdown:
         specifier: ^9.0.1
         version: 9.1.0(@types/react@19.2.17)(react@19.2.8)
       react-router-dom:
-        specifier: ^7.18.1
+        specifier: '>=6'
         version: 7.18.2(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       remark-gfm:
         specifier: ^4.0.0
@@ -338,6 +332,12 @@ importers:
       postcss:
         specifier: ^8.5.24
         version: 8.5.25
+      react:
+        specifier: ^19.2.8
+        version: 19.2.8
+      react-dom:
+        specifier: ^19.2.8
+        version: 19.2.8(react@19.2.8)
       tailwindcss:
         specifier: ^3.4.14
         version: 3.4.19(yaml@2.9.0)
@@ -2612,6 +2612,7 @@ packages:
   eslint@9.39.4:
     resolution: {integrity: sha512-XoMjdBOwe/esVgEvLmNsD3IRHkm7fbKIUGvrleloJXUZgDHig2IPWNniv+GwjyJXzuNqVjlr5+4yVUZjycJwfQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'

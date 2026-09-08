@@ -29,10 +29,16 @@ export default defineConfig(({ mode }) => {
             fileName: (format) => `plenipo-ui.${format}.js`,
           },
           rollupOptions: {
-            // Peer dependencies — consuming apps supply these.
+            // Peer dependencies — consuming apps supply these. React is matched as a PREFIX, not a
+            // bare name: the compiled JSX imports "react/jsx-runtime" (and "react/jsx-dev-runtime"),
+            // and a bare "react" external left those inside the bundle. That shipped React 19's
+            // runtime in 0.1.0-alpha.29, which reads internals off the host's `react` — and a React
+            // 18 host, which the peer range admits, crashed at the first component with
+            // "Cannot read properties of undefined (reading 'recentlyCreatedOwnerStacks')" (#213).
+            // The host's own React must supply its own runtime, whichever version it runs.
             external: [
-              "react",
-              "react-dom",
+              /^react(\/.*)?$/,
+              /^react-dom(\/.*)?$/,
               "react-router-dom",
               "@microsoft/signalr",
               "@tanstack/react-query",
@@ -40,7 +46,10 @@ export default defineConfig(({ mode }) => {
             output: {
               globals: {
                 react: "React",
+                "react/jsx-runtime": "ReactJSXRuntime",
+                "react/jsx-dev-runtime": "ReactJSXDevRuntime",
                 "react-dom": "ReactDOM",
+                "react-dom/client": "ReactDOMClient",
                 "react-router-dom": "ReactRouterDOM",
                 "@microsoft/signalr": "signalR",
                 "@tanstack/react-query": "ReactQuery",

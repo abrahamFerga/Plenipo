@@ -13,8 +13,29 @@ build consumer conformance tested and the one a product pins to consume a fix be
 
 ## [Unreleased]
 
+### Changed
+
+- **Consumer conformance covers the shipped frontend (#128).** `@plenipo/ui` and `@plenipo/client`
+  are published packages every product's shell renders from, yet a change under `frontend/**` never
+  triggered the conformance run — so a frontend-only platform PR could not satisfy `consumers_green`
+  (a run that never executes is a red gate) and, worse, a UI change that broke a product was never
+  tested at all. The workflow now triggers on the shipped frontend packages and on `consumers.json`,
+  packs both libraries at the candidate version alongside the nupkgs, and for a consumer that
+  registers a `frontend` directory redirects its `@plenipo/ui` and `@plenipo/client` to the candidate
+  tarballs (pnpm overrides, merged into the product's own), then runs its build and tests — before
+  the .NET suite, so a frontend verdict is never hidden behind a Testcontainers run.
+
 ### Fixed
 
+- **`@plenipo/ui` no longer bundles React's JSX runtime (#213).** The library build externalised the
+  bare `react` but not `react/jsx-runtime`, so the compiled JSX carried a copy of whichever React the
+  platform built with. That was harmless while both sides were React 18; `0.1.0-alpha.29` was built
+  on React 19 and shipped React 19's runtime, which reads internals off the host's `react` — and a
+  React 18 host, which the `>=18` peer range admits, crashed in every component with
+  `Cannot read properties of undefined (reading 'recentlyCreatedOwnerStacks')`. The first run of the
+  new frontend conformance rung found it on networthy. Everything under `react/` and `react-dom/` is
+  external now, so the host's own React supplies its own runtime, and `react` / `react-dom` are
+  declared once, as peers, instead of as both a dependency and a peer.
 - **`PlenipoTenancyConformance` accepts per-tenant seeded reference data (#208).** The pack's "a
   second tenant sees nothing on the read surfaces" was a proxy for "sees none of the first tenant's
   rows", and the proxy was wrong for a product that seeds a starter taxonomy per tenant on first read:

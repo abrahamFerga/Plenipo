@@ -4,11 +4,16 @@
 # Consumer-driven contract testing, in the shape this stack allows: pack the platform at a
 # release-candidate version, then build and test each registered consumer against those packages.
 #
+# The shipped frontend is part of the contract too (#128): a consumer that registers a `frontend`
+# directory in consumers.json has its shell built and tested against @plenipo/ui and @plenipo/client
+# packed from the same candidate, and changes under the shipped frontend packages trigger the run.
+#
 # WHAT THIS DOES NOT COVER — state it plainly, because a green check here reads as "safe":
 #   * The CSP hash. A product may pin a sha256 of platform-authored INLINE HTML. Change that HTML
 #     and the product's SPA white-screens. No managed-API check sees it, and neither does this job
-#     unless the consumer has a browser smoke test. It is the highest-risk break and it is invisible.
-#   * Static asset and bundle shape changes, for the same reason.
+#     unless the consumer has a browser smoke test. Since alpha.29 the served shell carries a
+#     per-request nonce and the kit's S15 checks it, so a product on nonces is out of this trap.
+#   * Static asset and bundle shape changes beyond what the consumer's frontend build and tests see.
 #   * Behavioural drift that still compiles and still passes the consumer's own tests — this gate is
 #     only as strong as the consumer suite it runs.
 #   * Consumers not registered below, and any marked conformance:false.
@@ -31,7 +36,21 @@ name: Consumer conformance
 on:
   pull_request:
     branches: [main]
-    paths: ["src/**", "Directory.Packages.props", "Directory.Build.props", "Directory.Build.targets"]
+    # The shipped surface is the .NET packages AND the frontend libraries every product's shell
+    # renders from (@plenipo/ui, @plenipo/client) — a change under those paths carries consumer
+    # blast radius exactly like src/** does, and a run that never executes is a red gate (#128).
+    # The registry itself is a path too, so registering or reconfiguring a consumer is exercised.
+    paths:
+      - "src/**"
+      - "Directory.Packages.props"
+      - "Directory.Build.props"
+      - "Directory.Build.targets"
+      - "frontend/plenipo-client/**"
+      - "frontend/plenipo-ui/**"
+      - "frontend/package.json"
+      - "frontend/pnpm-lock.yaml"
+      - "frontend/pnpm-workspace.yaml"
+      - "consumers.json"
   workflow_dispatch:
     inputs:
       consumer:
@@ -128,6 +147,35 @@ jobs:
           dotnet pack Plenipo.slnx -c Release -p:Version=$RC -o "$GITHUB_WORKSPACE/rc-packages"
           ls "$GITHUB_WORKSPACE/rc-packages"
 
+      # The frontend half of the contract (#128): @plenipo/ui and @plenipo/client are published
+      # packages, and a consumer's shell is built from them. Pack both at the same candidate version
+      # so the consumer's frontend below builds and tests against THIS PR's UI, not the registry's.
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.9.0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: platform/frontend/pnpm-lock.yaml
+
+      - name: Pack @plenipo/client and @plenipo/ui as the candidate
+        working-directory: platform/frontend
+        env:
+          VITE_API_BASE: ""
+        run: |
+          RC='${{ steps.pack.outputs.rc }}'
+          pnpm install --frozen-lockfile
+          pnpm -C plenipo-client build
+          pnpm -C plenipo-ui build
+          mkdir -p "$GITHUB_WORKSPACE/rc-npm"
+          # Version the client first: pnpm pack rewrites the ui's workspace:* dependency to whatever
+          # version the client carries at pack time, so the two tarballs reference each other.
+          (cd plenipo-client && npm pkg set version="$RC" && pnpm pack --pack-destination "$GITHUB_WORKSPACE/rc-npm")
+          (cd plenipo-ui && npm pkg set version="$RC" && pnpm pack --pack-destination "$GITHUB_WORKSPACE/rc-npm")
+          ls "$GITHUB_WORKSPACE/rc-npm"
+
       - name: Check out the consumer
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -146,6 +194,41 @@ jobs:
       - name: Build the consumer against the candidate
         working-directory: consumer
         run: dotnet build ${{ matrix.solution }} -c Release -p:PlenipoVersion=${{ steps.pack.outputs.rc }}
+
+      # A consumer that registers a `frontend` directory (its package.json depends on @plenipo/ui)
+      # gets its shell built and tested against the candidate tarballs. Before the .NET suite on
+      # purpose: a frontend verdict must not be hidden behind a long Testcontainers run that fails
+      # for its own reasons.
+      - name: Swap in the candidate @plenipo/ui
+        if: matrix.frontend
+        working-directory: consumer/${{ matrix.frontend }}
+        run: |
+          RC='${{ steps.pack.outputs.rc }}'
+          client="$GITHUB_WORKSPACE/rc-npm/plenipo-client-$RC.tgz"
+          ui="$GITHUB_WORKSPACE/rc-npm/plenipo-ui-$RC.tgz"
+          # pnpm overrides redirect every reference — the product's exact pin and the ui's own
+          # dependency on the client — to this PR's tarballs. Merged into an existing block so the
+          # product's other overrides (a patched vite, a quarantined browserslist table) survive.
+          f=pnpm-workspace.yaml
+          if [ -f "$f" ]; then sed -i -E '/^[[:space:]]+"?@plenipo\/(ui|client)"?:/d' "$f"; else : > "$f"; fi
+          if grep -qE '^overrides:' "$f"; then
+            sed -i -E "s|^overrides:.*|overrides:\n  \"@plenipo/client\": \"file:$client\"\n  \"@plenipo/ui\": \"file:$ui\"|" "$f"
+          else
+            printf '\noverrides:\n  "@plenipo/client": "file:%s"\n  "@plenipo/ui": "file:%s"\n' "$client" "$ui" >> "$f"
+          fi
+          pnpm install --no-frozen-lockfile
+          pnpm ls @plenipo/ui @plenipo/client
+
+      - name: Build and test the consumer's frontend against the candidate
+        if: matrix.frontend
+        working-directory: consumer/${{ matrix.frontend }}
+        run: |
+          pnpm run build
+          if node -e "process.exit(require('./package.json').scripts?.test ? 0 : 1)"; then
+            pnpm run test
+          else
+            echo "No test script: the build is the whole frontend rung for this consumer."
+          fi
 
       - name: Test the consumer against the candidate
         working-directory: consumer
