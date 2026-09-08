@@ -33,8 +33,8 @@
       "module": "hiring",
       "frontend": "frontend/hireworthy-ui",
       "required": false,
-      "conformance": false,
-      "note": "Real Plenipo.* consumer (alpha.28) on main — src/Hireworthy.{AppHost,Host,Hiring} verified via the GitHub tree — and it filed #145 with an L3 reproduction, so it was consuming the platform while unregistered and therefore unprotected. Registered with conformance OFF deliberately, not as a judgement on the repo: #144 documents that one red consumer deadlocks every platform PR, so adding an unproven consumer to the blocking matrix while that is live would widen a known deadlock. The alpha.29 upgrade is hireworthy#66; flip conformance on once #144 is fixed AND it reports green against alpha.29."
+      "conformance": true,
+      "note": "Real Plenipo.* consumer on 0.1.0-alpha.29.17 with the Plenipo.Testing kit fully green against its host (hireworthy#69, 2026-09-08: 81/81 integration incl. S01–S15, manifest, tenancy, R1–R4, golden evals). It filed #145 with an L3 reproduction before it was registered, which is why registration matters. Runs in the matrix as a report (required: false → continue-on-error) until it has held green across a few platform PRs; then flip required."
     },
     {
       "repo": "abrahamFerga/casewell",
