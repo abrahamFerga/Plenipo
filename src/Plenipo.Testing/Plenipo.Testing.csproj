@@ -13,6 +13,9 @@
     <!-- A library of test base classes, not a test project: `dotnet test Plenipo.slnx` must skip it
          rather than try to host it (it references xunit but has no test runner of its own). -->
     <IsTestProject>false</IsTestProject>
+    <!-- New in the release after 0.1.0-alpha.28: there is no baseline package to validate against
+         yet. Remove this the release after the kit first ships. -->
+    <DisablePackageBaselineValidation>true</DisablePackageBaselineValidation>
     <PackageId>Plenipo.Testing</PackageId>
     <Description>Conformance kit for products built on Plenipo — the Testcontainers host fixture, the AG-UI stream parser, the golden-eval runner, and the platform's spine, manifest and tenancy invariants as executable xunit tests.</Description>
     <!-- CA1707: the kit's test methods are named as behaviour statements with underscores
