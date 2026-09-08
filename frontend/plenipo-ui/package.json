@@ -47,7 +47,8 @@
     "test:e2e": "playwright test",
     "preview": "vite preview",
     "prepack": "npm run build",
-    "build:app": "tsc -b && vite build --mode app"
+    "build:app": "tsc -b && vite build --mode app",
+    "test:e2e:host": "playwright test -c playwright.host.config.ts"
   },
   "dependencies": {
     "@plenipo/client": "workspace:*",
