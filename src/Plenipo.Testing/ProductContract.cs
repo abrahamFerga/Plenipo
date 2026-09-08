@@ -19,7 +19,11 @@ namespace Plenipo.Testing;
 /// addition to the module's data-tab endpoints, which are probed automatically.</param>
 /// <param name="ReadPrompt">The user turn that routes to <paramref name="ReadTool"/> on the Mock
 /// provider. Defaults to the tool name spelled out, which the Mock matches by name tokens.</param>
-/// <param name="WritePrompt">The user turn that routes to <paramref name="WriteTool"/>.</param>
+/// <param name="WritePrompt">The user turn that routes to <paramref name="WriteTool"/>. When the
+/// tool validates its arguments — a list that must not be empty, a code the tool looks up — put a
+/// JSON object in the turn: <c>Please advance candidates for me, using a tool. {"references":["alice"]}</c>.
+/// The Mock provider takes the declared parameters in that object verbatim (any shape) and fills the
+/// rest as usual; quoted spans (<c>'Savings'</c>) still fill string parameters in declaration order.</param>
 /// <param name="DevTenant">The seeded development tenant slug.</param>
 public sealed record ProductContract(
     string ModuleId,
@@ -34,6 +38,18 @@ public sealed record ProductContract(
 {
     /// <summary>The routes from <see cref="ReadEndpoints"/>, never null.</summary>
     public IReadOnlyList<string> ReadRoutes => ReadEndpoints ?? [];
+
+    /// <summary>
+    /// Read routes — from <see cref="ReadEndpoints"/> or the module's data tabs — whose rows are
+    /// per-tenant seeded reference data (a starter taxonomy, a default rubric), so a fresh tenant
+    /// legitimately sees rows on its first read. For these the tenancy pack asserts the second
+    /// tenant's rows are disjoint by <c>id</c> from the first tenant's instead of absent; every other
+    /// route keeps the strict "nothing" rule. Name the route exactly as the pack probes it (#208).
+    /// </summary>
+    public IReadOnlyList<string>? SeededReadEndpoints { get; init; }
+
+    /// <summary>The routes from <see cref="SeededReadEndpoints"/>, never null.</summary>
+    public IReadOnlyList<string> SeededReadRoutes => SeededReadEndpoints ?? [];
 
     /// <summary>The turn that routes to <see cref="ReadTool"/>.</summary>
     public string EffectiveReadPrompt => ReadPrompt ?? PromptFor(ReadTool);

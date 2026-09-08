@@ -119,7 +119,10 @@ public sealed class Fixture : PlenipoHostFixture<Program>
         WriteTool:     "record_transaction",   // must be RequiresApproval = true
         ApproverRole:  "household-admin",      // may chat, call both tools, decide approvals
         NarrowRole:    "household-member",     // may chat, must not hold the write tool's permission
-        ReadEndpoints: ["/api/finance/transactions", "/api/finance/budgets"]);
+        ReadEndpoints: ["/api/finance/transactions", "/api/finance/budgets"])
+    {
+        SeededReadEndpoints = ["/api/finance/categories"],   // a fresh tenant's OWN starter rows, checked disjoint by id
+    };
 }
 
 [CollectionDefinition("api")] public sealed class ApiCollection : ICollectionFixture<Fixture>;

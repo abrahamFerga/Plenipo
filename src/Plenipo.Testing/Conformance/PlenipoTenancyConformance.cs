@@ -14,7 +14,9 @@ namespace Plenipo.Testing.Conformance;
 /// Tenant isolation by construction, proved two ways: every tenant-owned entity in every registered
 /// DbContext carries a global query filter (reflection over the model, so a forgotten
 /// <c>HasQueryFilter</c> fails here rather than in production), and a second tenant sees nothing on
-/// the product's read surfaces and on the audit log.
+/// the product's read surfaces and on the audit log — nothing at all on a list; on a surface the
+/// product declares seeded per tenant, or on a singleton tab's document, only its own rows,
+/// disjoint by id from the first tenant's (#208).
 /// </summary>
 public abstract class PlenipoTenancyConformance<TProgram>(PlenipoHostFixture<TProgram> fixture)
     where TProgram : class
@@ -102,11 +104,16 @@ public abstract class PlenipoTenancyConformance<TProgram>(PlenipoHostFixture<TPr
         var modules = await admin.GetFromJsonAsync<JsonElement>("/api/platform/modules");
         var module = Assert.Single(modules.EnumerateArray(),
             m => string.Equals(m.GetProperty("id").GetString(), Contract.ModuleId, StringComparison.Ordinal));
-        var tabEndpoints = module.GetProperty("tabs").EnumerateArray()
-            .Select(t => t.TryGetProperty("dataEndpoint", out var e) ? e.GetString() : null)
-            .Where(e => !string.IsNullOrWhiteSpace(e))
-            .Select(e => e!);
-        var routes = tabEndpoints.Concat(Contract.ReadRoutes).Distinct(StringComparer.Ordinal).ToArray();
+        var tabs = module.GetProperty("tabs").EnumerateArray()
+            .Select(t => (
+                Endpoint: t.TryGetProperty("dataEndpoint", out var e) ? e.GetString() : null,
+                Singleton: t.TryGetProperty("singleton", out var s) && s.ValueKind == JsonValueKind.True))
+            .Where(t => !string.IsNullOrWhiteSpace(t.Endpoint))
+            .ToArray();
+        // A singleton tab's endpoint returns the tenant's own document (settings, a profile) — a
+        // per-tenant row by construction of the tab kind, so a fresh tenant legitimately sees one.
+        var singletonRoutes = tabs.Where(t => t.Singleton).Select(t => t.Endpoint!).ToHashSet(StringComparer.Ordinal);
+        var routes = tabs.Select(t => t.Endpoint!).Concat(Contract.ReadRoutes).Distinct(StringComparer.Ordinal).ToArray();
         Assert.True(routes.Length > 0,
             "No read surface to probe: the module declares no data tabs and ProductContract.ReadEndpoints is empty.");
 
@@ -115,6 +122,7 @@ public abstract class PlenipoTenancyConformance<TProgram>(PlenipoHostFixture<TPr
         {
             using var dev = await admin.GetAsync(new Uri(route, UriKind.Relative));
             Assert.True(dev.IsSuccessStatusCode, $"GET {route} must succeed for the dev tenant (got {(int)dev.StatusCode}).");
+            var devBody = await dev.Content.ReadAsStringAsync();
 
             using var response = await other.GetAsync(new Uri(route, UriKind.Relative));
             Assert.True(
@@ -133,30 +141,53 @@ public abstract class PlenipoTenancyConformance<TProgram>(PlenipoHostFixture<TPr
             }
 
             using var json = JsonDocument.Parse(body);
-            AssertNoRows(route, json.RootElement);
+            var seeded = Contract.SeededReadRoutes.Contains(route, StringComparer.Ordinal);
+            if (seeded || singletonRoutes.Contains(route))
+            {
+                using var devJson = JsonDocument.Parse(string.IsNullOrWhiteSpace(devBody) ? "[]" : devBody);
+                // A declared seeded surface must carry ids, or its rows cannot be attributed; a singleton
+                // document need not (it is the tenant's own by the tab's definition), but if it has one
+                // it must not be the first tenant's.
+                AssertOnlyOwnRows(route, devJson.RootElement, json.RootElement, requireIds: seeded);
+            }
+            else
+            {
+                AssertNoRows(route, json.RootElement);
+            }
         }
     }
 
     private static void AssertNoRows(string route, JsonElement root)
     {
-        switch (root.ValueKind)
-        {
-            case JsonValueKind.Array:
-                Assert.True(root.GetArrayLength() == 0, $"GET {route} as a second tenant returned {root.GetArrayLength()} rows; expected none.");
-                break;
-            case JsonValueKind.Object:
-                foreach (var name in new[] { "items", "rows", "data", "results" })
-                {
-                    if (root.TryGetProperty(name, out var rows) && rows.ValueKind == JsonValueKind.Array)
-                    {
-                        Assert.True(rows.GetArrayLength() == 0, $"GET {route} as a second tenant returned {rows.GetArrayLength()} '{name}'; expected none.");
-                    }
-                }
+        var rows = TenantRows.Rows(root);
+        Assert.True(rows.Count == 0,
+            $"GET {route} as a second tenant returned {rows.Count} rows; expected none. If this surface is per-tenant seeded " +
+            "reference data — a starter taxonomy every new tenant gets on first read — declare the route in " +
+            "ProductContract.SeededReadEndpoints and the pack asserts the rows are the second tenant's own (disjoint by id) instead.");
+    }
 
-                break;
-            default:
-                break;
+    // #208: a seeded surface shows a fresh tenant its own rows. The invariant is still "none of the
+    // FIRST tenant's rows", decided by id — which is why every row must carry one here.
+    private static void AssertOnlyOwnRows(string route, JsonElement dev, JsonElement other, bool requireIds)
+    {
+        var rows = TenantRows.Rows(other);
+        if (rows.Count == 0)
+        {
+            return;
         }
+
+        if (requireIds)
+        {
+            var unattributable = rows.Count(row => TenantRows.IdOf(row) is null);
+            Assert.True(unattributable == 0,
+                $"GET {route} as a second tenant returned {unattributable} of {rows.Count} rows without an 'id', so the pack cannot tell " +
+                "whose they are; a route in ProductContract.SeededReadEndpoints must return an id per row.");
+        }
+
+        var shared = TenantRows.SharedIds(dev, other);
+        Assert.True(shared.Count == 0,
+            $"GET {route} as a second tenant returned {shared.Count} of the first tenant's rows (ids {string.Join(", ", shared.Take(5))}); " +
+            "a second tenant must see none of the first tenant's rows, seeded surface or not.");
     }
 
     private static IEnumerable<Type> DbContextTypes() =>

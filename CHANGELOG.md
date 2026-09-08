@@ -13,7 +13,24 @@ build consumer conformance tested and the one a product pins to consume a fix be
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **`PlenipoTenancyConformance` accepts per-tenant seeded reference data (#208).** The pack's "a
+  second tenant sees nothing on the read surfaces" was a proxy for "sees none of the first tenant's
+  rows", and the proxy was wrong for a product that seeds a starter taxonomy per tenant on first read:
+  networthy's `/api/finance/categories` returned the new household's own twenty rows and the kit
+  called it a leak. `ProductContract.SeededReadEndpoints` names such routes; for them the pack asserts
+  the second tenant's rows are disjoint by `id` from the first tenant's (and carry ids at all); a
+  singleton tab's endpoint — the tenant's own document by the tab's definition — gets the same
+  treatment without a declaration. Every other route keeps the strict rule, and its failure message
+  now names the knob.
+- **The Mock provider takes tool arguments verbatim from a JSON object in the turn (#209).** A
+  required array was always synthesised as `[]`, so a write that validates its list — hireworthy's
+  `advance_candidates(string[] references)` — refused every Mock-driven call, and the kit's S03 was
+  unsatisfiable for that product. `Please advance candidates for me, using a tool. {"references":["alice"]}`
+  now fills the declared parameters from the object (any shape; undeclared keys dropped; the object is
+  cut out of the text the other heuristics and the tool selection read). The kit's approval assertions
+  also quote the response body instead of a bare status code, which is how that 422 had stayed hidden.
 
 ## [0.1.0-alpha.29] — 2026-09-08
 
