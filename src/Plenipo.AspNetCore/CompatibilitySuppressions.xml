@@ -3,6 +3,13 @@
 <Suppressions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Plenipo.AspNetCore.Auth.DevAuthenticationHandler.#ctor(Microsoft.Extensions.Options.IOptionsMonitor{Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions},Microsoft.Extensions.Logging.ILoggerFactory,System.Text.Encodings.Web.UrlEncoder)</Target>
+    <Left>lib/net10.0/Plenipo.AspNetCore.dll</Left>
+    <Right>lib/net10.0/Plenipo.AspNetCore.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:Plenipo.AspNetCore.Setup.DatabaseInitializer.EnsureRolePermissionsSeededAsync(Plenipo.Infrastructure.Persistence.PlatformDbContext,System.Guid,System.Collections.Generic.IReadOnlyDictionary{System.String,System.String[]},System.Threading.CancellationToken)</Target>
     <Left>lib/net10.0/Plenipo.AspNetCore.dll</Left>
     <Right>lib/net10.0/Plenipo.AspNetCore.dll</Right>
