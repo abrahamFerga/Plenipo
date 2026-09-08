@@ -179,6 +179,19 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   resolver, the tool, the requester, the approval id and the outcome, so "who released this write" is
   answerable from the append-only trail and not only from the pending-approval row the disclosure
   view reads (hireworthy#46).
+- **Consumer conformance says which dependency floors a candidate raised and which product shims it
+  retires.** A raised floor was the breaking change nobody classified: the `Microsoft.Extensions.AI`
+  bump to 10.9.0 failed every consumer that pinned it lower with NU1605 and the changelog said
+  nothing. `eng/diff-floors.sh` compares each `Plenipo.*` nuspec's `<dependency>` floors against the
+  last release's, and a new `floors` job on every conformance run posts the raised ones as warnings
+  and a step summary (39 between alpha.28 and today's `main`). The inverse-guard run
+  (`PlatformShimGuardTests`, #144) now turns each red guard into an annotation — "N shims this
+  candidate retires" — so the signal that a product can delete a shim reaches the release notes
+  instead of only a log nobody reads. The trigger also watches `Directory.Build.targets`. Still
+  open under #194: `frontend/**` conformance (swapping the candidate's `@plenipo/*` packages into a
+  consumer, not merely triggering) and the spine paths in `pr-gates.mjs`, which is an immutable
+  merge control and needs the administrative path.
+
 - **Served shells carry a per-request CSP nonce, so a product never pins a hash of platform HTML.**
   Both SPAs have one inline script (the theme initializer), and a product shipping a strict
   `script-src` pinned its SHA-256 — so any platform change to the shell's HTML white-screened the

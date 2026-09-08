@@ -31,7 +31,7 @@ name: Consumer conformance
 on:
   pull_request:
     branches: [main]
-    paths: ["src/**", "Directory.Packages.props", "Directory.Build.props"]
+    paths: ["src/**", "Directory.Packages.props", "Directory.Build.props", "Directory.Build.targets"]
   workflow_dispatch:
     inputs:
       consumer:
@@ -61,6 +61,43 @@ jobs:
           fi
           echo "matrix=$(cat out.json)" >> "$GITHUB_OUTPUT"
           cat out.json
+
+  # A raised dependency floor is a breaking change nobody classified: when the platform moved
+  # Microsoft.Extensions.AI past what a consumer pinned directly, that consumer failed restore with
+  # NU1605 and the changelog said nothing. This job compares every Plenipo.* package's declared
+  # floors against the last release's and posts the raised ones — warnings on the run, a table in
+  # the summary — for the reviewer and for announce-release, which treats a raised floor as breaking.
+  # It informs; the consumer build below is what decides.
+  floors:
+    name: Dependency floors vs the last release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Fetch the last release as the baseline
+        run: bash eng/fetch-baseline.sh
+
+      - name: Pack the candidate
+        # Package validation is the package job's business; here only the nuspecs matter.
+        run: >-
+          dotnet pack Plenipo.slnx -c Release -o "$GITHUB_WORKSPACE/floor-packages"
+          -p:Version=0.0.0-rc.${GITHUB_RUN_ID} -p:PlenipoPackageValidation=false
+
+      - name: Report raised dependency floors
+        run: |
+          log="$RUNNER_TEMP/floors.log"
+          bash eng/diff-floors.sh artifacts/baseline-feed "$GITHUB_WORKSPACE/floor-packages" | tee "$log"
+          {
+            echo "### Dependency floors vs the baseline release"
+            echo
+            grep -E '^::(warning|notice) ' "$log" | sed -E 's/^::[a-z]+ title=([^:]*)::(.*)$/- **\1** — \2/' || true
+            echo
+            tail -1 "$log"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   conformance:
     name: ${{ matrix.repo }}
@@ -124,10 +161,39 @@ jobs:
       - name: Report product shims the platform may have retired
         continue-on-error: true
         working-directory: consumer
+        # PlatformShimGuardTests assert the platform is STILL missing something. One going red against
+        # the candidate means the candidate shipped it and the product can delete a shim (#144). The
+        # output is kept so the next step can turn every red guard into an annotation — the alarm
+        # wired to the building where someone is listening.
         run: >-
           dotnet test ${{ matrix.solution }} -c Release
           -p:PlenipoVersion=${{ steps.pack.outputs.rc }}
           --filter 'FullyQualifiedName~PlatformShimGuardTests'
+          --logger "console;verbosity=normal"
+          2>&1 | tee "$RUNNER_TEMP/shim-guards.log"
+
+      - name: Annotate the shims this candidate retires
+        if: always()
+        env:
+          CONSUMER: ${{ matrix.repo }}
+        run: |
+          log="$RUNNER_TEMP/shim-guards.log"
+          [ -f "$log" ] || exit 0
+          retired="$(grep -E '^\s*Failed ' "$log" | sed -E 's/^\s*Failed //; s/ \[[0-9]+ ms\]\s*$//' || true)"
+          if [ -z "$retired" ]; then
+            echo "No shim guard fired: $CONSUMER carries no shim this candidate retires."
+            exit 0
+          fi
+          count="$(printf '%s\n' "$retired" | wc -l | tr -d ' ')"
+          echo "::notice title=$CONSUMER — $count shim(s) this candidate retires::A PlatformShimGuardTests guard went red against the candidate, so the platform now provides what the shim covered. Release-note material for announce-release; the product deletes the shim on upgrade."
+          printf '%s\n' "$retired" | while IFS= read -r guard; do
+            echo "::notice title=Shim retired in $CONSUMER::$guard"
+          done
+          {
+            echo "### $CONSUMER: shims this candidate retires ($count)"
+            echo
+            printf '%s\n' "$retired" | sed 's/^/- `/; s/$/`/'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   verdict:
     name: Conformance verdict
