@@ -65,12 +65,38 @@ export function createAgentConnection(): HubConnection {
         const bearer = headers["Authorization"] ?? headers["authorization"];
         return bearer?.startsWith("Bearer ") ? bearer.slice("Bearer ".length) : "";
       },
-      // Dev auth only, and only where it is live. `withUrl` reads this synchronously while
-      // `authHeaders` may be async, so it cannot be derived from there — but the dev headers are a
-      // constant, and a secured deployment must send none of them at all.
-      headers: plenipoWebMode() === "oidc" ? {} : { ...devAuthHeaders },
+      headers: agentHubHeaders(),
     })
     .withAutomaticReconnect()
     .configureLogging(LogLevel.Warning)
     .build();
+}
+
+/**
+ * The header bag a dev-mode hub connection carries — the configured client's own identity, the
+ * same one every HTTP request sends, so a product's dev-identity picker reaches the hub too (#215).
+ * It used to be the shared `devAuthHeaders` constant regardless of `configureClient`, which made
+ * every chat turn run as the constant's `system_admin` while the REST calls ran as whoever was
+ * picked — the split identity #110 fixed on the server, recreated in the client.
+ *
+ * `withUrl` reads the bag synchronously, so a synchronous `authHeaders` is read directly and an
+ * async one falls back to the constant (a product whose picker must reach the hub keeps it
+ * synchronous). A bearer never travels here — that is `accessTokenFactory`'s job, above — and a
+ * secured deployment (`mode: "oidc"`) sends no dev header at all.
+ */
+export function agentHubHeaders(): Record<string, string> {
+  if (plenipoWebMode() === "oidc") {
+    return {};
+  }
+
+  const configured = clientConfig().authHeaders();
+  const isPromise = typeof (configured as Promise<unknown> | undefined)?.then === "function";
+  const source = isPromise ? devAuthHeaders : (configured as Record<string, string>);
+  const headers: Record<string, string> = {};
+  for (const [name, value] of Object.entries(source)) {
+    if (name.toLowerCase() !== "authorization") {
+      headers[name] = value;
+    }
+  }
+  return headers;
 }
