@@ -4,7 +4,8 @@
     "each entry against every platform PR touching src/**. A product that is not registered here",
     "gets no protection, which is the incentive to register. Keep it small and honest: every entry",
     "costs CI minutes on every platform PR, so mark a consumer 'conformance': false with a note",
-    "rather than deleting the signal that it exists."
+    "rather than deleting the signal that it exists.",
+    "Optional per consumer: \"frontend\" — the directory (relative to the repo root) whose package.json depends on @plenipo/ui. When set, the matrix also builds and tests that frontend against @plenipo/ui and @plenipo/client packed from the candidate (#128). Absent = the .NET rungs only."
   ],
   "consumers": [
     {
@@ -12,6 +13,7 @@
       "solution": "Networthy.slnx",
       "ref": "main",
       "module": "finance",
+      "frontend": "frontend/networthy-ui",
       "required": true,
       "note": "Reference product for module, role, approval, document, and RAG seams. Consumes Plenipo.* alpha.28 from the vendored .packages feed; the alpha.29 upgrade (CSP nonce, the Plenipo.Testing kit, six retired shims) is networthy#247."
     },
@@ -29,6 +31,7 @@
       "solution": "Hireworthy.slnx",
       "ref": "main",
       "module": "hiring",
+      "frontend": "frontend/hireworthy-ui",
       "required": false,
       "conformance": false,
       "note": "Real Plenipo.* consumer (alpha.28) on main — src/Hireworthy.{AppHost,Host,Hiring} verified via the GitHub tree — and it filed #145 with an L3 reproduction, so it was consuming the platform while unregistered and therefore unprotected. Registered with conformance OFF deliberately, not as a judgement on the repo: #144 documents that one red consumer deadlocks every platform PR, so adding an unproven consumer to the blocking matrix while that is live would widen a known deadlock. The alpha.29 upgrade is hireworthy#66; flip conformance on once #144 is fixed AND it reports green against alpha.29."
