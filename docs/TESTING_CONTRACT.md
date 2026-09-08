@@ -46,7 +46,7 @@ Every repo on the fleet runs the same rungs. What differs is which ones the repo
 | **3** | Integration E2E | real host, real pgvector, real migrations, the approval gate, tenant isolation, the AG-UI protocol | L1 + L3 | Docker | every PR |
 | **4** | Golden evals — contract | agent routing, gating, protocol on the deterministic Mock provider | L1 | Docker | every PR |
 | **5** | Model-quality evals | tool-call accuracy, groundedness, task adherence with a real model, scored by an LLM judge | L4 (trended) | provider key | nightly, never a PR gate |
-| **6** | Frontend | units, real-browser E2E with the API mocked, the shipped bundle is current, no CSP violation on load | L1 | Node | every PR |
+| **6** | Frontend | units, real-browser E2E with the API mocked, the shipped bundle is current and hygienic, and — since #218 — the served shell driven in a real browser against the real sample host with the Mock provider: manifest, a chat turn, an approval-gated write, its release, the data tab, zero page or console errors | L1 + L3 | Node; Docker for the host rung | every PR |
 | **7** | Sweep + smoke | a whole product exercised as a user would; a deployed instance smoke-tested | L3 | Docker / a URL | after merges, after upgrades, after deploys |
 
 Two helpers decide how far to climb:
@@ -145,6 +145,24 @@ shim it wrote for S3 now fails a **new** guard instead of silently double-applyi
 that name and carries `[Trait("Category", "PlatformShimGuard")]`; conformance excludes it and reports
 it separately as "shims this candidate retires".
 
+### 3.5 The kit-default rule
+
+A change to the kit must keep a product that conformed to the previous kit green **by default**. A
+new `ProductContract` knob may only *relax* an invariant for a product that declares it; it may never
+be the precondition for passing one. The reason is structural, not stylistic: the required consumer
+in `consumers.json` is built against every platform PR, and its `main` cannot declare a knob that
+does not exist in the kit it is on. If passing needs the declaration, the platform PR that adds the
+knob is red on that consumer, the consumer's PR that adds the declaration cannot compile until the
+platform ships, and nothing merges without an administrator — the bootstrap deadlock of 2026-09-08,
+when `SeededReadEndpoints` (#208) arrived strict-by-default and every platform PR was red on
+networthy until #210 was merged by hand.
+
+The test for a kit change is therefore: run the previous release's consumers' suites against the
+candidate kit unchanged. Any new red that the product can only clear by editing its fixture is a
+kit defect, however correct the new invariant is. Tighten by making the *default* smarter (compare
+rows by id instead of counting them), by reading what the product already declares (a manifest's
+`singleton` tab), or by shipping the knob one release before the invariant that needs it.
+
 ## 4. What the platform owes
 
 ### 4.1 On every pull request
@@ -156,7 +174,7 @@ it separately as "shims this candidate retires".
 | **Package validation against the last release** | since #193 | `EnablePackageValidation` + `PackageValidationBaselineVersion` = last tag on every packable project (`Directory.Build.targets`; the baseline comes from the release's assets via `eng/fetch-baseline.sh`). A removed or changed public member fails `dotnet pack` unless the project's `CompatibilitySuppressions.xml` names it — that file is reviewed like code and is the exact breaking list `announce-release` writes migration notes from. Bump the baseline as part of every release |
 | **Dependency-floor diff** | missing | conformance job diffs the RC's transitive floors against the last release's and posts the raised ones; a raised floor is classified **breaking** by `announce-release` |
 | Consumer conformance | since #128: triggers on `src/**` and on the shipped frontend packages (`frontend/plenipo-ui`, `frontend/plenipo-client`), and on `consumers.json`; builds and tests each registered consumer against the candidate nupkgs and, for a consumer that registers a `frontend` directory, builds and tests that shell against `@plenipo/ui` and `@plenipo/client` packed from the same candidate; annotates the shims a candidate retires (#203) | flip `required` for each consumer once it has held green; `PATH_RULES` for the spine (#137) is a locked control path and waits for the owner |
-| Frontend | exists | add a CSP check: load the built shell under the platform's real CSP header and assert zero `securitypolicyviolation` events |
+| Frontend | since #218: `browser-e2e.yml` (its own workflow, because `ci.yml` is a locked control) builds the app shell, serves it from the sample host on a Postgres service with the Mock provider, and drives the core loop in Chromium — the wire between shell and host that the mocked specs cannot see | promote the check to required once it has held green; add a CSP-header variant for hosts that set one and assert zero `securitypolicyviolation` events |
 
 ### 4.2 On every merge to `main` — the release train
 
@@ -178,6 +196,10 @@ JSON shape a product reads, a flipped default, **a raised dependency floor**, **
 - Rung 5 runs nightly on the sample host with a real provider, see §6.
 - `consumers.json` stays honest: a consumer with `conformance: false` is listed with the reason and
   the issue that unblocks it. An empty registry is a red gate.
+- Drift is measured, not remembered (#220): `fleet-drift.yml` runs weekly and on demand, reads every
+  consumer's platform pin from its default branch, and reports it against the last release — a
+  table in the run summary, a warning per laggard, and one living platform issue edited in place.
+  `announce-release` remains the push channel; this is the pull-side dashboard.
 
 ## 5. What a product owes
 

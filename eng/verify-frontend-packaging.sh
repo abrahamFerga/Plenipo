@@ -44,6 +44,15 @@ for pkg in client ui; do
   cp "$TGZ" "$CONS/plenipo-$pkg.tgz"
 done
 
+# What is INSIDE the ui tarball (#219, after #213): the JSX runtime must come from the host, no React
+# internals may be inlined, and no peer may also be a dependency. The type-check below cannot see
+# any of that — a bundle with React 19's runtime compiled in type-checks perfectly and crashes a
+# React 18 host at the first component.
+echo "==> Checking the packed @plenipo/ui bundle"
+mkdir -p "$WORK/ui-x"
+tar -xzf "$CONS/plenipo-ui.tgz" -C "$WORK/ui-x"
+bash "$ROOT/eng/check-ui-bundle.sh" "$WORK/ui-x/package"
+
 # @plenipo/client is a direct dependency here, not just a transitive one, because that is how a
 # non-React consumer takes it — the mobile shell installs the client and never touches @plenipo/ui.
 # Declaring it also pins the ui's own dependency on it to this tarball rather than the registry.
