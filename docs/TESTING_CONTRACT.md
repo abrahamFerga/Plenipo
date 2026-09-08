@@ -145,6 +145,24 @@ shim it wrote for S3 now fails a **new** guard instead of silently double-applyi
 that name and carries `[Trait("Category", "PlatformShimGuard")]`; conformance excludes it and reports
 it separately as "shims this candidate retires".
 
+### 3.5 The kit-default rule
+
+A change to the kit must keep a product that conformed to the previous kit green **by default**. A
+new `ProductContract` knob may only *relax* an invariant for a product that declares it; it may never
+be the precondition for passing one. The reason is structural, not stylistic: the required consumer
+in `consumers.json` is built against every platform PR, and its `main` cannot declare a knob that
+does not exist in the kit it is on. If passing needs the declaration, the platform PR that adds the
+knob is red on that consumer, the consumer's PR that adds the declaration cannot compile until the
+platform ships, and nothing merges without an administrator — the bootstrap deadlock of 2026-09-08,
+when `SeededReadEndpoints` (#208) arrived strict-by-default and every platform PR was red on
+networthy until #210 was merged by hand.
+
+The test for a kit change is therefore: run the previous release's consumers' suites against the
+candidate kit unchanged. Any new red that the product can only clear by editing its fixture is a
+kit defect, however correct the new invariant is. Tighten by making the *default* smarter (compare
+rows by id instead of counting them), by reading what the product already declares (a manifest's
+`singleton` tab), or by shipping the knob one release before the invariant that needs it.
+
 ## 4. What the platform owes
 
 ### 4.1 On every pull request
