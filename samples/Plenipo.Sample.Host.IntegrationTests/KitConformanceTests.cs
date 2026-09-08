@@ -2,7 +2,7 @@ using Plenipo.Testing.Conformance;
 
 namespace Plenipo.Sample.Host.IntegrationTests;
 
-// The platform is the first consumer of its own conformance kit: the three invariant packs a product
+// The platform is the first consumer of its own conformance kit: the invariant packs a product
 // derives from Plenipo.Testing run here against the sample host's finance module, exactly as they
 // will run against every product. A kit test that cannot pass on the sample host never ships.
 
@@ -14,3 +14,6 @@ public sealed class ManifestConformance(IntegrationFixture fixture) : PlenipoMan
 
 [Collection("api")]
 public sealed class TenancyConformance(IntegrationFixture fixture) : PlenipoTenancyConformance<Program>(fixture);
+
+[Collection("api")]
+public sealed class RedTeamConformance(IntegrationFixture fixture) : PlenipoRedTeamConformance<Program>(fixture);

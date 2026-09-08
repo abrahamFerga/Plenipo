@@ -16,7 +16,10 @@ namespace Plenipo.AspNetCore.Hosting;
 ///
 /// The shell is static; every byte of data it reads comes from the RBAC-gated <c>/api/*</c> surface.
 /// Reserved prefixes (<c>/api</c>, <c>/admin</c>, <c>/hubs</c>, <c>/webhooks</c>, health, OpenAPI)
-/// are never shadowed, so all platform endpoints keep working unchanged.
+/// are never shadowed, so all platform endpoints keep working unchanged. The shell's
+/// <c>index.html</c> is served through <see cref="PlenipoCsp"/>, which stamps a per-request nonce
+/// onto its scripts so a product can ship a nonce-based Content-Security-Policy instead of pinning
+/// a hash of platform-authored HTML.
 /// </summary>
 public static class DomainUiExtensions
 {
@@ -55,6 +58,19 @@ public static class DomainUiExtensions
 
         var provider = new PhysicalFileProvider(Path.GetFullPath(root));
 
+        // 0. index.html is never served as a raw file: it goes through the nonce-stamping fallback
+        //    below, whichever way it is asked for.
+        app.Use((ctx, next) =>
+        {
+            if (HttpMethods.IsGet(ctx.Request.Method)
+                && ctx.Request.Path.Equals("/index.html", StringComparison.OrdinalIgnoreCase))
+            {
+                ctx.Request.Path = "/";
+            }
+
+            return next(ctx);
+        });
+
         // 1. Serve real files (JS/CSS/assets) at the root. A matching file short-circuits here.
         app.UseStaticFiles(new StaticFileOptions
         {
@@ -75,8 +91,8 @@ public static class DomainUiExtensions
                     ctx.Response.StatusCode = StatusCodes.Status404NotFound;
                     return;
                 }
-                ctx.Response.ContentType = "text/html; charset=utf-8";
-                await ctx.Response.SendFileAsync(index);
+
+                await PlenipoCsp.ServeShellAsync(ctx, index);
             }));
 
         if (logger.IsEnabled(LogLevel.Information))

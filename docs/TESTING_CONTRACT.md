@@ -74,7 +74,7 @@ A new platform package, versioned with the rest of the family and consumed by ev
 | `PlenipoManifestConformance<TProgram>` | `ManifestGuardTests` in hireworthy and auditworthy | every tool in the manifest has a `ModuleTool` and vice versa, same permission string, every write tool `RequiresApproval`, every tab permission in the security catalog |
 | `PlenipoTenancyConformance<TProgram>` | the regex in `validate-product` | reflection over the product's `DbContext` model: every entity carrying `TenantId` has a global query filter; plus an HTTP probe that a second tenant sees nothing on every mapped GET |
 | `PlenipoAppHostConformance<TAppHost>` | auditworthy's `AppHost.Tests` | `Aspire.Hosting.Testing`: boots the product AppHost, asserts the Postgres image is pgvector, every declared resource reaches Healthy, `/alive` and `/api/platform/modules` answer |
-| `PlenipoRedTeamPack` | nothing — new | prompt-injection, harmful-content and sensitive-data probes through the real guardrail pipeline in enforcement mode; deterministic for rule-based controls |
+| `PlenipoRedTeamConformance<TProgram>` | nothing — new | prompt-injection and sensitive-data probes through the real guardrail pipeline: in `Enforce` mode an injection is stopped before the model (R1), an email is redacted before the model and never streamed back (R2), an SSN can be blocked outright (R3); in `Audit` mode the turn proceeds and the finding is still on the audit trail (R4). Keyless — the platform's local detectors — so it runs on every PR; harmful-content categories need the optional Azure connection and are not probed here |
 | `buildTransitive/Plenipo.Testing.props` | each product's own Testcontainers pin | pins Testcontainers and its transitive floors, carries `NuGetAuditSuppress` items with an expiry comment — **an advisory is fixed once, on the platform, and reaches every product on upgrade** |
 
 ### 3.2 The spine invariant pack
@@ -105,7 +105,7 @@ Status: S1–S7, S9, S11–S14 ship in `PlenipoSpineConformance` (S3 also assert
 event and the disclosure view's requester and resolver; S4a is the approvals-permission gate on its
 own). S10 holds by construction — connector tools release through the same requester scope — and
 has no generic test because the kit cannot assume a connector. S8 waits on #121, which is still
-`needs-human`. S15 waits on #197.
+`needs-human`. S15 ships with #197: served shells carry a per-request nonce and the pack checks it.
 
 ### 3.3 How a product uses it
 
@@ -151,8 +151,8 @@ it separately as "shims this candidate retires".
 | `ci.yml` — build, unit, in-process, integration, evals, image scan, packaging, frontend | exists | unchanged |
 | Deterministic PR gates (`pr-gates.mjs`): `Closes #N`, runtime evidence, red-before-green | exists | add the spine paths to `PATH_RULES` and scan additions as well as removals (#137) |
 | **Package validation against the last release** | since #193 | `EnablePackageValidation` + `PackageValidationBaselineVersion` = last tag on every packable project (`Directory.Build.targets`; the baseline comes from the release's assets via `eng/fetch-baseline.sh`). A removed or changed public member fails `dotnet pack` unless the project's `CompatibilitySuppressions.xml` names it — that file is reviewed like code and is the exact breaking list `announce-release` writes migration notes from. Bump the baseline as part of every release |
-| **Dependency-floor diff** | since #194 | the conformance run's `floors` job packs the candidate and `eng/diff-floors.sh` compares every `Plenipo.*` nuspec's floors against the last release's; raised ones are warnings on the run and a table in the summary, and `announce-release` classifies a raised floor as **breaking** |
-| Consumer conformance | exists; since #194 also annotates the shims a candidate retires (each red `PlatformShimGuardTests` guard) and watches `Directory.Build.targets` | still to do: trigger on `frontend/**` and swap the candidate's `@plenipo/*` packages into the consumer, not merely run its suite (#128); the spine paths in `pr-gates.mjs`, an immutable merge control, through the administrative path (#137) |
+| **Dependency-floor diff** | missing | conformance job diffs the RC's transitive floors against the last release's and posts the raised ones; a raised floor is classified **breaking** by `announce-release` |
+| Consumer conformance | exists, `src/**` only | trigger on `frontend/**` too and run the consumer's frontend rungs (#128); post the retired-shim list as an annotation |
 | Frontend | exists | add a CSP check: load the built shell under the platform's real CSP header and assert zero `securitypolicyviolation` events |
 
 ### 4.2 On every merge to `main` — the release train
@@ -231,7 +231,7 @@ reasons.
 | **Contract evals** (rung 4) | did the platform route, gate and stream correctly for this intent and this role? | Mock | yes | every PR |
 | **Trajectory assertions** (rung 3) | did the tool calls happen in the right order, with the right arguments, exactly once, as the right identity, and were they audited? | Mock | yes | every PR |
 | **Model-quality evals** (rung 5) | with a real model, is the tool call accurate, the answer grounded in the tool result, the task adhered to, the refusal a refusal? | real | no | nightly; fails only on a regression past a threshold against a stored baseline |
-| **Red-team pack** | do the guardrails catch injection, harmful content and sensitive data in enforcement mode, across input, tool call, tool result and output? | Mock for rule-based controls; real for model-based | mostly | every PR for rule-based; nightly for model-based |
+| **Red-team pack** (`PlenipoRedTeamConformance`, rung 3) | do the guardrails catch injection and sensitive data in enforcement mode, and record findings in audit mode? Today: the user-input stage (R1–R4); the tool-call and tool-result stages need a module tool that returns attacker-controlled text and are the next cases | Mock for rule-based controls; real for model-based | yes for rule-based | every PR for rule-based; nightly for harmful-content categories, which need the optional Azure connection |
 
 Design rules for all four:
 
@@ -244,9 +244,11 @@ Design rules for all four:
 - **Assert the trajectory, not only the final text.** "The reply mentions approval" is weaker than
   "`record_transaction` was proposed once, parked, executed once after approval, by the requester,
   with three audit rows".
-- **RAG has its own fixture:** a committed three-document corpus with known chunk ids and page
-  numbers; a deterministic retrieval test asserts the expected chunks and `p. N` citations on the
-  Mock embedder (rung 3), and a nightly groundedness score on a real model (rung 5).
+- **RAG has its own fixture:** corpora built in-test with known text and pages — the sample suite's
+  page-citation, scoping, language and reranker tests render a multi-page PDF through the platform's
+  own writer and assert the expected chunks and `p. N` citations on the Mock embedder (rung 3);
+  groundedness of the final answer is a nightly score on a real model (rung 5). A committed shared
+  corpus is not needed while every corpus a test asserts on is derived, not hard-coded.
 - **Record what a real model did when it surprised you.** A rung 5 failure that exposes a platform
   defect becomes a rung 3 or 4 case, so it is caught deterministically forever after.
 
@@ -261,7 +263,7 @@ Design rules for all four:
 | Changed JSON shape a product reads | the product's `<product>.http` catalog test and the `@plenipo/client` type-check in `verify-frontend-packaging.sh` |
 | Flipped default | contract eval cases pinning the old behaviour, e.g. `Rag:Reranker` |
 | Raised dependency floor | the floor diff in conformance; NU1605 in the consumer build |
-| Changed inline HTML behind a CSP hash | S15 and the frontend CSP smoke |
+| Changed inline HTML behind a CSP hash | no longer a class: served shells carry a per-request nonce (`PlenipoCsp`), products emit `'nonce-…'` instead of a hash; S15 checks it |
 | Advisory in a test-only dependency | the kit's props: fixed once |
 | A product merely lagging | rung 0 version-lag check |
 

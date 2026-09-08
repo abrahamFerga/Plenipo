@@ -6,7 +6,10 @@ All notable changes to Plenipo are recorded here. The format follows
 
 Releases are cut from a tagged GitHub Release (`v*`), which triggers the publish workflow
 (`.github/workflows/publish.yml`) to push the `Plenipo.*` NuGet packages and the `@plenipo/client`
-and `@plenipo/ui` npm packages. Until then, everything lives under **Unreleased**.
+and `@plenipo/ui` npm packages. Until then, everything lives under **Unreleased** — but not
+uninstallable: every merge to `main` that touches the packages publishes a numbered prerelease
+(`<last tag>.<run number>`, e.g. `0.1.0-alpha.28.412`) to the GitHub Packages feed, which is the
+build consumer conformance tested and the one a product pins to consume a fix before the next tag.
 
 ## [Unreleased] — toward 0.1.0-alpha
 
@@ -146,6 +149,19 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
 
 ### Added
 
+- **`PlenipoRedTeamConformance` — the guardrails, probed through the real pipeline on every product.**
+  The agent security controls (`docs/AGENT_SECURITY.md`) were unit-tested and proven once on the bare
+  platform host; nothing drove attack strings through a *product's* host, where a module's own
+  instructions, tools and roles sit in the pipeline. The kit's new pack does, keylessly, with the
+  tenant's controls set through the admin API and cleared afterwards: in `Enforce` mode a prompt
+  injection is stopped before the model with a `RUN_ERROR` naming the policy and an
+  `AgentSecurityBlocked` audit event (R1), an email address is redacted before the model and never
+  appears anywhere in the stream (R2), a Social Security number can be blocked outright (R3); in
+  `Audit` mode the same injection proceeds and is still recorded as `AgentSecurityDetected` (R4).
+  Harmful-content categories need the optional Azure connection and are not probed; the tool-call
+  and tool-result stages are the next cases. The sample host runs it against the finance module
+  alongside the other packs. (#196)
+
 - **`GET /api/chat/approvals?conversationId=…`** narrows the queue to one conversation, pushed into
   `IApprovalStore.ListPendingAsync(Guid? conversationId, …)` (a default interface member, so a
   swapped store keeps compiling). `PendingApprovals` in `@plenipo/ui` takes a `conversationId` prop —
@@ -176,6 +192,15 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   consumer, not merely triggering) and the spine paths in `pr-gates.mjs`, which is an immutable
   merge control and needs the administrative path.
 
+- **Served shells carry a per-request CSP nonce, so a product never pins a hash of platform HTML.**
+  Both SPAs have one inline script (the theme initializer), and a product shipping a strict
+  `script-src` pinned its SHA-256 — so any platform change to the shell's HTML white-screened the
+  product, and `consumer-conformance.yml`'s own header had to admit that no gate could see it. The
+  host now serves `index.html` (at `/`, `/index.html`, deep links, and `/admin/…`) through
+  `PlenipoCsp`, stamping `nonce="…"` onto every `<script>` and marking the response `no-store`; a
+  product's CSP middleware calls `PlenipoCsp.NonceFor(context)` and emits `'nonce-…'` instead. The
+  platform sets no policy header itself. `BUILDING_A_PRODUCT.md` shows the middleware; the kit's
+  `S15` invariant checks a served shell's scripts carry a nonce the policy admits. (#197)
 - **Package validation: a public-surface break now fails the pull request, not a consumer.** Every
   packable project is compared against the last published release when it is packed
   (`EnablePackageValidation`, baseline `0.1.0-alpha.28` in `Directory.Build.targets`, restored from

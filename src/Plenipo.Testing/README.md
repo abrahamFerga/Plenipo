@@ -20,6 +20,7 @@ public sealed class Fixture : PlenipoHostFixture<Program>
 [Collection("api")] public sealed class Spine(Fixture f)    : PlenipoSpineConformance<Program>(f);
 [Collection("api")] public sealed class Manifest(Fixture f) : PlenipoManifestConformance<Program>(f);
 [Collection("api")] public sealed class Tenancy(Fixture f)  : PlenipoTenancyConformance<Program>(f);
+[Collection("api")] public sealed class RedTeam(Fixture f)  : PlenipoRedTeamConformance<Program>(f);
 [Collection("api")] public sealed class Evals(Fixture f)    : PlenipoGoldenEvals<Program>(f);
 ```
 

@@ -64,6 +64,20 @@ public static class AdminConsoleExtensions
 
         var provider = new PhysicalFileProvider(Path.GetFullPath(root));
 
+        // 0. index.html is never served as a raw file: it goes through the nonce-stamping fallback
+        //    below (see PlenipoCsp), whichever way it is asked for.
+        var indexPath = $"{requestPath.TrimEnd('/')}/index.html";
+        app.Use((ctx, next) =>
+        {
+            if (HttpMethods.IsGet(ctx.Request.Method)
+                && ctx.Request.Path.Equals(indexPath, StringComparison.OrdinalIgnoreCase))
+            {
+                ctx.Request.Path = $"{requestPath.TrimEnd('/')}/";
+            }
+
+            return next(ctx);
+        });
+
         // 1. Serve real files (JS/CSS/assets) under the request path. A matching file short-circuits here.
         app.UseStaticFiles(new StaticFileOptions
         {
@@ -85,8 +99,8 @@ public static class AdminConsoleExtensions
                     ctx.Response.StatusCode = StatusCodes.Status404NotFound;
                     return;
                 }
-                ctx.Response.ContentType = "text/html; charset=utf-8";
-                await ctx.Response.SendFileAsync(index);
+
+                await PlenipoCsp.ServeShellAsync(ctx, index);
             }));
 
         if (logger.IsEnabled(LogLevel.Information))
