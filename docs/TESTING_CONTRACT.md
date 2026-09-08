@@ -46,7 +46,7 @@ Every repo on the fleet runs the same rungs. What differs is which ones the repo
 | **3** | Integration E2E | real host, real pgvector, real migrations, the approval gate, tenant isolation, the AG-UI protocol | L1 + L3 | Docker | every PR |
 | **4** | Golden evals — contract | agent routing, gating, protocol on the deterministic Mock provider | L1 | Docker | every PR |
 | **5** | Model-quality evals | tool-call accuracy, groundedness, task adherence with a real model, scored by an LLM judge | L4 (trended) | provider key | nightly, never a PR gate |
-| **6** | Frontend | units, real-browser E2E with the API mocked, the shipped bundle is current, no CSP violation on load | L1 | Node | every PR |
+| **6** | Frontend | units, real-browser E2E with the API mocked, the shipped bundle is current and hygienic, and — since #218 — the served shell driven in a real browser against the real sample host with the Mock provider: manifest, a chat turn, an approval-gated write, its release, the data tab, zero page or console errors | L1 + L3 | Node; Docker for the host rung | every PR |
 | **7** | Sweep + smoke | a whole product exercised as a user would; a deployed instance smoke-tested | L3 | Docker / a URL | after merges, after upgrades, after deploys |
 
 Two helpers decide how far to climb:
@@ -156,7 +156,7 @@ it separately as "shims this candidate retires".
 | **Package validation against the last release** | since #193 | `EnablePackageValidation` + `PackageValidationBaselineVersion` = last tag on every packable project (`Directory.Build.targets`; the baseline comes from the release's assets via `eng/fetch-baseline.sh`). A removed or changed public member fails `dotnet pack` unless the project's `CompatibilitySuppressions.xml` names it — that file is reviewed like code and is the exact breaking list `announce-release` writes migration notes from. Bump the baseline as part of every release |
 | **Dependency-floor diff** | missing | conformance job diffs the RC's transitive floors against the last release's and posts the raised ones; a raised floor is classified **breaking** by `announce-release` |
 | Consumer conformance | since #128: triggers on `src/**` and on the shipped frontend packages (`frontend/plenipo-ui`, `frontend/plenipo-client`), and on `consumers.json`; builds and tests each registered consumer against the candidate nupkgs and, for a consumer that registers a `frontend` directory, builds and tests that shell against `@plenipo/ui` and `@plenipo/client` packed from the same candidate; annotates the shims a candidate retires (#203) | flip `required` for each consumer once it has held green; `PATH_RULES` for the spine (#137) is a locked control path and waits for the owner |
-| Frontend | exists | add a CSP check: load the built shell under the platform's real CSP header and assert zero `securitypolicyviolation` events |
+| Frontend | since #218: `browser-e2e.yml` (its own workflow, because `ci.yml` is a locked control) builds the app shell, serves it from the sample host on a Postgres service with the Mock provider, and drives the core loop in Chromium — the wire between shell and host that the mocked specs cannot see | promote the check to required once it has held green; add a CSP-header variant for hosts that set one and assert zero `securitypolicyviolation` events |
 
 ### 4.2 On every merge to `main` — the release train
 

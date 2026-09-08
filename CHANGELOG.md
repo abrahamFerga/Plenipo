@@ -13,6 +13,21 @@ build consumer conformance tested and the one a product pins to consume a fix be
 
 ## [Unreleased]
 
+### Added
+
+- **The served shell, in a real browser, against the real host (#218).** The Playwright specs under
+  `frontend/plenipo-ui/e2e` mock the platform API, so a shell that renders fine against them and
+  breaks against the host — a bundled React runtime (#213), a DTO shape, an SSE/SignalR framing, a
+  CSP refusal of the served scripts — was caught by nobody until a product ran it.
+  `eng/browser-e2e.sh` builds the app shell, puts it where the sample host serves it from, starts the
+  host on a throwaway Postgres with the Mock provider, and `frontend/plenipo-ui/e2e-host` drives one
+  user's core loop in Chromium: the manifest renders, a starter prompt streams a reply with its tool
+  chip and token count, an approval-gated write parks, Approve releases it, the Transactions tab shows
+  the row, and no page or console error was raised. `browser-e2e.yml` runs it on every PR touching
+  the platform, the samples or the shipped frontend — its own workflow because `ci.yml` is a locked
+  merge control; an owner promotes it to required once it has held green. `pnpm test:e2e:host` runs
+  the spec against any host `PLENIPO_HOST_URL` names.
+
 ### Changed
 
 - **Consumer conformance covers the shipped frontend (#128).** `@plenipo/ui` and `@plenipo/client`
