@@ -178,6 +178,10 @@ JSON shape a product reads, a flipped default, **a raised dependency floor**, **
 - Rung 5 runs nightly on the sample host with a real provider, see §6.
 - `consumers.json` stays honest: a consumer with `conformance: false` is listed with the reason and
   the issue that unblocks it. An empty registry is a red gate.
+- Drift is measured, not remembered (#220): `fleet-drift.yml` runs weekly and on demand, reads every
+  consumer's platform pin from its default branch, and reports it against the last release — a
+  table in the run summary, a warning per laggard, and one living platform issue edited in place.
+  `announce-release` remains the push channel; this is the pull-side dashboard.
 
 ## 5. What a product owes
 
