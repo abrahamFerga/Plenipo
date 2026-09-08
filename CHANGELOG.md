@@ -6,7 +6,10 @@ All notable changes to Plenipo are recorded here. The format follows
 
 Releases are cut from a tagged GitHub Release (`v*`), which triggers the publish workflow
 (`.github/workflows/publish.yml`) to push the `Plenipo.*` NuGet packages and the `@plenipo/client`
-and `@plenipo/ui` npm packages. Until then, everything lives under **Unreleased**.
+and `@plenipo/ui` npm packages. Until then, everything lives under **Unreleased** — but not
+uninstallable: every merge to `main` that touches the packages publishes a numbered prerelease
+(`<last tag>.<run number>`, e.g. `0.1.0-alpha.28.412`) to the GitHub Packages feed, which is the
+build consumer conformance tested and the one a product pins to consume a fix before the next tag.
 
 ## [Unreleased] — toward 0.1.0-alpha
 
