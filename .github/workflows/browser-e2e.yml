@@ -74,6 +74,7 @@ jobs:
         run: pnpm -C frontend install --frozen-lockfile
 
       - name: Install Playwright chromium
+        working-directory: frontend
         run: pnpm --filter @plenipo/ui exec playwright install --with-deps chromium
 
       - name: Build the shell, start the host, drive the loop in Chromium
