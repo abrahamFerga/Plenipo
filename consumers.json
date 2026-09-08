@@ -13,7 +13,7 @@
       "ref": "main",
       "module": "finance",
       "required": true,
-      "note": "Reference product for module, role, approval, document, and RAG seams. Consumes Plenipo.* alpha.28 from the vendored .packages feed."
+      "note": "Reference product for module, role, approval, document, and RAG seams. Consumes Plenipo.* alpha.28 from the vendored .packages feed; the alpha.29 upgrade (CSP nonce, the Plenipo.Testing kit, six retired shims) is networthy#247."
     },
     {
       "repo": "abrahamFerga/auditworthy",
@@ -22,7 +22,7 @@
       "module": "compliance",
       "required": false,
       "conformance": false,
-      "note": "Real Plenipo.* consumer (alpha.28), blocked on two prerequisites, both fixed in auditworthy#27: it repeated the platform version per csproj (the swap needs a central PlenipoVersion property), and it pinned Microsoft.Extensions.AI 10.7.0 while platform main requires >= 10.8.1, which is 12 NU1605 downgrade errors. Flip conformance on once auditworthy#27 merges."
+      "note": "Real Plenipo.* consumer (alpha.28). Its two prerequisites landed with auditworthy#27 (central PlenipoVersion; Microsoft.Extensions.AI 10.8.1 on main). The alpha.29 upgrade is auditworthy#101 — flip conformance on when it reports green against alpha.29."
     },
     {
       "repo": "abrahamFerga/hireworthy",
@@ -31,7 +31,7 @@
       "module": "hiring",
       "required": false,
       "conformance": false,
-      "note": "Real Plenipo.* consumer (alpha.28) on main — src/Hireworthy.{AppHost,Host,Hiring} verified via the GitHub tree — and it filed #145 with an L3 reproduction, so it was consuming the platform while unregistered and therefore unprotected. Registered with conformance OFF deliberately, not as a judgement on the repo: #144 documents that one red consumer deadlocks every platform PR, so adding an unproven consumer to the blocking matrix while that is live would widen a known deadlock. Flip conformance on once #144 is fixed AND a manual build of Hireworthy.slnx against platform main is green."
+      "note": "Real Plenipo.* consumer (alpha.28) on main — src/Hireworthy.{AppHost,Host,Hiring} verified via the GitHub tree — and it filed #145 with an L3 reproduction, so it was consuming the platform while unregistered and therefore unprotected. Registered with conformance OFF deliberately, not as a judgement on the repo: #144 documents that one red consumer deadlocks every platform PR, so adding an unproven consumer to the blocking matrix while that is live would widen a known deadlock. The alpha.29 upgrade is hireworthy#66; flip conformance on once #144 is fixed AND it reports green against alpha.29."
     },
     {
       "repo": "abrahamFerga/casewell",
@@ -40,7 +40,7 @@
       "module": "legal",
       "required": false,
       "conformance": false,
-      "note": "Stale — still consumes pre-rename Cortex.* packages (alpha.14), so it would fail for reasons unrelated to any platform change. Upgrade tracked in casewell#40; re-enable once it lands."
+      "note": "Stale — still consumes pre-rename Cortex.* packages (alpha.14), so it would fail for reasons unrelated to any platform change. Upgrade tracked in casewell#40, with the alpha.29 deltas on top in casewell#97; re-enable once both land."
     },
     {
       "repo": "abrahamFerga/rentwell",
@@ -49,7 +49,7 @@
       "module": "tbd",
       "required": false,
       "conformance": false,
-      "note": "Not yet a consumer on main — the foundations bootstrap is still on a feature branch. Flip conformance on once src/ with Plenipo.* references lands on main."
+      "note": "Not yet a consumer on main — the foundations bootstrap is still on a feature branch. Told to start on alpha.29 in rentwell#29. Flip conformance on once src/ with Plenipo.* references lands on main."
     }
   ]
 }

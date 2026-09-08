@@ -30,7 +30,7 @@
   -->
   <PropertyGroup Condition="'$(IsPackable)' == 'true'">
     <PlenipoBaselineFeed>$(MSBuildThisFileDirectory)artifacts/baseline-feed</PlenipoBaselineFeed>
-    <PackageValidationBaselineVersion>0.1.0-alpha.28</PackageValidationBaselineVersion>
+    <PackageValidationBaselineVersion>0.1.0-alpha.29</PackageValidationBaselineVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsPackable)' == 'true' and Exists('$(PlenipoBaselineFeed)') and '$(PlenipoPackageValidation)' != 'false'">

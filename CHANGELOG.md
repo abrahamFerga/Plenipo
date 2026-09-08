@@ -6,12 +6,21 @@ All notable changes to Plenipo are recorded here. The format follows
 
 Releases are cut from a tagged GitHub Release (`v*`), which triggers the publish workflow
 (`.github/workflows/publish.yml`) to push the `Plenipo.*` NuGet packages and the `@plenipo/client`
-and `@plenipo/ui` npm packages. Until then, everything lives under **Unreleased** — but not
+and `@plenipo/ui` npm packages. Between tags, everything lives under **Unreleased** — but not
 uninstallable: every merge to `main` that touches the packages publishes a numbered prerelease
 (`<last tag>.<run number>`, e.g. `0.1.0-alpha.28.412`) to the GitHub Packages feed, which is the
 build consumer conformance tested and the one a product pins to consume a fix before the next tag.
 
-## [Unreleased] — toward 0.1.0-alpha
+## [Unreleased]
+
+Nothing yet.
+
+## [0.1.0-alpha.29] — 2026-09-08
+
+The fleet testing release, and the first sectioned entry: everything below, from the first alpha
+through this tag, is what `v0.1.0-alpha.29` ships. Earlier alphas were cut without promoting this
+section, so the [release notes](https://github.com/abrahamFerga/Plenipo/releases/tag/v0.1.0-alpha.29)
+are the place that says what changed since alpha.28 specifically, and the upgrade steps for it.
 
 The first alpha: the base platform, an admin/security dashboard, and three sample verticals,
 all runnable with no AI key via a built-in Mock provider. See [README.md](README.md) and
