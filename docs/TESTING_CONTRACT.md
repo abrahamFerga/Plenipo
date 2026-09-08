@@ -89,17 +89,23 @@ release safe for every product at once.
 | S2 | A write tool is parked with `approval_required`; the reply does not claim the write happened | existing |
 | S3 | Approving executes the tool **once, as the requester**, and audits three rows: proposal, decision with a non-null approver, execution success | #153, #88, casewell#74, networthy#151, auditworthy#23, hireworthy#46 |
 | S4 | An approver who lacks the tool's own permission gets 403 and nothing executes | #145, hireworthy#51 |
-| S5 | A pending approval can only be decided from the conversation that produced it | #111 |
+| S5 | A conversation's pending approvals can be listed alone, so a chat never offers another thread's write | #111 |
 | S6 | Rejecting executes nothing and is audited as a rejection | existing |
 | S7 | A permission denial is recorded in the auth audit | #115 |
 | S8 | An ungated tool that refuses to act is not audited as a success | #121, networthy#184 |
-| S9 | Dev-auth: an absent or empty `X-Dev-Roles` yields no roles, never `*` | #167, networthy#227 |
+| S9 | Dev-auth: an empty `X-Dev-Roles` yields no roles; an absent one yields `Auth:Dev:RolesWhenAbsent`, which a product sets to empty so a stripped header can never escalate | #167, networthy#227 |
 | S10 | A connector tool approved by a human executes as the requester too | casewell#89 |
 | S11 | The AG-UI turn streams `RUN_STARTED … CUSTOM(token_usage) … RUN_FINISHED`, no `RUN_ERROR`, and a usage row exists afterwards | existing |
 | S12 | Malformed or absent JSON is a 400, never a 500, on every mapped endpoint | #176, networthy#216 |
 | S13 | `/alive` and `/health` answer 200 with `ASPNETCORE_ENVIRONMENT=Production` | runbook §6 |
 | S14 | A first-touch user is provisioned exactly once under concurrent requests | networthy#215 |
 | S15 | The product's pinned CSP `sha256-` for platform inline HTML matches what the platform serves, or the product pins none | conformance header, `announce-release` |
+
+Status: S1–S7, S9, S11–S14 ship in `PlenipoSpineConformance` (S3 also asserts the `ApprovalDecided`
+event and the disclosure view's requester and resolver; S4a is the approvals-permission gate on its
+own). S10 holds by construction — connector tools release through the same requester scope — and
+has no generic test because the kit cannot assume a connector. S8 waits on #121, which is still
+`needs-human`. S15 waits on #197.
 
 ### 3.3 How a product uses it
 
@@ -144,7 +150,7 @@ it separately as "shims this candidate retires".
 |---|---|---|
 | `ci.yml` — build, unit, in-process, integration, evals, image scan, packaging, frontend | exists | unchanged |
 | Deterministic PR gates (`pr-gates.mjs`): `Closes #N`, runtime evidence, red-before-green | exists | add the spine paths to `PATH_RULES` and scan additions as well as removals (#137) |
-| **Package validation against the last release** | missing | `EnablePackageValidation` + `PackageValidationBaselineVersion` = last tag on every packable project. A removed or changed public member fails the build unless a suppression file names it. This is the L1 breaking-change detector the fleet has been doing by hand |
+| **Package validation against the last release** | since #193 | `EnablePackageValidation` + `PackageValidationBaselineVersion` = last tag on every packable project (`Directory.Build.targets`; the baseline comes from the release's assets via `eng/fetch-baseline.sh`). A removed or changed public member fails `dotnet pack` unless the project's `CompatibilitySuppressions.xml` names it — that file is reviewed like code and is the exact breaking list `announce-release` writes migration notes from. Bump the baseline as part of every release |
 | **Dependency-floor diff** | missing | conformance job diffs the RC's transitive floors against the last release's and posts the raised ones; a raised floor is classified **breaking** by `announce-release` |
 | Consumer conformance | exists, `src/**` only | trigger on `frontend/**` too and run the consumer's frontend rungs (#128); post the retired-shim list as an annotation |
 | Frontend | exists | add a CSP check: load the built shell under the platform's real CSP header and assert zero `securitypolicyviolation` events |

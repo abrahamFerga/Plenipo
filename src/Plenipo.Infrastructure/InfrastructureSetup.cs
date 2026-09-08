@@ -451,6 +451,7 @@ public static class InfrastructureSetup
         services.AddScoped<ApprovalNotifier>();
         services.AddScoped<ApprovalResolutionAnnouncer>();
         services.AddScoped<ApprovalExecutor>();
+        services.AddScoped<ApprovalRelease>();
         services.AddScoped<IAuthorizedAgentRunner, AuthorizedAgentRunner>();
 
         // The channel-agnostic core every inbound conversation channel runs through (WhatsApp today).

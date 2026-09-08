@@ -58,6 +58,29 @@ bash eng/verify-frontend-packaging.sh
 
 All of the above must be green before a PR is merged.
 
+### Breaking changes are a reviewed diff, not a surprise
+
+Every packable project is compared against the **last published release** when it is packed
+(`PackageValidationBaselineVersion` in `Directory.Build.targets`; the baseline packages come from that
+release's assets). A removed or changed public member — a signature, a positional record's
+constructor, an interface member added or removed — fails `dotnet pack` with a `CP0002`/`CP0006`
+error until the project's `CompatibilitySuppressions.xml` names it. That file is the exact list of
+what the next release breaks, reviewed like code, and what the release notes and consumer migration
+instructions are written from.
+
+```bash
+bash eng/fetch-baseline.sh                                   # once per clone; verify-packaging.sh (and so CI) does it too
+dotnet pack Plenipo.slnx -c Release -o artifacts/packages    # fails on an undeclared break
+dotnet pack src/Plenipo.Core -c Release -p:GenerateCompatibilitySuppressionFile=true   # declare it
+```
+
+Before suppressing, ask whether the break is necessary: an added interface member can often be a
+default implementation, a changed record can keep its old constructor. When it is necessary, the PR
+says so under **Surface:** and the changelog carries the migration step. The SDK validates
+incrementally (a marker under `obj/`), so after editing a suppression file locally delete
+`obj/**/Microsoft.NET.ApiCompat.ValidatePackage.semaphore` to re-run it; CI always starts clean.
+Bump the baseline version as part of every release.
+
 ## Conventions
 
 - **Central Package Management** — package versions live in `Directory.Packages.props`; `.csproj` files

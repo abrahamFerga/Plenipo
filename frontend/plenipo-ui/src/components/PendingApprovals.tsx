@@ -58,18 +58,29 @@ const formatRest = (rest: [string, unknown][]) => rest.map(([k, v]) => `${k}: ${
  */
 export interface PendingApprovalsProps {
   moduleId: string;
+  /**
+   * Scope the list to one conversation. A pending approval belongs to the conversation that proposed
+   * it, and "approve this" is informed consent only when the user can see what asked for it — so a
+   * chat surface passes its conversation id, and `null` while it has none yet (a brand-new chat must
+   * not render another thread's write with live Approve/Reject buttons). Omit the prop entirely for
+   * the tenant-wide review queue.
+   */
+  conversationId?: string | null;
   /** Called with a display-ready outcome line whenever an approval finishes resolving. */
   onResolved?: (note: string) => void;
 }
 
-export function PendingApprovals({ moduleId, onResolved }: PendingApprovalsProps) {
+export function PendingApprovals({ moduleId, conversationId, onResolved }: PendingApprovalsProps) {
   const qc = useQueryClient();
   const { data: me } = useMe();
   const canManage = hasPermission(me?.permissions ?? [], "chat.approvals.manage");
+  const scoped = conversationId !== undefined;
   const { data } = useQuery({
-    queryKey: ["approvals"],
-    queryFn: api.approvals.list,
-    enabled: canManage, // only users who can approve fetch the list (the API enforces this too)
+    queryKey: scoped ? ["approvals", conversationId] : ["approvals"],
+    queryFn: () => api.approvals.list(conversationId ?? undefined),
+    // Only users who can approve fetch the list (the API enforces this too), and a scoped surface
+    // with no conversation yet has nothing to fetch.
+    enabled: canManage && !(scoped && conversationId === null),
   });
 
   // The row whose button was clicked — its label becomes the progress indicator ("Running…").

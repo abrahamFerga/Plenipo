@@ -19,6 +19,22 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
 
 ### Changed
 
+- **A released approval runs as the requester, and only someone who holds the tool's own permission
+  can release it.** `POST /api/chat/approvals/{id}/approve` used to re-execute the parked tool inside
+  the *approver's* request scope, so every tool that resolves `ICurrentUser` attributed the write to
+  whoever clicked — defeating "nobody approves their own bill" and trust-ledger attribution in the
+  products (#153, casewell#74) — and `chat.approvals.manage` alone was enough to execute *any* parked
+  tool, including one the approver's role withholds (#145, hireworthy#51). The new `ApprovalRelease`
+  builds a fresh scope carrying the requester's identity and the permission set snapshotted when the
+  action was parked (`PendingApproval.RequesterSubject`, `PermissionsSnapshotJson` — the same
+  convention as background jobs; a migration adds the two nullable columns), the way `JobProcessor`
+  and the channel turn service already restore an enqueuer. Before the claim, the endpoint checks the
+  approver holds the tool's `Permission`; a holder of the approvals permission alone gets a 403, the
+  action stays pending for someone who may release it, and the refusal is an `AccessDenied` auth
+  event. Rows parked before the upgrade carry no snapshot and run under the approver's authority,
+  exactly as they did before. `ApprovalExecutor.ExecuteAsync` keeps its signature and gains
+  `ResolveToolAsync` and a static `InvokeAsync`; nothing a product calls changed.
+
 - **Retrieval now has a precision pass: results are reranked, not just fused.** Hybrid search is
   recall-oriented by design — it casts a wide net and fuses two arms that disagree about what
   "similar" means — and the top-K was being taken straight off that fusion. At corpus scale that
@@ -133,6 +149,42 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
 
 ### Added
 
+- **`GET /api/chat/approvals?conversationId=…`** narrows the queue to one conversation, pushed into
+  `IApprovalStore.ListPendingAsync(Guid? conversationId, …)` (a default interface member, so a
+  swapped store keeps compiling). `PendingApprovals` in `@plenipo/ui` takes a `conversationId` prop —
+  `ChatPanel` passes its own, and `null` while a chat has no conversation yet — so a brand-new chat no
+  longer renders another thread's parked write with live Approve/Reject buttons (#111, networthy#150).
+  Omit the prop for the tenant-wide review queue.
+
+- **`Auth:Dev:RolesWhenAbsent`** — what an *absent* `X-Dev-Roles` header asserts under dev auth. Unset
+  keeps the development convenience (`system_admin`); a product sets it to `""` so absence means no
+  roles, because an absent header is exactly what a header-stripping proxy produces and a proxy must
+  be able to degrade a caller, never escalate one (#167, networthy#227). A present-but-empty header
+  has always meant no roles and still does.
+
+- **`AuthAuditEventType.ApprovalDecided`** — every approve and reject writes an auth event naming the
+  resolver, the tool, the requester, the approval id and the outcome, so "who released this write" is
+  answerable from the append-only trail and not only from the pending-approval row the disclosure
+  view reads (hireworthy#46).
+- **Package validation: a public-surface break now fails the pull request, not a consumer.** Every
+  packable project is compared against the last published release when it is packed
+  (`EnablePackageValidation`, baseline `0.1.0-alpha.28` in `Directory.Build.targets`, restored from
+  the release's assets by `eng/fetch-baseline.sh`, which CI runs before restore). A removed or
+  changed public member fails `dotnet pack` until the project's `CompatibilitySuppressions.xml`
+  names it — the reviewed, exact list the release notes are written from. Running it for the first
+  time found **31 breaks since alpha.28**, of which the changelog had named three:
+  `IRagService` (three signatures changed, `ListCollectionsAsync` added) and `RagService` to match,
+  `RagHit` and `RagIngestArgs` positional records, `IConnectorSyncHandler.OnFilesSyncedAsync`,
+  `IAuditLog.RecordAgentRunAsync` added to the interface, `RolePermissionResolution.PermissionsForRoles`
+  (two overloads), `ProvisionTenantCommand`, `ConnectorSyncFile`, `RagTools.SearchKnowledge`,
+  `TextChunker.Chunk`, `DatabaseInitializer.EnsureRolePermissionsSeededAsync`, and the public
+  constructors of `AuthorizedAgentRunner`, `ToolInvocationMiddleware`, `TenantAiSettingsResolver`,
+  `ApprovalNotifier` and `RagService`. All are suppressed as the alpha.29 baseline and listed here so
+  a product upgrading from alpha.28 knows what to expect; from now on each new one arrives with its
+  own suppression and migration note in the PR that makes it. `Plenipo.Testing` is exempt until it
+  has a released baseline. See [CONTRIBUTING.md](CONTRIBUTING.md) and
+  [docs/TESTING_CONTRACT.md §4.1](docs/TESTING_CONTRACT.md).
+
 - **`Plenipo.Testing` — the platform publishes its tests, the products execute them.** Every product
   on the fleet carried a private copy of the sample suite's integration fixture, AG-UI stream parser
   and golden-eval runner (under three different class names across four repos), so a harness fix
@@ -217,6 +269,30 @@ all runnable with no AI key via a built-in Mock provider. See [README.md](README
   after the first start.
 
 ### Fixed
+
+- **An approved write is audited as executed.** The park wrote a "Blocked: tool requires human
+  approval" tool-call row and the release wrote nothing, so the audit log affirmatively stated that
+  writes sitting in the ledger had been blocked (#88, networthy#151, auditworthy#23). The release now
+  writes its own tool-call row — success or failure, duration, attributed to the requester.
+
+- **Permission denials are recorded.** `AccessDenied` existed in the auth-event vocabulary and nothing
+  wrote it, so "did anyone try to approve their own proposal?" could not be answered from the trail
+  (#115). The authorization result handler now records one `AccessDenied` event per forbidden request
+  for an authenticated caller, naming the method, the path and the permission the policy required.
+  One row per denied request, deliberately: a hot endpoint under a misconfigured client will write
+  many, and that is the honest record; sampling can come later if volume proves a problem.
+
+- **An unreadable request body is a 400, not a 500.** `UseExceptionHandler()` discarded the status a
+  `BadHttpRequestException` carries, so a `POST /api/agui/{module}` with no body or unparseable JSON
+  answered "the server faulted" on every product (#176, networthy#216). The handler now honours the
+  status the exception nominated; every other exception is still a server fault, and a readable but
+  meaningless body is still answered in protocol (`RUN_ERROR`).
+
+- **Concurrent first-touch requests for a new user converge on one row.** A shell fans out several
+  requests on the first click for a new persona; the losers of the provisioning race hit the unique
+  index on `(TenantId, Subject)` and surfaced a 500 (networthy#215). They now adopt the winner's row.
+  This did not reproduce in-process on the sample host, so the change is defended by networthy's
+  runtime report and guarded by the kit's `S14` going forward rather than by a red-then-green here.
 
 - **A failed turn now says which problem it hit, so the administrator who can fix it learns what to
   fix.** Every exception from the provider's streaming enumerator collapsed to

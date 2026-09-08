@@ -261,6 +261,50 @@ describe("PendingApprovals (human-in-the-loop gate)", () => {
     );
   });
 
+  it("scoped to a conversation, it asks the server for that conversation only", async () => {
+    // #111: a pending approval belongs to the conversation that proposed it; the chat surface must
+    // never be handed another thread's write, so the scope is applied server-side, not by filtering.
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/me")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({ userId: "u1", displayName: "Dev", tenantId: "t1", permissions: ["chat.approvals.manage"] }),
+        } as unknown as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve([]) } as unknown as Response);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <PendingApprovals moduleId="finance" conversationId="c1" />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some((c) => String(c[0]).includes("/api/chat/approvals?conversationId=c1"))).toBe(true),
+    );
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).endsWith("/api/chat/approvals"))).toBe(false);
+  });
+
+  it("a chat with no conversation yet fetches nothing and offers nothing", async () => {
+    // The defect this closes: a brand-new, empty chat rendered another conversation's parked write
+    // with live Approve/Reject buttons. With no conversation there is nothing of ours to approve.
+    const fetchMock = stubApi();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <PendingApprovals moduleId="finance" conversationId={null} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(fetchMock.mock.calls.some((c) => String(c[0]).endsWith("/api/platform/me"))).toBe(true));
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes("/api/chat/approvals"))).toBe(false);
+    expect(screen.queryByText(/Approve/)).toBeNull();
+  });
+
   it("an item without a risk tier fails safe to the full card", async () => {
     stubApiWith([
       {
