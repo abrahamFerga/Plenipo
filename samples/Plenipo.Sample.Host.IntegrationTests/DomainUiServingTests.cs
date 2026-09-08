@@ -1,5 +1,11 @@
 using System.Net;
+using System.Text.RegularExpressions;
+using Plenipo.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Plenipo.Sample.Host.IntegrationTests;
 
@@ -7,6 +13,8 @@ namespace Plenipo.Sample.Host.IntegrationTests;
 /// The no-registry UI distribution path: when built SPA assets sit in wwwroot/app, the API host
 /// serves them at / with an index.html fallback for client-side deep links — while every reserved
 /// platform prefix (/api, /admin, health) keeps resolving to its real endpoint, never the SPA.
+/// The shell's scripts carry a per-request nonce, so a product's Content-Security-Policy can admit
+/// them by nonce instead of pinning a hash of platform-authored HTML (#197).
 /// </summary>
 [Collection("api")]
 public sealed class DomainUiServingTests(IntegrationFixture fixture) : IDisposable
@@ -56,5 +64,61 @@ public sealed class DomainUiServingTests(IntegrationFixture fixture) : IDisposab
         Assert.Equal(HttpStatusCode.OK, api.StatusCode);
         Assert.DoesNotContain("casewell-shell", await api.Content.ReadAsStringAsync());
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/alive")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Shell_scripts_carry_a_per_request_nonce_that_a_products_policy_can_admit()
+    {
+        // The real shells carry exactly this: one inline theme initializer plus the module bundle.
+        Directory.CreateDirectory(AssetRoot);
+        await File.WriteAllTextAsync(Path.Combine(AssetRoot, "index.html"),
+            "<html><head><script>document.documentElement.classList.add(\"dark\")</script></head>" +
+            "<body><div id=\"root\"></div><script type=\"module\" src=\"/app.js\"></script></body></html>");
+        await File.WriteAllTextAsync(Path.Combine(AssetRoot, "app.js"), "// bundle");
+
+        // A product's own CSP middleware, written the way BUILDING_A_PRODUCT.md shows: it runs
+        // before the platform serves the shell and asks for the request's nonce.
+        _factory = fixture.Factory.WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services => services.AddSingleton<IStartupFilter, ProductCspStartupFilter>()));
+        var client = _factory.CreateClient();
+
+        foreach (var route in new[] { "/", "/index.html", "/legal/matters" })
+        {
+            using var response = await client.GetAsync(route);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
+
+            var html = await response.Content.ReadAsStringAsync();
+            var nonces = Regex.Matches(html, "<script nonce=\"([^\"]+)\"").Select(m => m.Groups[1].Value).Distinct().ToArray();
+            var nonce = Assert.Single(nonces);                       // both scripts, one nonce
+            Assert.Equal(2, Regex.Matches(html, "<script ").Count);
+            Assert.DoesNotContain("<script>", html, StringComparison.Ordinal);
+
+            // The product's header admits exactly the nonce the platform stamped.
+            var policy = Assert.Single(response.Headers.GetValues("Content-Security-Policy"));
+            Assert.Contains($"'nonce-{nonce}'", policy, StringComparison.Ordinal);
+            Assert.DoesNotContain("sha256-", policy, StringComparison.Ordinal);
+        }
+
+        // Fresh nonce per response, and static files are untouched.
+        var first = Regex.Match(await client.GetStringAsync("/"), "nonce=\"([^\"]+)\"").Groups[1].Value;
+        var second = Regex.Match(await client.GetStringAsync("/"), "nonce=\"([^\"]+)\"").Groups[1].Value;
+        Assert.NotEqual(first, second);
+        Assert.Equal("// bundle", await client.GetStringAsync("/app.js"));
+    }
+
+    private sealed class ProductCspStartupFilter : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+        {
+            app.Use(async (context, pipeline) =>
+            {
+                var nonce = PlenipoCsp.NonceFor(context);
+                context.Response.Headers["Content-Security-Policy"] =
+                    $"default-src 'self'; script-src 'self' 'nonce-{nonce}'; style-src 'self' 'unsafe-inline'";
+                await pipeline(context);
+            });
+            next(app);
+        };
     }
 }

@@ -27,6 +27,12 @@ VERSION="0.0.0-verify$(date +%s)"
 # NuGet (a .NET tool) needs a native path in nuget.config; convert under Git Bash.
 to_native() { if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
 
+# Package validation (docs/TESTING_CONTRACT.md §4.1): with the last release's packages present,
+# the pack below also compares every public surface against that baseline and fails on an
+# undeclared break. This script is what CI's package job runs, so fetching here is what makes
+# validation run on every pull request without touching the workflow files.
+bash "$ROOT/eng/fetch-baseline.sh"
+
 echo "==> Packing $ROOT/Plenipo.slnx  (version $VERSION)"
 dotnet pack "$(to_native "$ROOT/Plenipo.slnx")" -c Release -o "$(to_native "$FEED")" -p:PackageVersion="$VERSION" >/dev/null
 echo "    packed: $(ls "$FEED"/*.nupkg | wc -l) packages"

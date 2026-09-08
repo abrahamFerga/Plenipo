@@ -29,6 +29,10 @@
 #
 # The local pack+consume path is already proven on every CI run by
 # eng/verify-packaging.sh (see ci.yml).
+#
+#  0. GitHub Packages, on EVERY MERGE TO MAIN (push trigger, `prerelease` job) — a numbered
+#     prerelease <last tag>.<run number>, so the build consumer conformance tested is a build a
+#     product can install the same hour. Channels 1–4 remain the human-promoted release.
 # =============================================================================
 
 name: Publish packages
@@ -42,6 +46,18 @@ on:
         description: "NuGet version to publish (e.g. 0.1.0-alpha.2)"
         type: string
         required: true
+  # Channel 0 — every merge to main publishes a NUMBERED PRERELEASE of the NuGet family to the
+  # GitHub Packages feed (docs/TESTING_CONTRACT.md §4.2). Consumer conformance tests every product
+  # against a candidate packed from the PR; without this, a red conformance run pointed at a build
+  # no product could install, and "on main but in no tag" was the fleet's blocking state for weeks.
+  # A human still promotes a build to nuget.org, public npm and release assets by tagging it.
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "Directory.Packages.props"
+      - "Directory.Build.props"
+      - "Directory.Build.targets"
 
 # GITHUB_TOKEN needs package-write for GitHub Packages and contents-write to
 # attach assets to the release. id-token: write feeds two OIDC flows: `npm
@@ -64,6 +80,7 @@ env:
 jobs:
   publish:
     name: Pack & publish
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -187,3 +204,66 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload "$GITHUB_REF_NAME" ./artifacts/*.nupkg ./artifacts/*.zip --clobber
+
+  # ---------------------------------------------------------------------------
+  # Channel 0 — prerelease on every merge to main (push trigger only).
+  #
+  # Version: <last tag>.<run number>, e.g. 0.1.0-alpha.28.412. SemVer 2 orders dot-separated
+  # prerelease identifiers, so every build after the alpha.28 tag sorts ABOVE alpha.28 and BELOW
+  # the alpha.29 a human eventually tags — a product pinning the exact build it was conformance-
+  # tested against never leapfrogs the next real release. GitHub Packages only: nuget.org is the
+  # promoted channel, and a prerelease that nobody chose must not appear there.
+  #
+  # Consumers restore it with a read:packages PAT (GitHub Packages requires one even for public
+  # repos): dotnet nuget add source https://nuget.pkg.github.com/<OWNER>/index.json --name plenipo-ci
+  # --username <user> --password <PAT>, then pin PlenipoVersion to the build.
+  # ---------------------------------------------------------------------------
+  prerelease:
+    name: Prerelease to GitHub Packages
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout (with tags, for the version)
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v6.0.0
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Resolve the prerelease version
+        id: ver
+        run: |
+          last="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || echo v0.1.0-alpha.0)"
+          version="${last#v}.${{ github.run_number }}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Prerelease $version (after $last, commit ${GITHUB_SHA::7})"
+
+      - name: Pack
+        run: |
+          dotnet pack Plenipo.slnx -c Release -o ./artifacts \
+            -p:PackageVersion="${{ steps.ver.outputs.version }}" \
+            -p:RepositoryUrl="${{ github.server_url }}/${{ github.repository }}" \
+            -p:PackageProjectUrl="${{ github.server_url }}/${{ github.repository }}"
+
+      - name: Push to GitHub Packages
+        run: |
+          dotnet nuget push "./artifacts/*.nupkg" \
+            --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
+            --api-key "${{ secrets.GITHUB_TOKEN }}" \
+            --skip-duplicate
+
+      - name: Summary
+        run: |
+          {
+            echo "### Prerelease ${{ steps.ver.outputs.version }}"
+            echo ""
+            echo "Packed from \`${GITHUB_SHA::7}\` and pushed to the GitHub Packages feed. Pin it with"
+            echo "\`<PlenipoVersion>${{ steps.ver.outputs.version }}</PlenipoVersion>\` to consume exactly the"
+            echo "build consumer conformance tested."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -94,6 +94,30 @@ Both mounts are no-ops when the directories are absent, so an API-only host and 
 Vite servers (which the sample AppHosts launch with hot reload) keep working unchanged. See
 casewell's `scripts/build-ui.ps1` for a worked one-command version of the checkout path.
 
+### A Content-Security-Policy that survives platform upgrades: nonces, not hashes
+
+Both shells carry one inline script (the theme initializer). A strict `script-src` therefore has
+to admit it, and pinning its `sha256-…` hash is a trap: any platform change to the shell's HTML
+white-screens your product, and no compile-and-test gate can see it. The host stamps a
+**per-request nonce** onto every `<script>` it serves (and marks the shell `no-store`); ask for the
+same nonce in your CSP middleware, which runs before the platform serves the shell:
+
+```csharp
+app.Use(async (context, next) =>
+{
+    var nonce = PlenipoCsp.NonceFor(context);            // Plenipo.AspNetCore.Hosting
+    context.Response.Headers["Content-Security-Policy"] =
+        "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; " +
+        $"form-action 'self'; script-src 'self' 'nonce-{nonce}'; " +
+        "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'";
+    await next();
+});
+```
+
+The platform sets no policy header of its own — what your product allows is your call — and the
+`Plenipo.Testing` kit's `S15` invariant checks that every served shell's scripts carry a nonce the
+policy admits. Delete any `sha256-` literal from your host when you adopt this.
+
 ## What's deliberately NOT extensible (yet)
 
 - **Admin console pages** — the console is a fixed surface; product-specific admin UI lives in

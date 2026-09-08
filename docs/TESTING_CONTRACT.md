@@ -105,7 +105,7 @@ Status: S1–S7, S9, S11–S14 ship in `PlenipoSpineConformance` (S3 also assert
 event and the disclosure view's requester and resolver; S4a is the approvals-permission gate on its
 own). S10 holds by construction — connector tools release through the same requester scope — and
 has no generic test because the kit cannot assume a connector. S8 waits on #121, which is still
-`needs-human`. S15 waits on #197.
+`needs-human`. S15 ships with #197: served shells carry a per-request nonce and the pack checks it.
 
 ### 3.3 How a product uses it
 
@@ -150,7 +150,7 @@ it separately as "shims this candidate retires".
 |---|---|---|
 | `ci.yml` — build, unit, in-process, integration, evals, image scan, packaging, frontend | exists | unchanged |
 | Deterministic PR gates (`pr-gates.mjs`): `Closes #N`, runtime evidence, red-before-green | exists | add the spine paths to `PATH_RULES` and scan additions as well as removals (#137) |
-| **Package validation against the last release** | missing | `EnablePackageValidation` + `PackageValidationBaselineVersion` = last tag on every packable project. A removed or changed public member fails the build unless a suppression file names it. This is the L1 breaking-change detector the fleet has been doing by hand |
+| **Package validation against the last release** | since #193 | `EnablePackageValidation` + `PackageValidationBaselineVersion` = last tag on every packable project (`Directory.Build.targets`; the baseline comes from the release's assets via `eng/fetch-baseline.sh`). A removed or changed public member fails `dotnet pack` unless the project's `CompatibilitySuppressions.xml` names it — that file is reviewed like code and is the exact breaking list `announce-release` writes migration notes from. Bump the baseline as part of every release |
 | **Dependency-floor diff** | missing | conformance job diffs the RC's transitive floors against the last release's and posts the raised ones; a raised floor is classified **breaking** by `announce-release` |
 | Consumer conformance | exists, `src/**` only | trigger on `frontend/**` too and run the consumer's frontend rungs (#128); post the retired-shim list as an annotation |
 | Frontend | exists | add a CSP check: load the built shell under the platform's real CSP header and assert zero `securitypolicyviolation` events |
@@ -263,7 +263,7 @@ Design rules for all four:
 | Changed JSON shape a product reads | the product's `<product>.http` catalog test and the `@plenipo/client` type-check in `verify-frontend-packaging.sh` |
 | Flipped default | contract eval cases pinning the old behaviour, e.g. `Rag:Reranker` |
 | Raised dependency floor | the floor diff in conformance; NU1605 in the consumer build |
-| Changed inline HTML behind a CSP hash | S15 and the frontend CSP smoke |
+| Changed inline HTML behind a CSP hash | no longer a class: served shells carry a per-request nonce (`PlenipoCsp`), products emit `'nonce-…'` instead of a hash; S15 checks it |
 | Advisory in a test-only dependency | the kit's props: fixed once |
 | A product merely lagging | rung 0 version-lag check |
 
