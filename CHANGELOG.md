@@ -15,6 +15,16 @@ build consumer conformance tested and the one a product pins to consume a fix be
 
 ### Added
 
+- **Guards for what 2026-09-08 exposed (#219).** `eng/check-ui-bundle.sh` looks inside the packed
+  `@plenipo/ui` — the JSX runtime must be imported from the host, no React internals may be inlined,
+  no peer may also be a dependency (which moves `@microsoft/signalr`, `@tanstack/react-query` and `react-router-dom` to
+  `devDependencies`, declared once as peers) — and `eng/verify-frontend-packaging.sh` runs it, so the bundling
+  that shipped in alpha.29 (#213) fails CI's packaging step instead of a product's tests. Consumer
+  conformance's floors job fails when `PackageValidationBaselineVersion` lags the latest release, so a
+  forgotten post-release bump goes red on the next platform PR instead of silently measuring the
+  public surface against an old baseline. And `docs/TESTING_CONTRACT.md` §3.5 states the kit-default
+  rule the seeded-surface bootstrap taught: a kit change must keep a conforming product green by
+  default; a new declaration may only relax an invariant, never be the precondition for passing one.
 - **The served shell, in a real browser, against the real host (#218).** The Playwright specs under
   `frontend/plenipo-ui/e2e` mock the platform API, so a shell that renders fine against them and
   breaks against the host — a bundled React runtime (#213), a DTO shape, an SSE/SignalR framing, a

@@ -100,6 +100,21 @@ jobs:
       - name: Fetch the last release as the baseline
         run: bash eng/fetch-baseline.sh
 
+      # Package validation measures every pack against PackageValidationBaselineVersion. Bumping it
+      # after a tag is a manual step (#207 did it by hand), and a forgotten bump means every "no
+      # public-surface change" verdict is measured against the wrong release. Red until it lands (#219).
+      - name: The validation baseline is the last release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          last="$(gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name)"
+          baseline="$(sed -n 's/.*<PackageValidationBaselineVersion>\(.*\)<\/PackageValidationBaselineVersion>.*/\1/p' Directory.Build.targets | head -1)"
+          if [ "v$baseline" != "$last" ]; then
+            echo "::error title=Package validation baseline lags the last release::Directory.Build.targets pins PackageValidationBaselineVersion=$baseline but the latest release is $last. Bump the baseline, delete the CompatibilitySuppressions.xml files, and promote the changelog — the release bookkeeping PR (#207 is the shape)."
+            exit 1
+          fi
+          echo "Baseline $baseline is the latest release ($last)."
+
       - name: Pack the candidate
         # Package validation is the package job's business; here only the nuspecs matter.
         run: >-
